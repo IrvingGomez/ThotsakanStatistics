@@ -133,6 +133,34 @@ Rules:
 State is data-only.
 
 ---
+## 2.5 Display Precision & Rounding Invariant
+
+Rounding is a presentation concern, never a mathematical one.
+
+- **Core (`core/`)**
+  - Implements statistical logic only.
+  - Must never round values for presentation.
+  - Must not know about decimal digits, display precision, or UI formatting.
+
+- **Controllers (`controllers/`)**
+  - Are the only layer allowed to convert raw numerical results into
+    display-ready values.
+  - Apply rounding and formatting via a dedicated helper, parameterized by
+    a single display-precision setting.
+  - Must not hard-code decimal digits in general user-facing results.
+
+- **UI (`ui/`)**
+  - Receives already formatted values.
+  - Must not introduce new rounding or silent mathematical constants.
+
+Default policy:
+
+- The project’s default display precision is **4 decimal digits**.
+- This is a configuration choice, not a mathematical assumption.
+- The default precision must be overridable (e.g., stored in application state),
+  but Core’s numerical results remain full-precision.
+
+---
 
 # 3. Estimator Governance
 

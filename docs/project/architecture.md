@@ -66,6 +66,13 @@ Typical responsibilities:
 
 Controllers define the internal API that the UI consumes.
 
+Controllers are also responsible for applying presentation formatting
+(including rounding), using a shared formatting helper and a single
+display-precision setting (default: 4 decimal digits).
+
+Core returns full-precision numerical values; rounding never happens in
+`core/` and is always treated as a display concern.
+
 ---
 
 ## UI (`ui/`)

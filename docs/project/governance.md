@@ -32,6 +32,7 @@ Before merging changes:
 - Import integrity must hold
 - No architectural boundary violations
 - No undocumented statistical changes
+- No rounding in `core/`; any new rounding must be justified in controllers and covered by tests.
 
 Testing levels:
 
@@ -39,6 +40,7 @@ Testing levels:
 2. Controller contract tests
 3. Exportability tests
 4. Structural import tests
+
 
 ---
 

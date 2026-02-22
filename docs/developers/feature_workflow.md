@@ -115,7 +115,7 @@ What to do
 - Validate user inputs  
 - Convert UI values (strings, dropdowns) to proper types  
 - Select which Core function to call  
-- Apply rounding and formatting  
+- Apply rounding and formatting **using the shared formatting helper and the global display-precision setting**  
 - Decide what to return to the UI  
 
 What **not** to do
@@ -190,11 +190,14 @@ Use this table as a decision guide:
 | Computes statistics        | `core/`       |
 | Chooses estimators         | `controllers/`|
 | Parses user input          | `controllers/`|
-| Rounds numbers             | `controllers/`|
+| Rounds numbers             | `controllers/`¹|
 | Builds plots               | `core/`       |
 | Creates dropdowns          | `ui/`         |
 | Toggles visibility         | `ui/`         |
 | Stores data                | `state/`      |
+
+¹ Rounding must use the project-wide formatting helper and respect the central
+  display-precision setting (default: 4 decimals). Do not round inside `core/`.
 
 ---
 

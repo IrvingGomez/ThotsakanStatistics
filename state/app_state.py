@@ -1,5 +1,7 @@
 import pandas as pd
 
+DEFAULT_DISPLAY_PRECISION = 4
+
 class AppState:
     """
     Global application state.
@@ -25,5 +27,8 @@ class AppState:
         self.mean_ci: tuple[float, float] | None = None
         self.sigma_ci: tuple[float, float] | None = None
 
+        # Currently selected column for analysis
         self.selected_column = None
 
+        # Display configuration (presentation only)
+        self.display_precision: int = DEFAULT_DISPLAY_PRECISION

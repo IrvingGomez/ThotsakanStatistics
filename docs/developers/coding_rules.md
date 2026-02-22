@@ -109,26 +109,95 @@ Never hard-code classical defaults when configurability exists.
 
 ---
 
-# 4. Formatting and Rounding
+# 4. Formatting, Rounding, and Precision
 
-- Core must return raw numerical results.
-- Controllers apply rounding.
-- UI displays formatted values.
+## 4.1 Layer responsibilities
 
-Do NOT round inside statistical functions.
+- **Core**  
+  - Returns raw numerical results (full precision).  
+  - Must not round or format values for display.  
+  - Must not know about decimal digits, display precision, or UI preferences.
 
-Bad:
+- **Controllers**  
+  - Are the only place where numerical results are prepared for presentation.  
+  - May apply rounding / formatting **via a dedicated helper**, not ad-hoc `round(...)`.  
+  - Must not hard-code decimal digits for general results (no `round(x, 4)` scattered around).
+
+- **UI**  
+  - Displays already-formatted values.  
+  - Must not perform statistical computation or additional rounding on Core results.
+
+## 4.2 Default precision policy
+
+- The project uses a **default display precision of 4 decimal digits**.
+- This default is configuration, not math:
+  - It must **not** be baked into Core logic.
+  - It must **not** be enforced by global magic constants in random modules.
+- The default precision will eventually be **user-configurable** (e.g. via the Data tab).
+- Controllers must respect a single source of truth for precision (e.g. `state.display_precision`), rather than local constants.
+
+## 4.3 No rounding in Core
+
+Core functions must never round or format output.
+
+**Forbidden in `core/`:**
+
 ```python
-return round(ci_lower, 2), round(ci_upper, 2)
+return round(ci_lower, 4), round(ci_upper, 4)
+sigma_hat = np.round(sigma_hat, 4)
 ```
 
-Correct:
+Required:
 
 ```python
 return ci_lower, ci_upper
+sigma_hat = ...
 ```
 
-Formatting belongs in controllers.
+If tests require rounded output, adjust the tests to compare with tolerances (e.g. `pytest.approx`) instead of exact rounded values.
+
+## 4.4 Presentation helpers (Controllers only)
+
+Controllers must use a shared formatting helper instead of raw `round(...)` calls spread across the codebase.
+
+Example pattern (location to be used later):
+
+```python
+from controllers.utils.formatting import format_number
+
+def run_ci_mean(..., state):
+    ci_lower, ci_upper = core_ci_mean(...)
+    return {
+        "ci_lower": format_number(ci_lower, state.display_precision),
+        "ci_upper": format_number(ci_upper, state.display_precision),
+    }
+```
+
+Rules:
+
+- Do not invent new rounding approaches in random controllers.
+- Do not manipulate pd.options.display.precision globally.
+- All numeric display formatting should go through the shared helper.
+
+## 4.5 Hard-coded digits are technical debt
+
+Hard-coded digits such as:
+
+```python
+round(value, 4)
+f"{value:.4f}"
+```
+
+are acceptable only in **very narrow, explicitly commented cases** (e.g. debug logs).
+
+If you must keep a fixed precision somewhere, annotate it:
+
+```python
+# INTENTIONAL_FIXED_ROUNDING: debug only
+debug_str = f"{value:.4f}"
+```
+
+All user-facing numerical output (tables, intervals, summaries) must obey the central display-precision setting.
 
 ---
 # 5. Error Handling
