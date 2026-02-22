@@ -12,10 +12,7 @@ from core.hypothesis_tests import (
     one_way_anova,
 )
 
-ROUND = 4
-
-
-def _round_table(table: pd.DataFrame, decimals: int = ROUND) -> pd.DataFrame:
+def _round_table(table: pd.DataFrame, decimals: int) -> pd.DataFrame:
     """Round only numeric columns of the result table."""
     if table is None:
         return table
@@ -69,6 +66,7 @@ def _materialize_group(
 
 def run_hypothesis_testing(
     *,
+    state,
     df: pd.DataFrame | None,
     numeric_col: str,
     hypo_test: str,
@@ -121,7 +119,7 @@ def run_hypothesis_testing(
             bootstrap_samples=bootstrap_samples,
             include_graph=include_graph,
         )
-        table = _round_table(table)
+        table = _round_table(table, state.display_precision)
         return table, fig
 
     # ------------------------------------------------------------
@@ -147,7 +145,7 @@ def run_hypothesis_testing(
             bootstrap_samples=bootstrap_samples,
             include_graph=include_graph,
         )
-        table = _round_table(table)
+        table = _round_table(table, state.display_precision)
         return table, fig
 
     # ------------------------------------------------------------
@@ -169,7 +167,7 @@ def run_hypothesis_testing(
             include_graph=include_graph,
             bootstrap_samples=bootstrap_samples,
         )
-        table = _round_table(table)
+        table = _round_table(table, state.display_precision)
         return table, fig
 
     # ------------------------------------------------------------
@@ -195,7 +193,7 @@ def run_hypothesis_testing(
             numeric_col=numeric_col,
             cat_col=cat_col3,
         )
-        table = _round_table(table)
+        table = _round_table(table, state.display_precision)
         return table, fig
 
     # ------------------------------------------------------------
