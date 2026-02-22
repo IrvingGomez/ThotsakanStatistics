@@ -30,10 +30,42 @@
   - Invariant: `state/**/*.py` must not import from `core`, `controllers`, or `ui`.
   - Detection strategy: `rg -n "^(from|import)\s+(core|controllers|ui)(\.|\s|$)|^from\s+(core|controllers|ui)\." state`
 
-- RULE_ID: NO_ROUNDING_IN_CORE
-  - Source: "Core functions must never round or format output." and forbidden examples using `round(...)` and `np.round(...)` in `core/`. (docs/developers/coding_rules.md)
-  - Invariant: No rounding/formatting calls are allowed in `core/**/*.py` for presentation (`round`, `np.round`, `ndarray.round`, format specs like `:.4f`, `%0.4f`).
-  - Detection strategy: `rg -n "\bround\(|np\.round\(|\.round\(|:\.[0-9]+f\b|%\.[0-9]+f" core` plus AST allowlist for numeric algorithmic internal rounding if explicitly justified.
+- RULE_ID: NO_TABULAR_ROUNDING_IN_CORE
+  - Source: 
+    - "Core functions must never round or format output." (docs/developers/coding_rules.md)
+    - Display Precision & Rounding Invariant (docs/project/constitution.md)
+
+  - Invariant:
+    No rounding or fixed-decimal formatting is allowed in `core/**/*.py`
+    for values returned as tabular/statistical output.
+
+    Specifically forbidden in tabular return paths:
+      - `round(...)`
+      - `np.round(...)`
+      - `.round(...)` on DataFrames/arrays used for returned tables
+      - f-strings with fixed precision (e.g. `:.4f`, `:.3f`)
+      - `%0.4f`-style formatting
+
+    Exception — Graph annotations:
+      Core may format numbers inside plotting code (titles, labels, legends),
+      provided:
+        - The formatting is local to the plotting function.
+        - No global rounding constants are defined.
+        - It does not enforce the table display precision rule.
+        - It does not alter returned numerical values.
+
+  - Detection strategy:
+      1. Static scan:
+         `rg -n "\bround\(|np\.round\(|\.round\(|:\.[0-9]+f\b|%\.[0-9]+f" core`
+
+      2. Context filtering:
+         - If occurrence is inside a plotting function (`plt.*`, `ax.*`, `label=`, `set_title`, etc.),
+           classify as GRAPH_FORMATTING (allowed).
+         - If occurrence affects values returned by the function
+           (DataFrame, dict, tuple, numeric return), classify as VIOLATION.
+
+      3. Disallow:
+         - Any global rounding constant in `core/` (e.g., `ROUND = 4`).
 
 - RULE_ID: CONTROLLERS_ONLY_ROUNDING_LAYER
   - Source: "Controllers are the only place where numerical results are prepared for presentation." (docs/developers/coding_rules.md)
