@@ -139,7 +139,7 @@ def plot_simple_regression(
         ax.text(
             0.05,
             0.95,
-            f"$R^2 = {r2:.3f}$",
+            f"$R^2 = {r2}$",
             transform=ax.transAxes,
             ha="left",
             va="top",
@@ -231,7 +231,7 @@ def plot_observed_vs_predicted(
         ax.text(
             0.05,
             0.95,
-            f"$R^2 = {r2:.3f}$",
+            f"$R^2 = {r2}$",
             transform=ax.transAxes,
             ha="left",
             va="top",
