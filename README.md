@@ -24,6 +24,41 @@ The system emphasizes:
 
 ---
 
+## Documentation Guide
+
+This repository contains documentation for different audiences.
+
+### For Users (Students & Instructors)
+
+If you want to install, run, and use the application:
+
+- [User Guide](docs/users/README.md)
+- [Getting Started](docs/users/getting_started.md)
+
+These documents explain how to set up the environment, run the application, and use its statistical functionality.
+
+---
+
+### For Contributors and Developers
+
+If you plan to extend or modify the system:
+
+- [Developer Documentation](docs/developers/README.md)
+
+This documentation explains the architectural structure, development workflow, and coding rules that must be followed.
+
+---
+
+### Project Structure and Governance
+
+For structural and institutional rules governing the project:
+
+- [Architecture Overview](docs/project/architecture.md)
+- [Constitution (Structural & Mathematical Rules)](docs/project/constitution.md)
+- [Governance & Lifecycle Policy](docs/project/governance.md)
+
+---
+
 ## Vision
 
 ### Short-Term
@@ -185,8 +220,9 @@ All new features should include at least minimal test coverage.
 
 This project follows **Semantic Versioning (MAJOR.MINOR.PATCH)**.
 
-- **v0.1.0** – First structured public release  
+- **v0.1.2** – Metadata patch (Documentation Restructuring and Consistency)
 - **v0.1.1** – Metadata patch (LICENSE and CITATION added)
+- **v0.1.0** – First structured public release
 
 For full details, see:
 

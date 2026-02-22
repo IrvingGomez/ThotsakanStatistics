@@ -14,7 +14,7 @@ It is written primarily for:
 
 The goal is to help you add features **without breaking architectural guarantees** or introducing technical debt.
 
-This guide assumes you have already read [Architecture Guide](../project/architecture.md).
+This guide assumes you have already read [Architecture Overview](../project/architecture.md).
 
 ---
 

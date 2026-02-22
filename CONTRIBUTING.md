@@ -3,50 +3,28 @@
 
 Thank you for contributing to Thotsakan Statistics.
 
-This project is part of the **Himmapan Lab** ecosystem and is designed to support:
+This project is part of the **Himmapan Lab** ecosystem and is built on strict architectural and statistical discipline.
 
-- Statistical correctness
-- Clean architecture
-- Student collaboration
-- Long-term sustainability
-
-Contributions are welcome, but architectural discipline is mandatory.
+Contributions are welcome — architectural integrity is mandatory.
 
 ---
 
-# Who Can Contribute?
+# 1. Before You Start
 
-- Undergraduate students
-- Teaching assistants
-- Himmapan Lab collaborators
-- Maintainers
+If you are new to the project, read in this order:
 
-If you are new to the project, read:
+1. [Developer Documentation](docs/developers/README.md)
+2. [Architecture Overview](docs/project/architecture.md)
+3. [Constitution (Structural & Mathematical Rules)](docs/project/constitution.md)
+4. [Governance & Lifecycle Policy](docs/project/governance.md)
+5. [Feature Workflow](docs/developers/feature_workflow.md)
+6. [Coding Rules](docs/developers/coding_rules.md)
 
-```
-docs/developers/index.md
-```
-
-before making changes.
+Do not begin implementing before understanding these documents.
 
 ---
 
-# Before You Start
-
-1. Read:
-   - `docs/developers/architecture.md`
-   - `docs/developers/adding_new_feature.md`
-   - `docs/developers/coding_rules.md`
-
-2. Ensure you can:
-   - Run the application locally
-   - Run tests successfully
-
-3. Create and activate a virtual environment.
-
----
-
-# Development Setup
+# 2. Development Setup
 
 ## Install runtime dependencies
 
@@ -70,13 +48,11 @@ All tests must pass before submitting changes.
 
 ---
 
-# Contribution Workflow
+# 3. Contribution Workflow
 
-## 1. Create a Branch
+## 3.1 Create a Branch
 
 Do not work directly on `main`.
-
-Create a feature branch:
 
 ```
 git checkout -b feature/short-description
@@ -86,129 +62,88 @@ Examples:
 
 - `feature/bootstrap-ci`
 - `feature/new-visualization`
-- `fix/controller-validation-bug`
+- `fix/controller-validation`
 
 ---
 
-## 2. Follow the Development Order
+## 3.2 Follow Architectural Order
 
 Always implement in this order:
 
-```
-Core → Controller → UI
-```
+   Core → Controller → UI
 
-Never start with the UI.
+Never begin with the UI.
 
 ---
 
-## 3. Add Tests
+## 3.3 Add Tests
 
 At minimum:
 
-- Ensure imports still work.
-- Add a basic test for new statistical logic.
+- Ensure imports still work
+- Add a basic test for new statistical logic
 
-Even small contributions should include at least one test if possible.
+All new features should include test coverage.
 
 ---
 
-## 4. Run Tests
-
-Before committing:
+## 3.4 Run Tests Before Committing
 
 ```
 pytest -q
 ```
 
-If tests fail, fix them before pushing.
+Fix all failures before pushing.
 
 ---
 
-## 5. Submit a Pull Request
+## 3.5 Submit a Pull Request
 
 Include:
 
-- Clear description of the feature or fix
+- Clear description of the change
 - Explanation of where changes were made
-- Any architectural considerations
+- Version classification (PATCH / MINOR / MAJOR if relevant)
 
-Small, focused pull requests are preferred over large ones.
-
----
-
-# Architectural Rules (Non-Negotiable)
-
-- Core must not import UI or Controllers.
-- Controllers must not implement statistical formulas.
-- UI must not call Core directly.
-- No rounding inside Core.
-- Estimator choices must not be hard-coded if user-configurable.
-
-Violations will require revision.
+Small, focused pull requests are preferred.
 
 ---
 
-# Code Style
+# 4. Non-Negotiable Rules
 
-- Use descriptive names.
-- Prefer clarity over cleverness.
-- Keep functions focused and small.
-- Avoid unnecessary abstraction.
+Architectural and statistical rules are defined in:
 
-This is an educational project. Code should be understandable.
+- `docs/project/constitution.md`
 
----
+Versioning and lifecycle rules are defined in:
 
-# Datasets
+- `docs/project/governance.md`
 
-If adding datasets:
-
-- Place them in the correct folder (`practice/` or `internal/`).
-- Ensure no private or sensitive data.
-- Use clear filenames.
-- Prefer CSV format.
+If your contribution violates these documents, it will require revision.
 
 ---
 
-# Reporting Issues
+# 5. Reporting Issues
 
-When reporting a bug:
-
-Include:
+When reporting a bug, include:
 
 - Description of the problem
 - Steps to reproduce
 - Expected behavior
 - Observed behavior
 
-Clear reports help maintain project quality.
-
----
-
-# Himmapan Lab Vision
-
-This project is part of a broader initiative to build modular mathematical software for engineering education.
-
-Contributors are not only writing code — they are building:
-
-- Reproducible computational tools
-- Clean architectural systems
-- Long-term academic infrastructure
-
-Discipline today ensures scalability tomorrow.
+Clear reports improve project quality.
 
 ---
 
 # Final Reminder
 
-If you are unsure about:
+This is an educational and long-term project.
 
-- Where code belongs
-- Architectural implications
-- Estimator logic
-- Testing strategy
+We are building:
 
-Ask before implementing.
+- Reproducible statistical tools
+- Clean architectural systems
+- Sustainable academic infrastructure
 
-Maintaining architectural integrity is more important than implementing quickly.
+Clarity and discipline take precedence over speed.

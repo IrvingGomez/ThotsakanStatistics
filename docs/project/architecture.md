@@ -10,7 +10,7 @@ This is a structural overview.
 
 For non-negotiable structural and mathematical rules, see:
 
-- [Constitution](constitution.md)
+- [Constitution (Structural & Mathematical Rules)](constitution.md)
 - [Governance & Lifecycle Policy](governance.md)
 
 ---
@@ -195,10 +195,10 @@ This document describes *how the system is organized*.
 
 The following documents define binding rules:
 
-- [Constitution](docs/architecture/constitution.md) → structural and mathematical authority
+- [Constitution (Structural & Mathematical Rules)](docs/architecture/constitution.md) → structural and mathematical authority
 - [Governance & Lifecycle Policy](docs/architecture/governance.md)  → lifecycle, versioning, and release discipline
 
-If a structural conflict arises, [Constitution](docs/architecture/constitution.md) prevails.
+If a structural conflict arises, [Constitution (Structural & Mathematical Rules)](docs/architecture/constitution.md) prevails.
 
 ---
 
