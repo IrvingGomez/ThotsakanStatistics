@@ -6,13 +6,13 @@ from core.estimation.descriptive import compute_descriptive_statistics
 
 def run_descriptive_statistics(
     *,
+    state,
     df: pd.DataFrame,
     column: str,
     quantile_probs: list[float],
     trim_alpha: float | None,
     winsor_limits: tuple[float, float] | None,
     weights_col: str | None,
-    round_digits: int,
 ) -> pd.DataFrame:
 
     if df is None:
@@ -51,9 +51,6 @@ def run_descriptive_statistics(
         weights=weights.values if weights is not None else None,
     )
 
-    #numeric_cols = stats_df.select_dtypes("number").columns
-    #stats_df[numeric_cols] = stats_df[numeric_cols].round(round_digits)
-
-    stats_df[["Value", "Bias Corrected"]] = stats_df[["Value", "Bias Corrected"]].round(round_digits)
+    stats_df[["Value", "Bias Corrected"]] = stats_df[["Value", "Bias Corrected"]].round(state.display_precision)
 
     return stats_df

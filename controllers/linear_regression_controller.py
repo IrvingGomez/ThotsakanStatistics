@@ -8,7 +8,6 @@ import pandas as pd
 
 from core.linear_regression import run_linear_regression as _run_linear_regression
 
-
 def _select_working_dataframe(
     df: Optional[pd.DataFrame],
     filtered_df: Optional[pd.DataFrame],
@@ -86,6 +85,7 @@ def _parse_range(text: str) -> Optional[np.ndarray]:
 
 def run_linear_regression(
     *,
+    state,
     df: Optional[pd.DataFrame],
     filtered_df: Optional[pd.DataFrame],
     formula_check: bool,
@@ -101,7 +101,6 @@ def run_linear_regression(
     show_pi: bool,
     fit_to_obs: bool,
     x_range_text: str,
-    round_digits: int = 4,
 ) -> Tuple[str, pd.DataFrame, Optional[Figure]]:
     """
     High-level controller used by the Linear Regression tab.
@@ -155,6 +154,6 @@ def run_linear_regression(
     )
 
     # Rounding happens here, not in the stats layer.
-    params_df_rounded = params_df.round(round_digits)
+    params_df_rounded = params_df.round(state.display_precision)
 
     return summary_html, params_df_rounded, fig

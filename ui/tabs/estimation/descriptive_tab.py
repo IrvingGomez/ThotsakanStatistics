@@ -100,13 +100,13 @@ def build(state):
             weights_col = None
 
         stats_df = run_descriptive_statistics(
+            state,
             df=df,
             column=column,
             quantile_probs=parse_quantiles(q_text),
             trim_alpha=parse_trim(trim_text),
             winsor_limits=parse_winsor(winsor_text),
             weights_col=weights_col,
-            round_digits=4,
         )
 
         # cache for download
