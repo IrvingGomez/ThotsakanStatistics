@@ -160,6 +160,17 @@ Default policy:
 - The default precision must be overridable (e.g., stored in application state),
   but Core’s numerical results remain full-precision.
 
+Exception — Graph annotations:
+
+Core is allowed to format numbers inside plotting code
+(e.g. titles, labels, legends) for readability.
+
+Such formatting:
+- Must remain local to the plotting function.
+- Must not rely on global rounding constants.
+- Must not define global display precision.
+- Does not follow the table display precision rule.
+
 ---
 
 # 3. Estimator Governance
