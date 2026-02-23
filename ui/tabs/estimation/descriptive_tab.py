@@ -100,7 +100,7 @@ def build(state):
             weights_col = None
 
         stats_df = run_descriptive_statistics(
-            state,
+            state=state,
             df=df,
             column=column,
             quantile_probs=parse_quantiles(q_text),

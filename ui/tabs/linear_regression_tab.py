@@ -219,7 +219,7 @@ def build(state: AppState) -> None:
 
         try:
             summary_html, params_df, fig = run_linear_regression(
-                state,
+                state=state,
                 df=state.df,
                 filtered_df=state.filtered_df,
                 formula_check=bool(formula_check_val),
