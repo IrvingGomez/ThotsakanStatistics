@@ -407,7 +407,7 @@ def build(state):
                     bootstrap_deviation=bs,
                     bootstrap_samples=B,
                 )
-                ci_table_rounded = ci_table.round(4)
+                ci_table_rounded = ci_table
                 state.export_table = ci_table_rounded
 
                 return (
@@ -469,7 +469,7 @@ def build(state):
             )
             tables.append(pi)
 
-        final_table = pd.concat(tables, ignore_index=True).round(4)
+        final_table = pd.concat(tables, ignore_index=True)
         state.export_table = final_table
         state.export_figure = None
 

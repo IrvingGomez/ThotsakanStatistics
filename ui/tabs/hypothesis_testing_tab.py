@@ -336,6 +336,7 @@ def build(state):
 
         try:
             table, fig = run_hypothesis_testing(
+                state=state,
                 df=df,
                 numeric_col=numeric_col,
                 hypo_test=hypo_test,

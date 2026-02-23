@@ -3,8 +3,6 @@ import numpy as np
 import gradio as gr
 from pathlib import Path
 
-ROUND = 4
-
 def load_dataset(file):
     """
     Load CSV or Excel file.
@@ -64,7 +62,7 @@ def dataset_summary(df: pd.DataFrame):
     for col in summary.columns:
         if col not in ["variable", "count", "unique"]:
             summary[col] = summary[col].apply(
-                lambda x: f"{x:.{ROUND}f}" if isinstance(x, (int, float)) else x
+                lambda x: f"{x}" if isinstance(x, (int, float)) else x
             )
 
     return summary

@@ -219,6 +219,7 @@ def build(state: AppState) -> None:
 
         try:
             summary_html, params_df, fig = run_linear_regression(
+                state,
                 df=state.df,
                 filtered_df=state.filtered_df,
                 formula_check=bool(formula_check_val),
@@ -234,7 +235,6 @@ def build(state: AppState) -> None:
                 show_pi=bool(show_pi_val),
                 fit_to_obs=bool(fit_to_obs_val),
                 x_range_text=str(x_range_text_val or ""),
-                round_digits=4,
             )
         except Exception as e:  # noqa: BLE001
             # Surface a friendly HTML error message
