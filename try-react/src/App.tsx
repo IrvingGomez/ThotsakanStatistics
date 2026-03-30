@@ -1,56 +1,304 @@
-import { Suspense, lazy, useState } from 'react'
+import { useState, Suspense, lazy, useMemo } from 'react'
+import { ErrorBoundary } from 'react-error-boundary'
+import LogoBar from './layout/LogoBar'
+import Header from './layout/Header'
+import SubHeader, { type SubTab } from './layout/SubHeader'
+import LabBench from './layout/LabBench'
+import Footer from './layout/Footer'
+import HomeTab from './features/home/HomeTab'
+import DataTab from './features/data/DataTab'
 
-type TabKey = 'overview' | 'plot' | 'math'
+// ── Estimation: Normal PDF (Statistical Inference sub-tab) ───────────────────
+import NormalPDFControls, { DEFAULT_PARAMS } from './features/estimation/inference/NormalPDFControls'
+import NormalPDFNotebook from './features/estimation/inference/NormalPDFNotebook'
+import { useNormalPDF } from './hooks/useNormalPDF'
+import type { NormalPDFParams } from './hooks/useNormalPDF'
 
-const InteractivePlotTab = lazy(() => import('./tabs/InteractivePlotTab'))
-const MathPlaygroundTab = lazy(() => import('./tabs/MathPlaygroundTab'))
+// ── Probability: Common Distributions ────────────────────────────────────────
+import CommonDistControls from './features/probability/common/CommonDistControls'
+import CommonDistNotebook from './features/probability/common/CommonDistNotebook'
+import {
+  useDistribution,
+  DISTRIBUTIONS,
+  type QueryOp,
+} from './hooks/useDistribution'
 
-const TAB_LABELS: Array<{ key: TabKey; label: string }> = [
-  { key: 'overview', label: 'Project Context' },
-  { key: 'plot', label: 'Interactive Plot' },
-  { key: 'math', label: 'Math Playground' },
-]
+// Lazy-loaded heavy chart components
+const NormalPDFObservation = lazy(() => import('./features/estimation/inference/NormalPDFObservation'))
+const CommonDistObservation = lazy(() => import('./features/probability/common/CommonDistObservation'))
+
+// ─── Navigation config ────────────────────────────────────────────────────────
+
+type TabId = 'home' | 'data' | 'probability' | 'estimation' | 'hypothesis' | 'regression'
+
+// Lazy-loaded Descriptive Statistics panels (from composite DescriptiveTab)
+import { useDescriptiveTabState } from './features/estimation/descriptive/DescriptiveTab'
+const DescriptiveControlsSlot = lazy(() =>
+  import('./features/estimation/descriptive/DescriptiveTab').then((m) => ({ default: m.ControlsSlot })))
+const DescriptiveObservationSlot = lazy(() =>
+  import('./features/estimation/descriptive/DescriptiveTab').then((m) => ({ default: m.ObservationSlot })))
+const DescriptiveNotebookSlot = lazy(() =>
+  import('./features/estimation/descriptive/DescriptiveTab').then((m) => ({ default: m.NotebookSlot })))
+
+const SUB_TABS: Partial<Record<TabId, SubTab[]>> = {
+  probability: [
+    { key: 'common',  label: '📜 Common Distributions' },
+    { key: 'custom',  label: '✍️ Custom Distribution' },
+    { key: 'approx',  label: '🤏 Approximations' },
+  ],
+  estimation: [
+    { key: 'descriptive', label: '🧮 Descriptive Statistics' },
+    { key: 'inference',   label: '💭 Statistical Inference' },
+    { key: 'graphical',   label: '📊 Graphical Analysis' },
+  ],
+}
+
+const DEFAULT_SUB_TAB: Partial<Record<TabId, string>> = {
+  probability: 'common',
+  estimation:  'inference',
+}
+
+// ─── Placeholders ─────────────────────────────────────────────────────────────
+
+function ComingSoon({ label }: { label: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center h-full gap-2 opacity-40">
+      <span className="text-3xl">🚧</span>
+      <span className="text-sm text-[var(--color-text-muted)]">{label} — coming soon</span>
+    </div>
+  )
+}
+
+function ChartFallback() {
+  return (
+    <div className="flex items-center justify-center h-full text-[var(--color-text-muted)] text-sm">
+      Loading chart…
+    </div>
+  )
+}
+
+function ErrorFallback({ error, resetErrorBoundary }: { error: Error, resetErrorBoundary: () => void }) {
+  return (
+    <div className="flex flex-col items-center justify-center h-full p-8 mx-auto max-w-2xl text-center">
+      <div className="border border-red-900/50 bg-red-950/20 rounded-xl p-8 w-full shadow-2xl">
+        <h2 className="text-2xl font-bold text-red-400 mb-4 flex justify-center items-center gap-2">
+          <span className="text-3xl">⚠️</span> Something went wrong
+        </h2>
+        <div className="text-sm text-left w-full overflow-auto max-h-64 bg-black/40 border border-black/50 p-4 rounded-lg mb-6 shadow-inner">
+          <pre className="font-mono text-red-200/90 leading-relaxed whitespace-pre-wrap">
+            {error.name}: {error.message}
+          </pre>
+          {error.stack && (
+            <pre className="mt-4 pt-4 border-t border-red-900/30 font-mono text-red-200/50 text-xs whitespace-pre-wrap">
+              {error.stack}
+            </pre>
+          )}
+        </div>
+        <button
+          onClick={resetErrorBoundary}
+          className="px-6 py-3 bg-[var(--color-primary)] hover:brightness-110 text-white font-medium rounded-lg shadow-lg transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#111] focus:ring-[var(--color-primary)]"
+        >
+          Recover and Restart
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ─── App ────────────────────────────────────────────────────────────────────
 
 export default function App() {
-  const [tab, setTab] = useState<TabKey>('overview')
+  // ── Navigation ──────────────────────────────────────────────────────────────
+  const [activeTab, setActiveTab] = useState<TabId>('home')
+  const [subTabMap, setSubTabMap] = useState<Partial<Record<TabId, string>>>(DEFAULT_SUB_TAB)
+
+  function handleTabChange(tab: string) {
+    const t = tab as TabId
+    setActiveTab(t)
+  }
+
+  function handleSubTabChange(key: string) {
+    setSubTabMap((prev) => ({ ...prev, [activeTab]: key }))
+  }
+
+  const activeSubTab = subTabMap[activeTab] ?? null
+  const subTabs = SUB_TABS[activeTab]
+
+  // ── Estimation / Normal PDF state ──────────────────────────────────────────
+  const [normalParams, setNormalParams] = useState<NormalPDFParams>(DEFAULT_PARAMS)
+  const [normalMode, setNormalMode] = useState<'pdf' | 'cdf'>('pdf')
+  const normalResult = useNormalPDF(normalParams)
+
+  // ── Probability / Common Distributions state ───────────────────────────────
+  const firstDiscrete = DISTRIBUTIONS.find((d) => d.type === 'discrete')!
+  const [probModelType, setProbModelType] = useState<'discrete' | 'continuous'>('discrete')
+  const [probDistName, setProbDistName] = useState(firstDiscrete.name)
+  const [probParamValues, setProbParamValues] = useState<Record<string, number>>(
+    Object.fromEntries(firstDiscrete.params.map((p) => [p.key, p.default]))
+  )
+  const [probQueryOp, setProbQueryOp] = useState<QueryOp>('<=')
+  const [probQueryK, setProbQueryK] = useState(5)
+
+  const probDistParams = useMemo(() => ({
+    distName: probDistName,
+    paramValues: probParamValues,
+    queryOp: probQueryOp,
+    queryK: probQueryK,
+  }), [probDistName, probParamValues, probQueryOp, probQueryK])
+
+  const probResult = useDistribution(probDistParams)
+
+  function handleDistChange(name: string) {
+    const dist = DISTRIBUTIONS.find((d) => d.name === name)!
+    setProbDistName(name)
+    setProbParamValues(Object.fromEntries(dist.params.map((p) => [p.key, p.default])))
+  }
+
+  function handleModelTypeChange(t: 'discrete' | 'continuous') {
+    setProbModelType(t)
+    const first = DISTRIBUTIONS.find((d) => d.type === t)!
+    handleDistChange(first.name)
+  }
+
+  // ── Descriptive Statistics state ─────────────────────────────────────────
+  const descriptive = useDescriptiveTabState()
+
+  // ── Slot content resolver ──────────────────────────────────────────────────
+  let controls: React.ReactNode
+  let observation: React.ReactNode
+  let notebook: React.ReactNode
+  let footerDataset: string | undefined
+
+  // ── Probability tab ────────────────────────────────────────────────────────
+  if (activeTab === 'probability') {
+    if (activeSubTab === 'common') {
+      footerDataset = `${probDistName} Distribution`
+      controls = (
+        <CommonDistControls
+          modelType={probModelType}
+          distName={probDistName}
+          paramValues={probParamValues}
+          queryOp={probQueryOp}
+          queryK={probQueryK}
+          queryResult={probResult.queryResult}
+          onModelTypeChange={handleModelTypeChange}
+          onDistChange={handleDistChange}
+          onParamChange={(key, val) => {
+            setProbParamValues((prev) => ({ ...prev, [key]: val }))
+          }}
+          onQueryOpChange={setProbQueryOp}
+          onQueryKChange={setProbQueryK}
+        />
+      )
+      observation = (
+        <Suspense fallback={<ChartFallback />}>
+          <CommonDistObservation
+            distParams={probDistParams}
+            result={probResult}
+          />
+        </Suspense>
+      )
+      notebook = (
+        <CommonDistNotebook
+          distParams={probDistParams}
+          result={probResult}
+        />
+      )
+    } else {
+      controls    = <ComingSoon label="Custom Distribution" />
+      observation = <ComingSoon label="Custom Distribution" />
+      notebook    = <ComingSoon label="Custom Distribution" />
+    }
+
+  // ── Estimation tab ─────────────────────────────────────────────────────────
+  } else if (activeTab === 'estimation') {
+    if (activeSubTab === 'inference') {
+      footerDataset = 'Normal Distribution (CI)'
+      controls = (
+        <NormalPDFControls
+          params={normalParams}
+          mode={normalMode}
+          onParamsChange={(p) => setNormalParams((prev) => ({ ...prev, ...p }))}
+          onModeChange={setNormalMode}
+          onReset={() => { setNormalParams(DEFAULT_PARAMS); setNormalMode('pdf') }}
+        />
+      )
+      observation = (
+        <Suspense fallback={<ChartFallback />}>
+          <NormalPDFObservation params={normalParams} result={normalResult} mode={normalMode} />
+        </Suspense>
+      )
+      notebook = <NormalPDFNotebook params={normalParams} result={normalResult} />
+    } else if (activeSubTab === 'descriptive') {
+      footerDataset = 'Descriptive Statistics'
+      controls = (
+        <Suspense fallback={<ChartFallback />}>
+          <DescriptiveControlsSlot onRun={descriptive.handleRun} onReset={descriptive.handleReset} isComputing={descriptive.isComputing} />
+        </Suspense>
+      )
+      observation = (
+        <Suspense fallback={<ChartFallback />}>
+          <DescriptiveObservationSlot
+            result={descriptive.result}
+            config={descriptive.config}
+            hasData={descriptive.hasData}
+            precision={descriptive.precision}
+            isComputing={descriptive.isComputing}
+          />
+        </Suspense>
+      )
+      notebook = (
+        <Suspense fallback={<ChartFallback />}>
+          <DescriptiveNotebookSlot
+            result={descriptive.result}
+            config={descriptive.config}
+            filename={descriptive.filename}
+            filteredN={descriptive.filteredN}
+            rawN={descriptive.rawN}
+            precision={descriptive.precision}
+          />
+        </Suspense>
+      )
+    } else {
+      controls    = <ComingSoon label="Graphical Analysis" />
+      observation = <ComingSoon label="Graphical Analysis" />
+      notebook    = <ComingSoon label="Graphical Analysis" />
+    }
+
+  // ── Other tabs ─────────────────────────────────────────────────────────────
+  } else if (activeTab !== 'home') {
+    const label = activeTab.charAt(0).toUpperCase() + activeTab.slice(1)
+    controls    = <ComingSoon label={label} />
+    observation = <ComingSoon label={label} />
+    notebook    = <ComingSoon label={label} />
+  }
+
+  // ── Home/Data tabs use full-width layout instead of LabBench ──────────────
+  const isHome = activeTab === 'home'
+  const isFullWidth = isHome || activeTab === 'data'
 
   return (
-    <div className="app-shell">
-      <header className="app-header">
-        <h1>Thotsakan React Playground</h1>
-        <p>Starter UI for porting the Gradio statistics app into React.</p>
-      </header>
-
-      <nav className="tab-nav">
-        {TAB_LABELS.map((item) => (
-          <button
-            key={item.key}
-            className={tab === item.key ? 'tab-btn active' : 'tab-btn'}
-            onClick={() => setTab(item.key)}
-            type="button"
-          >
-            {item.label}
-          </button>
-        ))}
-      </nav>
-
-      {tab === 'overview' && (
-        <section className="panel">
-          <h2>Project Fit</h2>
-          <ul>
-            <li>Frontend: React + Vite (this project).</li>
-            <li>Charts: Plotly for interactive statistical visuals.</li>
-            <li>Math rendering: KaTeX.</li>
-            <li>Math input: MathLive field component.</li>
-            <li>Recommended backend path: keep Python stats engine and expose API endpoints.</li>
-          </ul>
-        </section>
+    <div className="flex flex-col h-full bg-[var(--color-bg-base)] text-[var(--color-text)]">
+      <LogoBar />
+      <Header activeTab={activeTab} onTabChange={handleTabChange} />
+      {!isFullWidth && (
+        <SubHeader
+          subTabs={subTabs}
+          activeSubTab={activeSubTab ?? undefined}
+          onSubTabChange={handleSubTabChange}
+        />
       )}
-
-      <Suspense fallback={<section className="panel"><p>Loading tab…</p></section>}>
-        {tab === 'plot' && <InteractivePlotTab />}
-        {tab === 'math' && <MathPlaygroundTab />}
-      </Suspense>
+      <div className="flex-1 overflow-hidden relative flex flex-col">
+        <ErrorBoundary fallbackRender={({ error, resetErrorBoundary }) => <ErrorFallback error={error as Error} resetErrorBoundary={resetErrorBoundary} />} onReset={() => setActiveTab('home')}>
+          {isHome
+            ? <HomeTab onNavigate={handleTabChange} />
+            : activeTab === 'data'
+              ? <DataTab />
+              : <LabBench controls={controls} observation={observation} notebook={notebook} />
+          }
+        </ErrorBoundary>
+      </div>
+      <Footer dataset={footerDataset} version="0.1.0-alpha" />
     </div>
   )
 }

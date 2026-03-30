@@ -18,7 +18,7 @@ export default function MathPlaygroundTab() {
     let cancelled = false
 
     const loadKatex = async () => {
-      await import('katex/dist/katex.min.css')
+      await import('katex/dist/katex.min.css' as unknown as string)
       const module = (await import('katex')).default
       if (!cancelled) {
         setKatexRenderer(module)
