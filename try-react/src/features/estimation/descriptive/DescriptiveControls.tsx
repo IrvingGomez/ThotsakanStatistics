@@ -12,7 +12,7 @@ export interface DescriptiveConfig {
   quantileProbs: number[]
   trimAlpha: number | null
   winsorLimits: [number, number] | null
-  showBiasCorr: boolean
+  showConsistencyCorr: boolean
   advancedStats: string[]
 }
 
@@ -21,7 +21,7 @@ export const DEFAULT_CONFIG: Omit<DescriptiveConfig, 'column'> = {
   quantileProbs: [0.25, 0.5, 0.75],
   trimAlpha: null,
   winsorLimits: null,
-  showBiasCorr: true,
+  showConsistencyCorr: true,
   advancedStats: [],
 }
 
@@ -287,7 +287,7 @@ export default function DescriptiveControls({ onRun, onReset }: DescriptiveContr
   const [quantilesRaw, setQuantilesRaw] = useState('0.25, 0.5, 0.75')
   const [trimRaw, setTrimRaw] = useState('')
   const [winsorRaw, setWinsorRaw] = useState('')
-  const [showBiasCorr, setShowBiasCorr] = useState(true)
+  const [showConsistencyCorr, setShowConsistencyCorr] = useState(true)
   const [advancedStats, setAdvancedStats] = useState<string[]>([])
   const [advancedOpen, setAdvancedOpen] = useState(false)
 
@@ -336,10 +336,10 @@ export default function DescriptiveControls({ onRun, onReset }: DescriptiveContr
       quantileProbs,
       trimAlpha: trimAlpha ?? null,
       winsorLimits,
-      showBiasCorr,
+      showConsistencyCorr,
       advancedStats,
     })
-  }, [column, weightsCol, quantilesRaw, trimRaw, winsorRaw, showBiasCorr, advancedStats, onRun])
+  }, [column, weightsCol, quantilesRaw, trimRaw, winsorRaw, showConsistencyCorr, advancedStats, onRun])
 
   // React to changes in configuration and auto-run
   useEffect(() => {
@@ -354,7 +354,7 @@ export default function DescriptiveControls({ onRun, onReset }: DescriptiveContr
     setQuantilesRaw('0.25, 0.5, 0.75')
     setTrimRaw('')
     setWinsorRaw('')
-    setShowBiasCorr(true)
+    setShowConsistencyCorr(true)
     setAdvancedStats([])
     setError(null)
     onReset()
@@ -419,7 +419,7 @@ export default function DescriptiveControls({ onRun, onReset }: DescriptiveContr
       <Divider />
 
       <SectionLabel>Display Options</SectionLabel>
-      <Toggle label="Show bias corrected" value={showBiasCorr} onChange={setShowBiasCorr} />
+      <Toggle label="Show consistency corrected" value={showConsistencyCorr} onChange={setShowConsistencyCorr} />
 
       <Divider />
 

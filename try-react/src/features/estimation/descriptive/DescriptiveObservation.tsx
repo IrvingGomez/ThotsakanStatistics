@@ -78,9 +78,9 @@ const CATEGORY_STYLE: Record<string, { bg: string; text: string; label: string }
 // ─── Statistics Table ─────────────────────────────────────────────────────────
 
 function StatsTable({
-  rows, showBiasCorr, precision,
+  rows, showConsistencyCorr, precision,
 }: {
-  rows: StatRow[]; showBiasCorr: boolean; precision: number
+  rows: StatRow[]; showConsistencyCorr: boolean; precision: number
 }) {
   const [copied, setCopied] = useState(false)
 
@@ -98,12 +98,12 @@ function StatsTable({
   }
 
   function exportCSV() {
-    const header = showBiasCorr
-      ? 'Category,Measure,Value,Bias Corrected\n'
+    const header = showConsistencyCorr
+      ? 'Category,Measure,Value,Consistency Corrected\n'
       : 'Category,Measure,Value\n'
     const body = rows.map((r) =>
-      showBiasCorr
-        ? `"${r.category}","${r.measure}",${fmt(r.value)},${fmt(r.biasCorr)}`
+      showConsistencyCorr
+        ? `"${r.category}","${r.measure}",${fmt(r.value)},${fmt(r.consistencyCorr)}`
         : `"${r.category}","${r.measure}",${fmt(r.value)}`
     ).join('\n')
 
@@ -139,8 +139,8 @@ function StatsTable({
               <th className="px-3 py-2 text-left text-[var(--color-text-muted)] font-normal w-36">Category</th>
               <th className="px-3 py-2 text-left text-[var(--color-text-muted)] font-normal">Measure</th>
               <th className="px-3 py-2 text-right text-[var(--color-text-muted)] font-normal w-28">Value</th>
-              {showBiasCorr && (
-                <th className="px-3 py-2 text-right text-[var(--color-text-muted)] font-normal w-28">Bias Corr.</th>
+              {showConsistencyCorr && (
+                <th className="px-3 py-2 text-right text-[var(--color-text-muted)] font-normal w-28">Consist. Corr.</th>
               )}
             </tr>
           </thead>
@@ -176,9 +176,9 @@ function StatsTable({
                   <td className={`px-3 py-1.5 text-right font-mono tabular-nums ${style.text}`}>
                     {fmt(row.value)}
                   </td>
-                  {showBiasCorr && (
+                  {showConsistencyCorr && (
                     <td className="px-3 py-1.5 text-right font-mono tabular-nums text-[var(--color-text-muted)]">
-                      {fmt(row.biasCorr)}
+                      {fmt(row.consistencyCorr)}
                     </td>
                   )}
                 </tr>
@@ -492,7 +492,7 @@ export default function DescriptiveObservation({
       {/* Statistics Table */}
       <StatsTable
         rows={result.rows.filter(r => !r.advancedId || config.advancedStats.includes(r.advancedId))}
-        showBiasCorr={config.showBiasCorr}
+        showConsistencyCorr={config.showConsistencyCorr}
         precision={precision}
       />
 

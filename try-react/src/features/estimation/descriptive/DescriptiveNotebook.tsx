@@ -106,8 +106,8 @@ function generateInterpretation(s: DescriptiveSummary, result: DescriptiveResult
 } {
   const { n, mean, median, std, iqr } = s
 
-  const skewRow = result.rows.find((r) => r.measure.includes('Skewness (biased)'))
-  const kurtRow = result.rows.find((r) => r.measure.includes('Kurtosis excess'))
+  const skewRow = result.rows.find((r) => r.measure.includes('Skewness (k-statistic)'))
+  const kurtRow = result.rows.find((r) => r.measure.includes('Kurtosis excess (k-statistic)'))
   const skew = skewRow?.value ?? null
   const kurt = kurtRow?.value ?? null
 
@@ -164,8 +164,8 @@ function generateNarrative(
   const hasKurtosis = config.advancedStats.includes('kurtosis')
   const hasCov = config.advancedStats.includes('cov')
 
-  const skewRow = result.rows.find(r => r.measure.includes('Skewness (biased)'))
-  const kurtRow = result.rows.find(r => r.measure.includes('Kurtosis excess'))
+  const skewRow = result.rows.find(r => r.measure.includes('Skewness (k-statistic)'))
+  const kurtRow = result.rows.find(r => r.measure.includes('Kurtosis excess (k-statistic)'))
   const covRow = result.rows.find(r => r.measure.includes('CoV'))
 
   const skew = hasSkewness && skewRow?.value != null && !isNaN(skewRow.value) ? skewRow.value : null
@@ -435,10 +435,10 @@ export default function DescriptiveNotebook({
 
   const p = precision
 
-  // Find bias correction context
+  // Find consistency correction context
   const stdRow = result.rows.find((r) => r.measure === 'Std Dev (ddof=1)')
-  const c4n = stdRow?.biasCorr != null && stdRow.value != null && stdRow.value !== 0
-    ? (stdRow.value / stdRow.biasCorr).toFixed(6)
+  const c4n = stdRow?.consistencyCorr != null && stdRow.value != null && stdRow.value !== 0
+    ? (stdRow.value / stdRow.consistencyCorr).toFixed(6)
     : null
 
   return (
@@ -485,13 +485,15 @@ export default function DescriptiveNotebook({
         </div>
       </details>
 
-      {/* Bias Correction Notes */}
-      {config.showBiasCorr && c4n && (
-        <Section title="Bias Correction" accent="text-[var(--color-text-muted)]">
+      {/* Consistency Correction Notes */}
+      {config.showConsistencyCorr && c4n && (
+        <Section title="Consistency Correction" accent="text-[var(--color-text-muted)]">
           <ul className="flex flex-col gap-1">
-            <Bullet>c₄(n={summary.n}) = {c4n} (unbiasing constant for σ)</Bullet>
-            <Bullet>Bias-corrected σ = σ̂ / c₄(n)</Bullet>
-            <Bullet>Useful when σ is used to estimate population σ.</Bullet>
+            <Bullet>c₄(n={summary.n}) = {c4n} — correction factor for σ (Std Dev)</Bullet>
+            <Bullet>Consistency-corrected σ = σ̂₁ / c₄(n)</Bullet>
+            <Bullet>MAD / Φ⁻¹(0.75) ≈ 1.4826 × MAD — consistent estimator of σ under normality</Bullet>
+            <Bullet>IQR / (2Φ⁻¹(0.75)) ≈ 0.7413 × IQR — consistent estimator of σ under normality</Bullet>
+            <Bullet>AAD × √(π/2) ≈ 1.2533 × AAD — consistent estimator of σ under normality</Bullet>
           </ul>
         </Section>
       )}

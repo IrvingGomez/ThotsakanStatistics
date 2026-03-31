@@ -4,7 +4,7 @@ export interface StatRow {
   category: 'Quantiles' | 'Central Tendency' | 'Dispersion' | 'Shape' | 'Extremes'
   measure: string
   value: number | null
-  biasCorr: number | null   // bias-corrected value, if applicable
+  consistencyCorr: number | null   // consistency-corrected value, if applicable
   robust?: boolean
   advancedId?: string
   warning?: string
@@ -218,6 +218,9 @@ function buildHistogram(sortedArr: number[], maxBins = 50): HistogramData {
   return { binEdges: edges, counts }
 }
 
+// Φ⁻¹(0.75) — used for consistency corrections of MAD, IQR, AAD under normality
+const NORM_PPF_75 = 0.6744897501960817
+
 const descriptiveStatsWorker = {
   computeDescriptiveStats(input: DescriptiveInput): DescriptiveResult | null {
     const { data, quantileProbs, trimAlpha, winsorLimits, weights } = input
@@ -228,8 +231,8 @@ const descriptiveStatsWorker = {
     const rows: StatRow[] = []
 
     if (n > 0) {
-      rows.push({ category: 'Extremes', measure: 'Minimum', value: s[0], biasCorr: null, robust: false })
-      rows.push({ category: 'Extremes', measure: 'Maximum', value: s[n - 1], biasCorr: null, robust: false })
+      rows.push({ category: 'Extremes', measure: 'Minimum', value: s[0], consistencyCorr: null, robust: false })
+      rows.push({ category: 'Extremes', measure: 'Maximum', value: s[n - 1], consistencyCorr: null, robust: false })
     }
 
     for (const p of quantileProbs) {
@@ -237,7 +240,7 @@ const descriptiveStatsWorker = {
         category: 'Quantiles',
         measure: `Q${p.toFixed(2)} (p=${p})`,
         value: quantile(s, p),
-        biasCorr: null,
+        consistencyCorr: null,
         robust: true,
       })
     }
@@ -245,16 +248,16 @@ const descriptiveStatsWorker = {
     const μ = mean(data)
     const med = quantile(s, 0.5)
 
-    rows.push({ category: 'Central Tendency', measure: 'Mean', value: μ, biasCorr: null, robust: false })
-    rows.push({ category: 'Central Tendency', measure: 'Median', value: med, biasCorr: null, robust: true })
-    rows.push({ category: 'Central Tendency', measure: 'Interquartile Mean (IQM)', value: trimmedMean(s, 0.25), biasCorr: null, robust: true, advancedId: 'iqm' })
+    rows.push({ category: 'Central Tendency', measure: 'Mean', value: μ, consistencyCorr: null, robust: false })
+    rows.push({ category: 'Central Tendency', measure: 'Median', value: med, consistencyCorr: null, robust: true })
+    rows.push({ category: 'Central Tendency', measure: 'Interquartile Mean (IQM)', value: trimmedMean(s, 0.25), consistencyCorr: null, robust: true, advancedId: 'iqm' })
 
     if (trimAlpha !== null && trimAlpha > 0) {
       rows.push({
         category: 'Central Tendency',
         measure: `Trimmed Mean (α=${trimAlpha})`,
         value: trimmedMean(s, trimAlpha),
-        biasCorr: null,
+        consistencyCorr: null,
         robust: true,
         advancedId: 'trimmed_mean',
       })
@@ -265,14 +268,11 @@ const descriptiveStatsWorker = {
         category: 'Central Tendency',
         measure: `Winsorized Mean (${winsorLimits[0]}, ${winsorLimits[1]})`,
         value: winsorizedMean(s, winsorLimits),
-        biasCorr: null,
+        consistencyCorr: null,
         robust: true,
         advancedId: 'winsorized_mean',
       })
     }
-
-    // DEBUG: remove after confirming
-    console.log('[Worker] data sample:', data.slice(0, 10), '| has zero?', data.some(x => x === 0), '| has negative?', data.some(x => x < 0))
 
     const gm = geometricMean(data)
     const hasNonPositiveGM = data.some(x => x <= 0)
@@ -280,7 +280,7 @@ const descriptiveStatsWorker = {
       category: 'Central Tendency',
       measure: 'Geometric Mean',
       value: isNaN(gm) ? null : gm,
-      biasCorr: null,
+      consistencyCorr: null,
       robust: false,
       advancedId: 'geometric_mean',
       warning: hasNonPositiveGM
@@ -294,7 +294,7 @@ const descriptiveStatsWorker = {
       category: 'Central Tendency',
       measure: 'Harmonic Mean',
       value: isNaN(hm) ? null : hm,
-      biasCorr: null,
+      consistencyCorr: null,
       robust: false,
       advancedId: 'harmonic_mean',
       warning: hasNonPositiveHM
@@ -307,7 +307,7 @@ const descriptiveStatsWorker = {
         category: 'Central Tendency',
         measure: 'Weighted Mean',
         value: weightedMean(data, weights),
-        biasCorr: null,
+        consistencyCorr: null,
         robust: false,
         advancedId: 'weighted_mean',
       })
@@ -318,15 +318,15 @@ const descriptiveStatsWorker = {
     const stdBiased = Math.sqrt(varBiased)
     const stdUnbiased = Math.sqrt(varUnbiased)
     const c4n = c4(n)
-    const stdBiasCorr = stdUnbiased / c4n
+    const stdConsistencyCorr = stdUnbiased / c4n
 
-    rows.push({ category: 'Dispersion', measure: 'Variance (ddof=0)', value: varBiased, biasCorr: varUnbiased, robust: false, advancedId: 'variance_0' })
-    rows.push({ category: 'Dispersion', measure: 'Variance (ddof=1)', value: varUnbiased, biasCorr: varUnbiased, robust: false, advancedId: 'variance_1' })
+    rows.push({ category: 'Dispersion', measure: 'Variance (ddof=0)', value: varBiased, consistencyCorr: varUnbiased, robust: false, advancedId: 'variance_0' })
+    rows.push({ category: 'Dispersion', measure: 'Variance (ddof=1)', value: varUnbiased, consistencyCorr: varUnbiased, robust: false, advancedId: 'variance_1' })
     rows.push({
       category: 'Dispersion',
       measure: 'Std Dev (ddof=0)',
       value: stdBiased,
-      biasCorr: stdBiasCorr,
+      consistencyCorr: stdConsistencyCorr,
       robust: false,
       advancedId: 'std_dev_0',
     })
@@ -334,7 +334,7 @@ const descriptiveStatsWorker = {
       category: 'Dispersion',
       measure: 'Std Dev (ddof=1)',
       value: stdUnbiased,
-      biasCorr: stdBiasCorr,
+      consistencyCorr: stdConsistencyCorr,
       robust: false,
     })
 
@@ -344,7 +344,7 @@ const descriptiveStatsWorker = {
       category: 'Dispersion',
       measure: 'Range',
       value: dataRange,
-      biasCorr: dataRange / d2n,
+      consistencyCorr: dataRange / d2n,
       robust: false,
       advancedId: 'range',
     })
@@ -352,9 +352,11 @@ const descriptiveStatsWorker = {
     const q1v = quantile(s, 0.25)
     const q3v = quantile(s, 0.75)
     const iqrV = q3v - q1v
-    rows.push({ category: 'Dispersion', measure: 'IQR (Q75 − Q25)', value: iqrV, biasCorr: null, robust: true })
-    rows.push({ category: 'Dispersion', measure: 'MAD (Median Abs Dev)', value: mad(s), biasCorr: null, robust: true, advancedId: 'mad' })
-    rows.push({ category: 'Dispersion', measure: 'AAD (Mean Abs Dev)', value: aad(data), biasCorr: null, robust: false, advancedId: 'aad' })
+    const madV = mad(s)
+    const aadV = aad(data)
+    rows.push({ category: 'Dispersion', measure: 'IQR (Q75 − Q25)', value: iqrV, consistencyCorr: iqrV / (2 * NORM_PPF_75), robust: true })
+    rows.push({ category: 'Dispersion', measure: 'MAD (Median Abs Dev)', value: madV, consistencyCorr: madV / NORM_PPF_75, robust: true, advancedId: 'mad' })
+    rows.push({ category: 'Dispersion', measure: 'AAD (Mean Abs Dev)', value: aadV, consistencyCorr: aadV * Math.sqrt(Math.PI / 2), robust: false, advancedId: 'aad' })
 
     {
       const meanIsZero = μ === 0
@@ -363,7 +365,7 @@ const descriptiveStatsWorker = {
         category: 'Dispersion',
         measure: 'CoV (σ/μ)',
         value: meanIsZero ? null : stdUnbiased / μ,
-        biasCorr: meanIsZero ? null : stdBiasCorr / μ,
+        consistencyCorr: meanIsZero ? null : stdConsistencyCorr / μ,
         robust: false,
         advancedId: 'cov',
         warning: meanIsZero
@@ -376,18 +378,18 @@ const descriptiveStatsWorker = {
 
     rows.push({
       category: 'Shape',
-      measure: 'Skewness (biased)',
-      value: skewness(data),
-      biasCorr: skewnessUnbiased(data),
+      measure: 'Skewness (k-statistic)',
+      value: skewnessUnbiased(data),
+      consistencyCorr: null,
       robust: false,
       advancedId: 'skewness',
       warning: stdBiased === 0 ? 'Undefined — all values are identical' : undefined,
     })
     rows.push({
       category: 'Shape',
-      measure: 'Kurtosis excess (biased)',
-      value: kurtosis(data),
-      biasCorr: kurtosisUnbiased(data),
+      measure: 'Kurtosis excess (k-statistic)',
+      value: kurtosisUnbiased(data),
+      consistencyCorr: null,
       robust: false,
       advancedId: 'kurtosis',
       warning: stdBiased === 0 ? 'Undefined — all values are identical' : undefined,
