@@ -90,3 +90,7 @@ Thumbs.db
 
 # Temp / scratch files
 test_data.csv
+
+# Read-only reference folders (not part of the React migration)
+ThotsakanStatistics/
+Try_reflex/
