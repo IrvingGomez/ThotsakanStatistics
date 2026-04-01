@@ -278,7 +278,7 @@ Every feature tab plugs into a shared 3-panel layout:
 
 ## 📄 License
 
-This project is developed for educational use at Irving College. Contact the maintainers for licensing details.
+This project is developed for educational use. Contact the maintainers for licensing details.
 
 ---
 
