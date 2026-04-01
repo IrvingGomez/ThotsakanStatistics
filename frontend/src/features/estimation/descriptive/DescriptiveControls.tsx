@@ -95,18 +95,17 @@ function TextInput({
 
 function Toggle({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) {
   return (
-    <label className="flex items-center gap-2 cursor-pointer mb-2">
+    <div className="flex items-center gap-2 cursor-pointer mb-2" onClick={() => onChange(!value)}>
       <button
         type="button"
         role="switch"
         aria-checked={value}
-        onClick={() => onChange(!value)}
         className={`relative w-8 h-4 rounded-full transition-colors ${value ? 'bg-[var(--color-accent)]' : 'bg-[var(--color-border-md)]'}`}
       >
         <span className={`absolute top-0.5 left-0.5 w-3 h-3 bg-white rounded-full transition-transform ${value ? 'translate-x-4' : ''}`} />
       </button>
       <span className="text-xs text-[var(--color-text)]">{label}</span>
-    </label>
+    </div>
   )
 }
 

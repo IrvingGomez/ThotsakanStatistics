@@ -31,6 +31,7 @@ export function useDescriptiveTabState() {
     }).then(res => {
       setResult(res)
     }).catch(err => {
+      setResult(null)
       setError(err instanceof Error ? err.message : 'Computation failed')
     }).finally(() => {
       setIsComputing(false)

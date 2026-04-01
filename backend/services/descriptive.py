@@ -34,6 +34,32 @@ def build_histogram(series: pd.Series) -> HistogramData:
         counts=counts.tolist()
     )
 
+def _advanced_id(measure: str) -> str | None:
+    """Map a core measure name to the frontend advancedId, or None for basic stats."""
+    if measure.startswith("Trimmed Mean"):
+        return "trimmed_mean"
+    if measure.startswith("Winsorized Mean"):
+        return "winsorized_mean"
+    return {
+        "Interquartile Mean": "iqm",
+        "Weighted Mean":      "weighted_mean",
+        "Geometric Mean":     "geometric_mean",
+        "Harmonic Mean":      "harmonic_mean",
+        "Variance (ddof=0)":  "variance_0",
+        "Variance (ddof=1)":  "variance_1",
+        "Std (ddof=0)":       "std_dev_0",
+        "Range":              "range",
+        "MAD":                "mad",
+        "AAD":                "aad",
+        "Skewness (central moments)": "skewness",
+        "Skewness (k-statistic)":     "skewness",
+        "Kurtosis (central moments)":        "kurtosis",
+        "Kurtosis (k-statistic)":            "kurtosis",
+        "Excess Kurtosis (central moments)": "kurtosis",
+        "Excess Kurtosis (k-statistic)":     "kurtosis",
+    }.get(measure)
+
+
 def calculate_descriptive(df: pd.DataFrame, req: DescriptiveRequest) -> DescriptiveResponse:
     if req.column not in df.columns:
         raise ValueError(f"Column '{req.column}' not found in dataset")
@@ -42,10 +68,18 @@ def calculate_descriptive(df: pd.DataFrame, req: DescriptiveRequest) -> Descript
     if req.filters:
         for col, allowed_values in req.filters.items():
             if col in df.columns and allowed_values:
-                df = df[df[col].astype(str).isin(allowed_values)]
+                # Need to gracefully handle float/int/string matches 
+                # e.g., if allowed is ["1"], but df[col] is 1.0
+                df_col_str = df[col].astype(str)
+                # also try to strip trailing '.0' for numeric parity
+                df_col_cleaned = df_col_str.str.replace(r'\.0$', '', regex=True)
+                df = df[df_col_str.isin(allowed_values) | df_col_cleaned.isin(allowed_values)]
 
     series = df[req.column].dropna()
     weights = df[req.weightsCol].dropna() if req.weightsCol else None
+    
+    if len(series) < 2:
+        raise ValueError(f"Not enough data points ({len(series)}) for column '{req.column}' after filtering.")
     
     # 1. Run core stats computation
     stats_df = compute_descriptive_statistics(
@@ -82,7 +116,8 @@ def calculate_descriptive(df: pd.DataFrame, req: DescriptiveRequest) -> Descript
             measure=str(row["Measure"]),
             value=val,
             consistencyCorr=corr,
-            robust=bool(row["Robust"])
+            robust=bool(row["Robust"]),
+            advancedId=_advanced_id(str(row["Measure"]))
         ))
         
     # 2. Build Summary
