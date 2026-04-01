@@ -2,15 +2,16 @@
 
 ## 1. Context
 
-Three projects exist in this workspace:
+Four components exist in this workspace:
 
-| Project | Stack | Role |
+| Component | Stack | Role |
 |---|---|---|
-| `ThotsakanStatistics` | Python · Gradio | Full stats engine — source of all computation logic |
-| `Try_reflex` | Python · Reflex | Layout prototype — 3-panel "lab bench" feel, no stats yet |
-| `try-react` | TypeScript · React + Vite | **Target** — final redesign goes here |
+| `frontend/` | TypeScript · React + Vite | **Active** — UI layer, interactive charts, instant feedback |
+| `backend/` | Python · FastAPI | **Active** — authoritative statistical computation |
+| `ThotsakanStatistics/` | Python · Gradio | **Read-only reference** — source of `core/` math logic |
+| `Try_reflex/` | Python · Reflex | **Read-only reference** — layout prototype |
 
-The **Try_reflex** layout (Controls / Observation / Notebook columns, dark background, no rigid navbar) is the spatial model to follow. The goal is to bring that feel into React with a proper sticky header, then port the stats engine from `ThotsakanStatistics` over time.
+**Architecture:** React handles the UI with instant JS approximations for slider responsiveness. FastAPI wraps the existing Python `core/` (identical to `ThotsakanStatistics/core/`) as the authoritative math engine. The professor verifies correctness by reading `backend/core/` directly.
 
 ---
 
@@ -53,56 +54,86 @@ The **Try_reflex** layout (Controls / Observation / Notebook columns, dark backg
 
 ## 3. Component Architecture
 
+### Frontend (`frontend/src/`)
+
 ```
 src/
 ├── main.tsx
 ├── App.tsx                        # Router + layout shell
 │
+├── api/                           # Backend fetch client
+│   ├── client.ts                  # Base config, error handling, session mgmt
+│   ├── descriptive.ts             # Typed wrappers per feature
+│   ├── inference.ts
+│   ├── hypothesis.ts
+│   ├── regression.ts
+│   └── types.ts                   # TS types matching backend Pydantic schemas
+│
 ├── layout/
 │   ├── Header.tsx                 # Sticky nav bar + tab buttons
 │   ├── SubHeader.tsx              # Breadcrumb ribbon (per-tab)
 │   ├── LabBench.tsx               # 3-panel resizable container
+│   ├── LogoBar.tsx                # App branding
 │   └── Footer.tsx                 # Status bar
 │
-├── panels/
-│   ├── ControlPanel.tsx           # Left slot — swaps content per tab
-│   ├── ObservationPanel.tsx       # Center slot — plots
-│   └── NotebookPanel.tsx          # Right slot — stats + lesson + notes
-│
-├── tabs/                          # Each tab provides 3 panel components
+├── features/                      # Each tab provides 3 panel components
 │   ├── home/
-│   ├── estimation/
-│   │   ├── descriptive/
-│   │   ├── graphical/
-│   │   └── inference/             # First to implement
-│   │       ├── InferenceControls.tsx
-│   │       ├── InferenceObservation.tsx
-│   │       └── InferenceNotebook.tsx
-│   ├── hypothesis/
-│   ├── regression/
-│   └── data/
+│   ├── data/
+│   ├── probability/
+│   │   └── common/                # 12 distributions
+│   └── estimation/
+│       ├── descriptive/
+│       ├── inference/
+│       └── graphical/             # Planned
 │
 ├── components/                    # Reusable atoms
 │   ├── DualInput.tsx              # Slider + number input (synced)
-│   ├── StatCard.tsx               # Single stat display
-│   ├── PlotContainer.tsx          # Plotly wrapper with loading state
-│   ├── MathBlock.tsx              # KaTeX rendered block
-│   ├── MathEditor.tsx             # MathLive input field
-│   ├── LessonCard.tsx             # Teaching tip card
-│   └── DataTable.tsx              # Lightweight data grid
+│   ├── CollapsedRail.tsx          # Collapsed sidebar indicator
+│   ├── DragHandle.tsx             # Panel resize handle
+│   └── ExportMenu.tsx             # CSV/PDF/PNG export
 │
-├── hooks/
-│   ├── useNormalPDF.ts            # Generate normal curve points
-│   ├── useConfidenceInterval.ts   # CI calculation
-│   ├── useStats.ts                # General stats helpers
-│   └── useDebounce.ts             # Smooth slider performance
+├── hooks/                         # Feature computation + API orchestration
+│   ├── useDistribution.ts         # 12 distributions (JS primary)
+│   ├── useNormalPDF.ts            # Normal curve + CI shading
+│   ├── useDescriptiveStats.ts     # Calls backend API
+│   ├── useResizablePanel.ts
+│   ├── useContainerBreakpoint.ts
+│   └── useSidebarKeyboard.ts
 │
+├── context/
+│   └── DataContext.tsx             # Global dataset state + session ID
+│
+└── utils/
+    ├── exportCSV.ts, exportPDF.ts, exportPNG.ts
+    └── parseFile.ts
+```
+
+### Backend (`backend/`)
+
+```
+backend/
+├── main.py                        # FastAPI app, CORS, route mounting
+├── core/                          # Pure math (IDENTICAL to ThotsakanStatistics/core/)
+│   ├── data_stats.py
+│   ├── estimation/
+│   │   ├── descriptive.py
+│   │   ├── graphical_analysis.py
+│   │   └── inference/             # ci_*.py, pi_*.py, estimators, likelihood
+│   ├── hypothesis_tests.py
+│   └── linear_regression.py
+├── services/                      # Orchestration (from controllers/)
+│   ├── descriptive.py
+│   ├── inference.py
+│   ├── hypothesis.py
+│   └── regression.py
 ├── api/
-│   └── statsApi.ts                # Optional FastAPI calls to Python backend
-│
-└── styles/
-    ├── globals.css
-    └── lab-bench.css
+│   ├── routes/                    # Thin FastAPI endpoints
+│   ├── schemas/                   # Pydantic request/response models
+│   └── deps.py                    # Shared deps (session lookup)
+├── sessions/
+│   └── store.py                   # In-memory dict + TTL auto-cleanup
+├── requirements.txt
+└── tests/
 ```
 
 ---
@@ -171,14 +202,28 @@ LabBench loads (Controls / Observation / Notebook)
 
 ## 7. Implementation Phases
 
+### Completed (Frontend-only era)
+
+| Phase | Deliverable | Status |
+|---|---|---|
+| **1** | Header + LabBench 3-panel layout + DualInput + Normal PDF tab | Done |
+| **2** | Notebook panel — StatCard, LessonCard, MathBlock | Done |
+| **3** | Data tab — CSV upload + DataTable preview | Done |
+| **4** | 12 common probability distributions (PMF/PDF/CDF) | Done |
+| **5** | Descriptive statistics (Web Worker) | Done |
+
+### Current (Hybrid migration — see `doc/migration_plan.md` for details)
+
 | Phase | Deliverable | Priority |
 |---|---|---|
-| **1** | Header + LabBench 3-panel layout + DualInput + Normal PDF tab | First |
-| **2** | Notebook panel — StatCard, LessonCard, MathBlock, scratchpad | Second |
-| **3** | Confidence interval tab (port `ci_mean.py` logic from ThotsakanStatistics) | Third |
-| **4** | Data tab — CSV upload + DataTable preview | Fourth |
-| **5** | Hypothesis testing + regression tabs | Fifth |
-| **6** | Thai/English i18n, export buttons, polish | Last |
+| **0** | Backend skeleton: FastAPI + session store + Vite proxy + `concurrently` | Foundation |
+| **1** | Descriptive stats: migrate Web Worker → backend API | First |
+| **2** | Inference: CI/PI/confidence regions via backend services | Second |
+| **3** | Graphical analysis: ECDF, advanced histograms | Third |
+| **4** | Hypothesis testing: new React UI + backend API | Fourth |
+| **5** | Linear regression: formula support + visualization | Fifth |
+| **6** | Distributions: add Python backend for integrity verification | Sixth |
+| **7** | Polish: i18n, export improvements, custom distributions, approximations | Last |
 
 ---
 

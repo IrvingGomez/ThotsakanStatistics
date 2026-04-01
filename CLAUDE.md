@@ -4,13 +4,30 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Thotsakan Statistics** — an interactive statistics laboratory for Thai engineering students. The React/TypeScript app (`try-react/`) replaces a Python/Gradio predecessor. Philosophy: "Stop Calculating. Start Simulating." — students manipulate variables and observe behavior rather than applying formulas.
+**Thotsakan Statistics** — an interactive statistics laboratory for Thai engineering students. Philosophy: "Stop Calculating. Start Simulating." — students manipulate variables and observe behavior rather than applying formulas.
 
-All substantive work lives in `try-react/`. The `Try_reflex/` directory is a legacy Python backend (Reflex framework), kept for reference only.
+**Hybrid architecture:** React/TypeScript frontend (`frontend/`) + Python/FastAPI backend (`backend/`). The frontend handles UI, interactivity, and instant visual feedback; the backend is the authoritative source for all statistical computation (scipy, statsmodels, pingouin). The professor verifies the Python `core/` math directly.
+
+### Repository Layout
+
+```
+thotsakan-stats/
+├── frontend/              # React + Vite + TypeScript (UI layer)
+├── backend/               # FastAPI + Python (computation layer)
+│   ├── core/              # Pure math — identical to ThotsakanStatistics/core/
+│   ├── services/          # Orchestration (cleaned from controllers/)
+│   ├── api/               # FastAPI routes + Pydantic schemas
+│   └── sessions/          # In-memory dataset store with TTL
+├── ThotsakanStatistics/   # Original Gradio app (READ-ONLY reference)
+├── Try_reflex/            # Legacy Reflex prototype (READ-ONLY reference)
+└── doc/
+```
+
+`ThotsakanStatistics/` and `Try_reflex/` are kept for reference during migration. Do not modify them.
 
 ## Commands
 
-All commands must be run from `try-react/`:
+### Frontend (from `frontend/`)
 
 ```bash
 npm run dev        # Vite dev server with fast refresh
@@ -20,11 +37,78 @@ npm run test       # Vitest (run once)
 npm run test:ui    # Vitest interactive UI
 ```
 
+### Backend (from `backend/`)
+
+```bash
+pip install -r requirements.txt   # Install dependencies
+uvicorn main:app --reload         # FastAPI dev server (port 8000)
+pytest                            # Run tests
+```
+
+### Both (from project root)
+
+```bash
+npm run dev        # Runs frontend + backend concurrently (via concurrently)
+```
+
 No linting is configured yet (no ESLint/Prettier).
 
 ## Architecture
 
-### The 3-Panel "LabBench" Pattern
+### The "Thin Client + Authoritative Server" Pattern
+
+For interactive features (slider-driven), the frontend computes an **instant JS approximation** for immediate visual feedback, then fires a debounced request to the Python backend. The backend returns the **authoritative result**, which React swaps in silently. For button-triggered features (regression, hypothesis tests, bootstrap), only the backend computes.
+
+```
+User drags slider
+  → JS computes approximate result instantly (renders)
+  → Debounced request fires to Python API (~200ms after last move)
+  → Python returns authoritative result
+  → React replaces approximate with real value
+```
+
+### Backend Architecture
+
+```
+backend/
+├── core/                  # Pure math (IDENTICAL to ThotsakanStatistics/core/)
+│   ├── data_stats.py      # Data loading and inspection
+│   ├── estimation/
+│   │   ├── descriptive.py
+│   │   ├── graphical_analysis.py
+│   │   └── inference/     # ci_*.py, pi_*.py, estimators, likelihood
+│   ├── hypothesis_tests.py
+│   └── linear_regression.py
+│
+├── services/              # Orchestration (from controllers/)
+│   ├── descriptive.py     # Thin: validate → call core
+│   ├── inference.py       # Thick: picks distribution, composes CI/PI
+│   ├── hypothesis.py      # Medium: dispatch + group materialization
+│   └── regression.py      # Medium: parsing + delegation
+│
+├── api/
+│   ├── routes/            # FastAPI endpoints (~10 lines each)
+│   ├── schemas/           # Pydantic request/response models
+│   └── deps.py            # Shared dependencies (session lookup, etc.)
+│
+├── sessions/
+│   └── store.py           # In-memory dict + TTL auto-cleanup
+│
+├── main.py                # FastAPI app, CORS, mount routes
+└── requirements.txt       # scipy, statsmodels, pingouin, fastapi, uvicorn
+```
+
+**Request flow:** `React hook → POST /api/... → api/routes/ → services/ → core/ → JSON response`
+
+**Key rules:**
+- `core/` must NOT depend on services, api, or sessions
+- `core/` is kept identical to `ThotsakanStatistics/core/` so the professor can verify the math
+- Rounding is presentation-level — core keeps full numerical precision
+- Datasets are held server-side in memory, keyed by session ID with TTL auto-cleanup
+
+### Frontend Architecture
+
+#### The 3-Panel "LabBench" Pattern
 
 Every feature tab slots three components into a shared layout (`src/layout/LabBench.tsx`):
 
@@ -44,63 +128,97 @@ Every feature tab slots three components into a shared layout (`src/layout/LabBe
 
 Panels are resizable (drag handles), collapsible, and persist widths to `localStorage` key `thotsakan-sidebar-state`. Auto-collapse at 768px (both sidebars) / 1024px (right sidebar).
 
-### Feature Organization
+#### Feature Organization
 
 ```
-src/features/
-  home/                          # Full-width landing page
-  data/                          # CSV upload + inspection
-  probability/
-    common/                      # 12 distributions (PMF/PDF/CDF)
-  estimation/
-    descriptive/                 # Stats tables, histograms, box plots
-    inference/                   # Normal PDF with CI visualization
+src/
+├── api/                             # NEW: backend fetch client
+│   ├── client.ts                    # Base fetch config, error handling
+│   ├── descriptive.ts               # Typed wrappers per endpoint
+│   ├── inference.ts
+│   └── types.ts                     # TypeScript types matching Pydantic schemas
+├── features/
+│   ├── home/                        # Full-width landing page
+│   ├── data/                        # CSV upload + inspection
+│   ├── probability/
+│   │   └── common/                  # 12 distributions (PMF/PDF/CDF)
+│   └── estimation/
+│       ├── descriptive/             # Stats tables, histograms, box plots
+│       └── inference/               # Normal PDF with CI visualization
+├── hooks/                           # Feature-local computation + API orchestration
+├── components/                      # Reusable UI atoms
+├── context/                         # Global state (DataContext)
+├── layout/                          # LabBench, Header, Footer, etc.
+├── utils/                           # Export helpers, file parsing
+└── workers/                         # Web Workers (being replaced by API calls)
 ```
 
 Each feature folder follows the naming convention: `*Controls.tsx`, `*Observation.tsx`, `*Notebook.tsx`. `App.tsx` wires the active tab's three components into `LabBench`.
 
-### State Management
+#### State Management
 
-**Global (DataContext):** `src/context/DataContext.tsx` — `useReducer` managing dataset, filters, column classifications, and display precision. Access via `useData()`. Provides computed `filteredRows` and helpers `getNumericData(col)` / `getUniqueValues(col)`.
+**Global (DataContext):** `src/context/DataContext.tsx` — `useReducer` managing dataset reference (session ID), filters, column classifications, and display precision. Access via `useData()`.
 
-**Feature-local:** Each tab's computation lives in a dedicated hook (`useNormalPDF`, `useDistribution`, `useDescriptiveStats`). These hooks are memoized and do the heavy math, returning chart-ready data to Observation components.
+**Feature-local:** Each tab's computation lives in a dedicated hook (`useNormalPDF`, `useDistribution`, `useDescriptiveStats`). Hooks provide instant JS approximation and orchestrate API calls for authoritative results.
 
-**Heavy computation:** `src/workers/descriptiveStats.worker.ts` runs off the main thread via Comlink. Called from `useDescriptiveStats`.
+**API client:** `src/api/` contains typed fetch wrappers. Hooks call these instead of doing heavy math locally.
 
 **UI persistence:** `useLocalStorageState` wraps `useState` with schema validation on load.
 
-### Key Hooks
+#### Key Hooks
 
 | Hook | What it does |
 |------|-------------|
-| `useDistribution()` | 12 distributions with PMF/PDF/CDF and query operations |
+| `useDistribution()` | 12 distributions with PMF/PDF/CDF and query operations (JS primary, Python for integrity) |
 | `useNormalPDF()` | Normal curve + CI shading (Beasley-Springer-Moro z-critical) |
-| `useDescriptiveStats()` | Delegates to Web Worker via Comlink |
+| `useDescriptiveStats()` | Calls backend API (replaces Web Worker) |
 | `useResizablePanel()` | Drag logic for panel width |
 | `useContainerBreakpoint()` | Viewport-based auto-collapse |
 | `useSidebarKeyboard()` | Keyboard shortcuts for sidebar toggle |
 
-### DualInput Component
+#### DualInput Component
 
 `src/components/DualInput.tsx` is used everywhere for parameter controls:
 - Slider → immediate commit; Text → 400ms debounce + blur commit
 - Arrow keys for fine adjustment; internal text state decoupled from committed value
 - Clamping + rounding to step precision
 
-### Visualization
+#### Visualization
 
 Plotly charts in Observation components are lazy-loaded with `React.lazy` + `Suspense` to avoid blocking initial render (plotly-vendor chunk is large). Bundle is split into `react-vendor`, `plotly-vendor`, and `math-vendor` chunks. Chunk size warning threshold: 1600 KB.
 
-### Math Rendering
+#### Math Rendering
 
 KaTeX for static formula display; MathLive for interactive math input. Custom element types declared in `src/custom-elements.d.ts`.
 
 ## Performance Targets
 
-From `doc/DESIGN_PROPOSAL.md`: slider interaction → plot update < 100ms; tab switch < 200ms.
+| Interaction | Target |
+|---|---|
+| Slider → JS approximation render | < 100ms |
+| Backend authoritative result | < 500ms (typical), < 2s (bootstrap) |
+| Tab switch | < 200ms (lazy loaded) |
+| Initial page load | < 2s |
+
+## Migration Status
+
+Porting features from `ThotsakanStatistics/` (Gradio) to the React + FastAPI hybrid. See `doc/migration_plan.md` for the phased roadmap.
+
+| Feature | Frontend | Backend | Status |
+|---|---|---|---|
+| Home tab | Done | N/A | Complete |
+| Data tab | Done | Pending (session store) | Partial |
+| 12 common distributions | Done (JS) | Pending (integrity) | Partial |
+| Descriptive statistics | Done (Web Worker) | Pending (migrate to API) | Partial |
+| Normal PDF / CI | Done (JS) | Pending (integrity) | Partial |
+| Inference (CI/PI/regions) | Not started | Pending | Not started |
+| Graphical analysis | Not started | Pending | Not started |
+| Hypothesis testing | Not started | Pending | Not started |
+| Linear regression | Not started | Pending | Not started |
 
 ## Documentation
 
 - `doc/DESIGN_PROPOSAL.md` — component architecture, tab/panel slot pattern, DualInput spec, implementation phases
 - `doc/identity.md` — brand philosophy, UX pillars, what the app is and is NOT
 - `doc/context.md` — high-level workspace onboarding, architecture layers, data flow
+- `doc/migration_plan.md` — phased migration roadmap from Gradio to React + FastAPI

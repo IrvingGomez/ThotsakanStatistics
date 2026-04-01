@@ -4,138 +4,152 @@
 
 **Thotsakan Statistics** is an interactive statistics laboratory application built by **Himmapan Lab** for engineering education.
 
-- Current app version in code: **0.1.2** (`ui/version.py`)
 - License: **MIT**
-- Main runtime UI stack: **Gradio**
+- Frontend: **React + TypeScript + Vite** (`frontend/`)
+- Backend: **FastAPI + Python** (`backend/`)
+- Original reference: **Gradio app** (`ThotsakanStatistics/`, read-only)
 
 Primary goals:
 1. Help students/instructors run statistics workflows interactively.
 2. Provide a structured codebase for student contributors.
+3. Let the professor verify statistical correctness by reading Python `core/`.
 
 ---
 
 ## 2) Current functional scope
 
-Implemented feature areas (from code and UI wiring):
+### Implemented in React frontend:
 
-- **Data tab**: dataset upload, summary, variable typing, category filters, type reclassification.
-- **Estimation tab**:
-  - Descriptive statistics
-  - Statistical inference (confidence/prediction intervals, confidence regions)
-  - Graphical analysis
-- **Hypothesis testing tab**:
-  - One-sample t-test
-  - Two-sample t-test (Welch option)
-  - Equal-variance tests (Bartlett/Levene)
-  - One-way ANOVA
-  - Table/figure download support
-- **Linear regression tab**:
-  - Formula-based or column-based model setup
-  - Optional CI/PI display
-  - Multiple plot types
+- **Home tab**: landing page with navigation.
+- **Data tab**: CSV/TSV upload, preview, column reclassification, filtering.
+- **Probability tab → Common Distributions**: 12 interactive distributions (PMF/PDF/CDF) with query operations.
+- **Estimation tab → Descriptive**: summary statistics, histograms, box plots (currently via Web Worker, migrating to backend API).
+- **Estimation tab → Inference**: Normal PDF with CI visualization.
 
-In progress / scaffolded:
-- **Probability tab** is present in UI but currently marked as “Building.”
+### Implemented in Python (ThotsakanStatistics/) — awaiting migration to backend API:
+
+- **Descriptive statistics**: 7 central tendency measures, 8 dispersion measures, shape stats, weighted/trimmed/Winsorized variants.
+- **Statistical inference**: CI/PI for mean, median, deviation (analytic + bootstrap), confidence regions, likelihood.
+- **Graphical analysis**: histograms with overlays, empirical PMF, ECDF with KS bands.
+- **Hypothesis testing**: one-sample t-test, two-sample t-test (Welch), Bartlett/Levene variance tests, one-way ANOVA + Tukey HSD.
+- **Linear regression**: simple + multiple OLS, formula support (statsmodels), CI/PI bands, residual analysis.
+
+### Not yet implemented anywhere:
+
+- **Probability tab → Custom distributions**: user-defined PDF/CDF.
+- **Probability tab → Approximations**: normal→binomial, CLT demonstration.
 
 ---
 
 ## 3) Architecture at a glance
 
-The project enforces a strict layered dependency direction:
+The project is a **hybrid React + FastAPI** application:
 
-`UI -> Controllers -> Core`
+```
+React Frontend                          Python Backend
+┌─────────────────┐                    ┌──────────────────┐
+│  UI Components   │  ──POST /api/──►  │  api/routes/      │
+│  Hooks (JS math  │  ◄──JSON─────── │  api/schemas/      │
+│   for instant    │                    │       │           │
+│   feedback)      │                    │  services/        │
+│  api/ client     │                    │  (orchestration)  │
+│                  │                    │       │           │
+│                  │                    │  core/            │
+│                  │                    │  (pure math)      │
+└─────────────────┘                    └──────────────────┘
+```
 
-Directory responsibilities:
+### Dependency direction (backend):
 
-- `app.py`: process entry point (builds and launches Gradio app).
-- `ui/`: presentation (layout, tabs, assets, styles).
-- `controllers/`: orchestration, input validation, dispatch, display formatting.
-- `core/`: statistical/math computations and plotting logic.
-- `state/`: shared app data (`AppState`) only.
-- `datasets/`: practice datasets.
-- `tests/`: minimal structural/guardrail tests.
-- `docs/`: user, developer, project-governance, and theory docs.
+`api/routes/ → services/ → core/`
+
+- **core/** must NOT depend on services, api, or sessions.
+- **core/** is kept identical to `ThotsakanStatistics/core/` — the professor reads this.
+- Rounding is presentation-level; core keeps full numerical precision.
+
+### The "Thin Client + Authoritative Server" pattern:
+
+For slider-driven features, JS computes an instant approximation for responsive UX, then the backend returns the authoritative result. For button-triggered features (regression, bootstrap), only the backend computes.
 
 ---
 
 ## 4) Key architectural rules (project doctrine)
 
-From project docs (`docs/project/*`):
-
-- Keep dependency flow one-way: **UI → Controllers → Core**.
-- **Core must not depend on UI/controllers/state**.
-- **Rounding is presentation-level**; core should keep full numerical precision.
-- Estimator/strategy choices should be explicit (no silent overrides).
+- Keep dependency flow one-way: **API → Services → Core**.
+- **Core must not depend on API/services/sessions**.
+- **Rounding is presentation-level**; core keeps full numerical precision.
+- Estimator/strategy choices must be explicit (no silent overrides).
 - Reproducibility is required for random procedures (seed-aware behavior).
-
-These constraints are part of the project’s constitutional/governance documents and are treated as non-negotiable.
+- Datasets are held server-side in memory with TTL auto-cleanup.
 
 ---
 
 ## 5) Runtime and dependencies
 
-Runtime dependencies (`requirements.txt`):
-- gradio, numpy, pandas, matplotlib, scipy, statsmodels, seaborn, tabulate, pingouin
+### Frontend (`frontend/`):
+- React 18+, TypeScript, Vite
+- Plotly (lazy-loaded), KaTeX, MathLive
+- `concurrently` (dev: runs frontend + backend together)
 
-Dev/test dependencies (`requirements-dev.txt`):
-- pytest
+### Backend (`backend/`):
+- FastAPI, uvicorn
+- numpy, pandas, scipy, statsmodels, pingouin, matplotlib, seaborn
 
-Entry point:
-- `python app.py`
+### Dev workflow:
+```bash
+npm run dev   # from project root — starts both Vite + uvicorn via concurrently
+```
+
+Vite proxies `/api/*` requests to FastAPI (port 8000). In production, FastAPI serves the built React static files.
 
 ---
 
 ## 6) How data flows through the app
 
-Typical execution path:
-1. User loads data in UI.
-2. UI stores/updates shared state (`AppState`).
-3. UI actions call controller functions.
-4. Controllers validate/transform parameters and call core computations.
-5. Core returns raw/statistical outputs (tables/figures/values).
-6. Controllers format outputs for presentation/export.
-7. UI renders result artifacts.
+### Dataset lifecycle:
+1. Student uploads CSV in React Data tab.
+2. File is sent to `POST /api/data/upload`.
+3. Backend parses with pandas, stores in memory keyed by session ID.
+4. React receives session ID + column metadata + preview rows.
+5. Subsequent API calls reference the session ID — no repeated data transfer.
+6. Sessions auto-expire after 30 minutes of inactivity.
+
+### Computation flow:
+1. User adjusts controls (sliders, selects) in React.
+2. Hook computes JS approximation → renders instantly.
+3. Debounced API call fires to backend.
+4. API route validates with Pydantic → calls service → service calls core.
+5. Core returns raw results with full precision.
+6. Service formats → API returns JSON.
+7. React swaps authoritative result into the UI.
 
 ---
 
 ## 7) Testing and quality posture
 
-Current tests are lightweight and focus on guardrails:
-- Import integrity across core/controllers/ui (`tests/test_imports.py`)
-- A policy check intended to prevent tabular rounding in `core/` (`tests/test_no_tabular_rounding_in_core.py`)
+### Backend:
+- `core/` has guardrail tests (import integrity, no rounding in core).
+- Statistical correctness tests are planned per migration phase.
 
-Changelog and docs explicitly note that deeper statistical correctness tests are planned for future releases.
+### Frontend:
+- Vitest for unit tests.
+- Web Worker tests exist for descriptive stats (will migrate to API integration tests).
 
 ---
 
 ## 8) Repository maturity snapshot
 
-Based on docs + changelog:
-
-- Version line is early-stage (`0.1.x`) with strong documentation/governance emphasis.
-- Architecture and contribution discipline are unusually explicit for an educational project.
-- Probability module expansion and broader validation/tests are listed as near-term roadmap items.
+- Architecture is early-stage with strong documentation/governance emphasis.
+- Frontend UI is functional for probability and basic estimation.
+- Backend API is being set up — `core/` math exists, API layer is new.
+- Migration from Gradio → React + FastAPI is in progress (see `doc/migration_plan.md`).
 
 ---
 
 ## 9) Fast onboarding checklist
 
-1. Create and activate virtual env.
-2. `pip install -r requirements.txt`
-3. `python app.py`
-4. (Contributors) `pip install -r requirements-dev.txt`
-5. Run `pytest -q`
-6. Read docs in this order:
-   - `docs/project/constitution.md`
-   - `docs/project/architecture.md`
-   - `docs/project/governance.md`
-   - `docs/developers/README.md`
-
----
-
-## 10) Suggested next context docs (optional)
-
-If you want deeper team onboarding, add:
-- `CONTEXT_ARCHITECTURE_DECISIONS.md` (major design rationale)
-- `CONTEXT_STATISTICAL_CONTRACTS.md` (explicit estimator/CI/PI invariants)
-- `CONTEXT_RELEASE_PLAYBOOK.md` (release checklist + CI expectations)
+1. Read `doc/identity.md` (project philosophy).
+2. Read `doc/migration_plan.md` (current phase and priorities).
+3. Frontend: `cd frontend && npm install && npm run dev`
+4. Backend: `cd backend && pip install -r requirements.txt && uvicorn main:app --reload`
+5. Or both: `npm run dev` from project root.

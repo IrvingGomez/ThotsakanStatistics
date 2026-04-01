@@ -55,12 +55,14 @@ Every screen in Thotsakan Stat must feel like a **Lab Bench**, not a quiz. It fo
 
 To support the "Lab" identity, we prioritize **Interactivity** over everything else.
 
-* **Framework:** **Reflex** (Python-to-Web).
-    * *Why:* We need the speed of a Single Page App (SPA) to make the simulations feel "alive," but the logic must be in Python to handle the statistical libraries (NumPy, SciPy).
+* **Frontend:** **React + TypeScript + Vite**.
+    * *Why:* Full SPA with instant slider feedback. JS computes quick approximations for that "alive" feeling — the lab bench responds before you lift your finger.
+* **Backend:** **FastAPI + Python** (scipy, statsmodels, pingouin).
+    * *Why:* The "Engine" that calculates the simulation must be scientifically accurate. Python is the authority — the professor reads and verifies `core/` directly.
 * **Visualization Engine:** **Plotly**.
     * *Why:* Interactive hovering, zooming, and panning are mandatory. Static images (Matplotlib) are forbidden in the Lab.
-* **Backend Logic:** **Python (NumPy/Pandas)**.
-    * *Why:* The "Engine" that calculates the simulation must be scientifically accurate.
+* **The Pattern:** Thin client + authoritative server.
+    * *Why:* Students get instant visual feedback (JS), backed by Python precision. The best of both worlds — responsive UI with verifiable math.
 
 ---
 

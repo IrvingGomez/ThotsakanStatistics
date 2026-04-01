@@ -1,0 +1,11 @@
+{
+  "name": "thotsakanstatistics-fullstack",
+  "version": "1.0.0",
+  "description": "ThotsakanStatistics complete frontend & backend service",
+  "scripts": {
+    "dev": "concurrently \"npm run dev --prefix frontend\" \"cd backend && uvicorn main:app --reload\""
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
