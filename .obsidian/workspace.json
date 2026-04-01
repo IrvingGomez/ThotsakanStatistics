@@ -185,6 +185,9 @@
   },
   "active": "80c175a29da1d545",
   "lastOpenFiles": [
+    "README.md",
+    "backend/test_pydantic.py",
+    "backend/test_local.py",
     "backend/test.csv",
     "backend/test_descriptive.py",
     "doc/frontend_backend_interaction.md",
