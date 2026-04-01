@@ -1,0 +1,161 @@
+import pandas as pd
+import numpy as np
+import json
+from scipy.stats import chi2
+
+from api.schemas.inference import InferenceParams, ConfidenceRegionsParams
+
+from core.estimation.inference.ci import (
+    ci_mean_analytic,
+    ci_median_analytic,
+    ci_deviation_analytic,
+    ci_mean_bootstrap,
+    ci_median_bootstrap,
+    ci_deviation_bootstrap,
+)
+
+from core.estimation.inference.pi import (
+    pi_mean,
+    pi_median,
+    pi_iqr,
+    pi_bootstrap,
+)
+
+from core.estimation.inference.estimator_options import available_estimators
+from core.estimation.inference.likelihood import relative_likelihood
+
+def select_distribution(mean_estimator: str, sigma_estimator: str) -> str:
+    if mean_estimator == "Sample Mean" and sigma_estimator == "Deviation (1 ddof)":
+        return "t"
+    return "norm"
+
+def validate_deviation_estimator(*, sigma_estimator: str, n: int):
+    if sigma_estimator == "Range (bias corrected)" and n > 25:
+        raise ValueError(
+            "Range-based confidence intervals require n ≤ 25. "
+            "Use another estimator or bootstrap."
+        )
+
+def get_estimators(data: pd.Series):
+    mean_choices, deviation_choices = available_estimators(data)
+    return {
+        "mean_estimators": mean_choices,
+        "deviation_estimators": deviation_choices,
+    }
+
+def calculate_intervals(data: pd.Series, params: InferenceParams, weights: pd.Series = None):
+    n = len(data)
+    validate_deviation_estimator(sigma_estimator=params.sigma_estimator, n=n)
+
+    dist = select_distribution(params.mean_estimator, params.sigma_estimator)
+    
+    # Parse winsor limits if string
+    winsor_limits = None
+    if params.winsor_limits:
+        try:
+            parts = [float(p.strip()) for p in params.winsor_limits.split(",") if p.strip()]
+            if len(parts) == 2:
+                winsor_limits = (parts[0], parts[1])
+        except Exception:
+            pass
+
+    # CI Computation
+    if params.bootstrap_mean:
+        mean_ci = ci_mean_bootstrap(
+            data=data, estimator=params.mean_estimator, alpha=params.alpha,
+            B=params.bootstrap_samples, trim_param=params.trim_param,
+            winsor_limits=winsor_limits, weights=weights
+        )
+    else:
+        mean_ci = ci_mean_analytic(
+            data=data, estimator=params.mean_estimator, alpha=params.alpha, dist=dist,
+            sigma_estimator=params.sigma_estimator, trim_param=params.trim_param,
+            winsor_limits=winsor_limits, weights=weights
+        )
+
+    if params.bootstrap_median:
+        median_ci = ci_median_bootstrap(
+            data=data, alpha=params.alpha, estimator=params.median_estimator, B=params.bootstrap_samples
+        )
+    else:
+        median_ci = ci_median_analytic(
+            data=data, alpha=params.alpha, estimator=params.median_estimator, sigma_estimator=params.sigma_estimator
+        )
+
+    if params.bootstrap_deviation:
+        sigma_ci = ci_deviation_bootstrap(
+            data=data, alpha=params.alpha, estimator=params.sigma_estimator, B=params.bootstrap_samples
+        )
+    else:
+        sigma_ci = ci_deviation_analytic(
+            data=data, alpha=params.alpha, estimator=params.sigma_estimator
+        )
+
+    # PI Computation
+    pi_rows = []
+    
+    mean_pi = pi_mean(
+        data=data, alpha=params.alpha, estimator=params.mean_estimator, dist=dist,
+        sigma_estimator=params.sigma_estimator, trim_param=params.trim_param,
+        winsor_limits=winsor_limits, weights=weights
+    )
+    pi_rows.append(["Prediction", "Mean", *mean_pi])
+
+    median_pi = pi_median(
+        data=data, alpha=params.alpha, estimator=params.median_estimator,
+        sigma_estimator=params.sigma_estimator
+    )
+    pi_rows.append(["Prediction", "Median", *median_pi])
+
+    iqr_pi = pi_iqr(data=data, alpha=params.alpha)
+    pi_rows.append(["Prediction", "IQR", *iqr_pi])
+
+    if params.bootstrap_pi:
+        boot_pi = pi_bootstrap(data=data, alpha=params.alpha, B=params.bootstrap_samples)
+        pi_rows.append(["Prediction", "Bootstrap", *boot_pi])
+
+    ci_table = pd.DataFrame([
+        ["Confidence", "Mean", *mean_ci],
+        ["Confidence", "Median", *median_ci],
+        ["Confidence", "Deviation", *sigma_ci],
+    ], columns=["Interval Type", "Statistic", "Lower", "Upper"])
+
+    pi_table = pd.DataFrame(pi_rows, columns=["Interval Type", "Statistic", "Lower", "Upper"])
+
+    return ci_table, pi_table, mean_ci, sigma_ci, median_ci
+
+def calculate_regions(data: pd.Series, params: ConfidenceRegionsParams, weights: pd.Series = None):
+    # Get CIs first
+    ci_table, pi_table, mean_ci, sigma_ci, median_ci = calculate_intervals(data, params, weights)
+
+    mu_ci = median_ci if params.mu_ci_source == "Median-based CI" else mean_ci
+
+    # Bypassing matplotlib visualization limits
+    probs = params.probs[::-1] # Matches chi2 nesting
+    levels = np.exp(-0.5 * chi2.ppf(probs, 2))
+
+    mu_grid = np.linspace(mu_ci[0] - params.eps_mu[0], mu_ci[1] + params.eps_mu[1], 200)
+    sigma_grid = np.linspace(sigma_ci[0] - params.eps_sigma[0], sigma_ci[1] + params.eps_sigma[1], 200)
+
+    MU, SIGMA = np.meshgrid(mu_grid, sigma_grid)
+
+    sigma_hat = float(np.std(data, ddof=0))
+    mu_hat = float(np.mean(data))
+
+    Z = relative_likelihood(data=data, mu=MU, sigma=SIGMA, sigma_hat=sigma_hat)
+
+    # Convert to JSON primitives for Plotly
+    z_matrix = Z.tolist()
+    
+    return {
+        "z_matrix": z_matrix,
+        "mu_grid": mu_grid.tolist(),
+        "sigma_grid": sigma_grid.tolist(),
+        "mu_hat": mu_hat,
+        "sigma_hat": sigma_hat,
+        "mean_ci": [float(x) for x in mean_ci],
+        "sigma_ci": [float(x) for x in sigma_ci],
+        "probs": probs,
+        "levels": levels.tolist(),
+        "table": ci_table.to_json(orient="records") if params.add_ci_box else None
+    }
