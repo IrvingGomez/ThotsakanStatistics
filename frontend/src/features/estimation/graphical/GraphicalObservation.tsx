@@ -6,13 +6,16 @@ import { useCallback, useMemo } from 'react'
 import createPlotlyComponent from 'react-plotly.js/factory'
 import Plotly from 'plotly.js-basic-dist-min'
 import type { GraphicalResponse } from '../../../api/graphical'
-import ExportMenu from '../../../components/ExportMenu'
-import { downloadChartPNG } from '../../../utils/exportPNG'
+import ResultToolbar from '../../../components/ResultToolbar'
+import { downloadChartsPNG } from '../../../utils/exportPNG'
 import { downloadCSV } from '../../../utils/exportCSV'
+import { downloadPDF } from '../../../utils/exportPDF'
+import { exportFilename } from '../../../utils/exportFilename'
+import { useChartRegistry } from '../../../hooks/useChartRegistry'
 
 const Plot = createPlotlyComponent(Plotly)
 
-const CHART_DIV_ID = 'graphical-analysis-chart'
+const CHART_ORDER = ['graphical'] as const
 
 // Plotly parses colors itself — CSS vars don't resolve, so use literals.
 const C_MAIN = '#a78bfa'      // rebeccapurple, lifted for dark backgrounds
@@ -43,7 +46,6 @@ interface GraphicalObservationProps {
   isComputing: boolean
   /** Overlays the last Run produced that this result no longer carries. */
   staleOverlays: string[]
-  error: string | null
 }
 
 /** Bar centres and widths from histogram edges. */
@@ -58,8 +60,9 @@ function barsFromEdges(bins: number[], densities: number[]) {
 }
 
 export default function GraphicalObservation({
-  result, column, graphType, hasData, isComputing, staleOverlays, error,
+  result, column, graphType, hasData, isComputing, staleOverlays,
 }: GraphicalObservationProps) {
+  const registry = useChartRegistry(CHART_ORDER)
   const bands = result?.interval_bands ?? []
   const hasStrip = bands.length > 0
 
@@ -68,13 +71,14 @@ export default function GraphicalObservation({
     const out: Record<string, unknown>[] = []
 
     if (result.histogram_data) {
-      const { bins, densities } = result.histogram_data
+      const { bins, densities, counts } = result.histogram_data
       const { x, width } = barsFromEdges(bins, densities)
       out.push({
         type: 'bar', x, y: densities, width,
         marker: { color: C_MAIN, opacity: 0.5, line: { color: C_MAIN, width: 1 } },
         name: 'Density',
-        hovertemplate: '%{x:.4g}<br>density %{y:.4g}<extra></extra>',
+        customdata: counts.map((count, index) => [bins[index], bins[index + 1], count]),
+        hovertemplate: 'Bin: %{customdata[0]:.4g} to %{customdata[1]:.4g}<br>Count: %{customdata[2]}<br>Density: %{y:.4g}<extra></extra>',
       })
     }
 
@@ -177,7 +181,7 @@ export default function GraphicalObservation({
       margin: { l: 56, r: 20, t: 44, b: 44 },
       paper_bgcolor: 'transparent',
       plot_bgcolor: 'transparent',
-      font: { color: '#9ca3af', size: 11 },
+      font: { color: '#9ca3af', size: 12 },
       bargap: 0.02,
       xaxis: { ...AXIS, title: column, anchor: hasStrip ? 'y2' : 'y' },
       yaxis: {
@@ -198,14 +202,14 @@ export default function GraphicalObservation({
         }
         : {}),
       showlegend: true,
-      legend: { font: { color: '#9ca3af', size: 10 }, bgcolor: 'transparent', orientation: 'h', y: -0.18 },
+      legend: { font: { color: '#9ca3af', size: 12 }, bgcolor: 'transparent', orientation: 'h', y: -0.18 },
     }
   }, [column, graphType, hasStrip])
 
   // ── Exports ───────────────────────────────────────────────────────────────
   const handleExportPNG = useCallback(() => {
-    downloadChartPNG(CHART_DIV_ID, `graphical-${column}-${graphType}.png`)
-  }, [column, graphType])
+    return downloadChartsPNG(registry.charts, exportFilename(`graphical-${column}-${graphType}`, 'png', 'graphical-analysis'))
+  }, [column, graphType, registry.charts])
 
   const handleExportCSV = useCallback(() => {
     if (!result) return
@@ -215,20 +219,20 @@ export default function GraphicalObservation({
       const { bins, counts, densities } = result.histogram_data
       counts.forEach((c, i) => rows.push([bins[i], bins[i + 1], c, densities[i]]))
     } else if (result.pmf_data) {
-      rows.push(['value', 'probability'])
-      result.pmf_data.values.forEach((v, i) => rows.push([v, result.pmf_data!.probs[i]]))
+      rows.push(['bin_low', 'bin_high', 'count', 'density'])
+      result.pmf_data.values.forEach((v, i) => {
+        const probability = result.pmf_data!.probs[i]
+        rows.push([v, v, Number.isFinite(probability) ? probability * result.summary.n : '', probability])
+      })
     } else if (result.ecdf_data) {
       const { x, y, lower, upper } = result.ecdf_data
-      rows.push(lower && upper ? ['x', 'ecdf', 'lower', 'upper'] : ['x', 'ecdf'])
-      x.forEach((v, i) => rows.push(
-        lower && upper ? [v, y[i], lower[i], upper[i]] : [v, y[i]]
-      ))
+      rows.push(['x', 'cumulative_probability', 'lower_band', 'upper_band'])
+      x.forEach((v, i) => rows.push([v, y[i], lower?.[i] ?? '', upper?.[i] ?? '']))
     }
-    downloadCSV(rows, `graphical-${column}-${graphType}.csv`)
+    downloadCSV(rows, exportFilename(`graphical-${column}-${graphType}`, 'csv', 'graphical-analysis'))
   }, [result, column, graphType])
 
   const handleExportPDF = useCallback(async () => {
-    const { downloadPDF } = await import('../../../utils/exportPDF')
     const stats = [
       { label: 'n', value: String(result?.summary.n ?? '—') },
       { label: 'Unique values', value: String(result?.summary.n_unique ?? '—') },
@@ -240,70 +244,82 @@ export default function GraphicalObservation({
       stats.push({ label: 'σ̂', value: result.point_estimates.sigma.toPrecision(6) })
     }
     await downloadPDF({
-      divId: CHART_DIV_ID,
+      charts: registry.charts,
       title: `Graphical Analysis — ${column}`,
       subtitle: graphType,
       stats,
-      filename: `graphical-${column}-${graphType}.pdf`,
+      filename: exportFilename(`graphical-${column}-${graphType}-report`, 'pdf', 'graphical-analysis'),
     })
-  }, [result, column, graphType])
+  }, [result, column, graphType, registry.charts])
+
+  const exportReady = !!result && !isComputing && registry.ready
 
   // ── States ────────────────────────────────────────────────────────────────
   if (!hasData) {
     return (
-      <div className="h-full flex items-center justify-center text-[var(--color-text-muted)]
+      <div className="min-h-48 flex items-center justify-center text-[var(--color-text-muted)]
         border border-dashed border-[var(--color-border-md)] rounded-xl m-4">
         Waiting for data — upload a CSV on the Data tab.
       </div>
     )
   }
 
-  if (error) {
-    return (
-      <div className="h-full flex items-center justify-center p-6">
-        <div className="max-w-lg w-full border border-red-900/50 bg-red-950/20 rounded-xl p-5">
-          <p className="text-sm font-semibold text-red-400 mb-2">⚠️ Could not draw this plot</p>
-          <pre className="text-xs font-mono text-red-200/90 whitespace-pre-wrap leading-relaxed">{error}</pre>
-        </div>
-      </div>
-    )
-  }
-
   if (!result) {
     return (
-      <div className="h-full flex items-center justify-center text-[var(--color-text-muted)] text-sm">
+      <div className="min-h-48 flex items-center justify-center text-[var(--color-text-muted)] text-sm">
         {isComputing ? 'Computing…' : 'Select a column to draw the plot.'}
       </div>
     )
   }
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="analysis-observation flex flex-col">
+      <ResultToolbar title={`Graphical analysis — ${column}`}
+        exports={exportReady ? { png: handleExportPNG, csv: handleExportCSV, pdf: handleExportPDF } : undefined}
+        ready={exportReady} disabledReason={isComputing ? 'Waiting for the updated result.' : 'Chart is still loading.'} />
       {staleOverlays.length > 0 && (
-        <div className="mx-2 mt-2 px-3 py-2 rounded-md border border-amber-700/50 bg-amber-950/20
-          text-[11px] text-amber-400 leading-snug">
+          <div className="mx-2 mt-2 px-3 py-2 rounded-md border border-amber-700/50 bg-amber-950/20
+          text-xs text-amber-300 leading-snug" role="status">
           Not shown on this plot: {staleOverlays.join(', ')}. A resample cannot be
           repeated from a display change — press Run to draw it again.
         </div>
       )}
-      <div className="flex justify-end px-2 pt-2">
-        <ExportMenu
-          onExportPNG={handleExportPNG}
-          onExportCSV={handleExportCSV}
-          onExportPDF={handleExportPDF}
-          ready={!!result}
-        />
-      </div>
-      <div className="flex-1 min-h-0">
+      <div>
         <Plot
-          divId={CHART_DIV_ID}
           data={traces}
           layout={layout}
           config={CONFIG}
           useResizeHandler
-          style={{ width: '100%', height: '100%' }}
+          style={{ width: '100%', height: 440 }}
+          onInitialized={registry.register('graphical', `${graphType} for ${column}`)}
+          onUpdate={registry.register('graphical', `${graphType} for ${column}`)}
+          onPurge={registry.unregister('graphical')}
         />
       </div>
+      {result.histogram_data && (
+        <div className="px-2 pb-3">
+          <p className="text-sm text-[var(--color-text-muted)] leading-relaxed mb-3">
+            Bar area represents proportion; height shows density. Hover a bar for its bin bounds and observation count.
+          </p>
+          <details>
+            <summary className="text-sm cursor-pointer py-2">View histogram data ({result.histogram_data.counts.length} bins)</summary>
+            <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Histogram bin data">
+              <table className="w-full text-xs text-right border-collapse">
+                <caption className="text-left text-[var(--color-text-muted)] py-2">Histogram bins for {column}. Bounds and counts match the exported CSV.</caption>
+                <thead><tr>{['Lower bound', 'Upper bound', 'Count', 'Density'].map((heading) => <th scope="col" key={heading} className="p-2 border-b border-[var(--color-border-md)]">{heading}</th>)}</tr></thead>
+                <tbody>{result.histogram_data.counts.map((count, index) => (
+                  <tr key={index} className="border-b border-[var(--color-border)]">
+                    <td className="p-2 font-mono">{result.histogram_data!.bins[index]}</td>
+                    <td className="p-2 font-mono">{result.histogram_data!.bins[index + 1]}</td>
+                    <td className="p-2 font-mono">{count}</td>
+                    <td className="p-2 font-mono">{result.histogram_data!.densities[index]}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+          </details>
+        </div>
+      )}
     </div>
   )
 }

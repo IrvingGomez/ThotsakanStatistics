@@ -1,41 +1,42 @@
-import type { HypothesisResponse } from '../../api/hypothesis'
-import HypothesisControls from './HypothesisControls'
-import HypothesisObservation from './HypothesisObservation'
-import HypothesisNotebook from './HypothesisNotebook'
-import type { HypothesisConfig } from './useHypothesisTabState'
+import AnalysisStatus from '../../components/AnalysisStatus';
+import { EQUAL_VARIANCE, TWO_SAMPLE_T } from '../../api/hypothesis';
+import HypothesisControls from './HypothesisControls';
+import HypothesisObservation from './HypothesisObservation';
+import HypothesisNotebook from './HypothesisNotebook';
+import type { HypothesisTabState } from './useHypothesisTabState';
 
-interface SlotProps {
-  result: HypothesisResponse | null
-  hasData: boolean
-  isComputing: boolean
-  precision: number
-  error: string | null
-  revealed: boolean
-  onReveal: () => void
-  onRun: (cfg: HypothesisConfig) => void
-  onLiveChange: (cfg: HypothesisConfig) => void
-  onReset: () => void
+function ResultStatus({ state }: { state: HypothesisTabState }) {
+  const config = state.applied?.config;
+  return <AnalysisStatus isComputing={state.isComputing} error={state.error} hasResult={!!state.result}
+    isDirty={state.isDirty} onRetry={state.handleRetry}>
+    <p>{state.applied?.filename || state.filename || 'No dataset'}{config ? ' · ' + config.column + ' · ' + config.testType : ''}</p>
+    {state.hasData && <p>{state.applied?.filteredN ?? state.filteredN} rows after filters{config ? ' · α = ' + config.alpha : ''}</p>}
+    {config && <p>Applied settings: {config.mu0 !== null ? 'μ₀ = ' + config.mu0 + ' · ' : ''}
+      {config.alternative}{config.testType === TWO_SAMPLE_T ? ' · ' + (config.correction ? 'Welch correction' : 'Pooled variance') : ''}
+      {config.testType === EQUAL_VARIANCE ? ' · ' + config.varianceTestType : ''}</p>}
+    {config?.group1 && config.group2 && [config.group1, config.group2].map((group, index) =>
+      <p key={index}>{group.name || 'Group ' + (index + 1)}: {group.column} = {group.values.join(', ')}</p>)}
+    {config?.anovaColumn && <p>Factor: {config.anovaColumn} · {config.anovaLevels?.join(', ')}</p>}
+  </AnalysisStatus>;
 }
 
-export function ControlsSlot({ onRun, onLiveChange, onReset, isComputing, error }: Pick<SlotProps, 'onRun' | 'onLiveChange' | 'onReset' | 'isComputing' | 'error'>) {
-  return <HypothesisControls onRun={onRun} onLiveChange={onLiveChange} onReset={onReset} isComputing={isComputing} error={error} />
+export function ControlsSlot({ state, onOpenColumnTypes }: { state: HypothesisTabState; onOpenColumnTypes: () => void }) {
+  return <HypothesisControls state={state} onOpenColumnTypes={onOpenColumnTypes} />;
 }
 
-export function ObservationSlot({ result, hasData, isComputing, revealed, onReveal }: Pick<SlotProps, 'result' | 'hasData' | 'isComputing' | 'revealed' | 'onReveal'>) {
-  return (
-    <div className="h-full relative">
-      <HypothesisObservation result={result} hasData={hasData} isComputing={isComputing} revealed={revealed} onReveal={onReveal} />
-      {isComputing && (
-        <div className="absolute inset-0 bg-[var(--color-bg-base)]/50 backdrop-blur-sm flex items-center justify-center z-50 rounded-lg">
-          <div className="bg-[var(--color-bg-elevated)] border border-[var(--color-border)] px-4 py-2 rounded-lg shadow-lg text-sm font-semibold flex items-center gap-2">
-            <span className="animate-spin text-lg">⚙️</span> Running Test...
-          </div>
-        </div>
-      )}
-    </div>
-  )
+export function ObservationSlot({ state }: { state: HypothesisTabState }) {
+  return <div className="analysis-panel flex flex-col gap-3">
+    <ResultStatus state={state} />
+    {(state.result || (!state.isComputing && !state.error)) && <HypothesisObservation result={state.result} hasData={state.hasData} revealed={state.revealed}
+      onReveal={state.onReveal} precision={state.precision} canReveal={!state.isComputing && !state.isDirty && !state.error}
+      isComputing={state.isComputing} isDirty={state.isDirty} />}
+  </div>;
 }
 
-export function NotebookSlot({ result, precision, revealed, onReveal }: Pick<SlotProps, 'result' | 'precision' | 'revealed' | 'onReveal'>) {
-  return <HypothesisNotebook result={result} precision={precision} revealed={revealed} onReveal={onReveal} />
+export function NotebookSlot({ state }: { state: HypothesisTabState }) {
+  return <div className="analysis-panel">
+    <ResultStatus state={state} />
+    {(state.result || (!state.isComputing && !state.error)) && <HypothesisNotebook result={state.result} precision={state.precision} revealed={state.revealed}
+      onReveal={state.onReveal} canReveal={!state.isComputing && !state.isDirty && !state.error} />}
+  </div>;
 }

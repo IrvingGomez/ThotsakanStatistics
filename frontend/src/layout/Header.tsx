@@ -20,7 +20,7 @@ interface HeaderProps {
 
 export default function Header({ activeTab, onTabChange }: HeaderProps) {
   return (
-    <header className="sticky top-0 z-50 h-14 flex items-center justify-between px-5
+    <header className="app-header sticky top-0 z-50 flex items-center justify-between gap-4 px-5 shrink-0 min-w-0
       bg-[var(--color-bg-panel)] border-b border-[var(--color-border)]">
 
       {/* Logo + title */}
@@ -37,25 +37,24 @@ export default function Header({ activeTab, onTabChange }: HeaderProps) {
       </div>
 
       {/* Tab navigation */}
-      <nav className="flex items-center gap-0.5">
+      <nav aria-label="Main navigation" className="app-navigation flex items-center gap-0.5 min-w-0 overflow-x-auto">
         {TABS.map((tab) => (
           <button
             key={tab.key}
             type="button"
+            aria-current={activeTab === tab.key ? 'page' : undefined}
             onClick={() => onTabChange(tab.key)}
-            className={`px-3 py-1.5 text-sm rounded-md transition-colors cursor-pointer
+            className={`shrink-0 whitespace-nowrap px-3 py-2 text-sm rounded-md transition-colors cursor-pointer
               ${activeTab === tab.key
                 ? 'bg-[var(--color-accent)] text-white'
                 : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-white/5'
               }`}
           >
-            <span className="mr-1 text-[0.85em]">{tab.icon}</span>{tab.label}
+            <span aria-hidden="true" className="mr-1 text-[0.85em]">{tab.icon}</span>{tab.label}
           </button>
         ))}
       </nav>
 
-      {/* Right slot (dark mode toggle placeholder) */}
-      <div className="shrink-0 w-24 flex justify-end" />
     </header>
   )
 }

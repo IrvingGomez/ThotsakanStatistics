@@ -133,7 +133,8 @@ export function overlaysNeedingRun(committed: HeavyConfig | null): string[] {
  * bootstrap.
  */
 export function mergeForLive(cfg: GraphicalConfig, committed: HeavyConfig | null): GraphicalConfig {
-  if (!committed) return { ...cfg, ...NO_OVERLAYS }
+  // Unapplied estimator/weight fields must not change the sample on the live path.
+  if (!committed) return { ...cfg, ...heavyOf({ ...cfg, ...DEFAULT_CONFIG }), ...NO_OVERLAYS }
 
   const merged: GraphicalConfig = { ...cfg, ...committed }
 
@@ -155,8 +156,7 @@ export function mergeForLive(cfg: GraphicalConfig, committed: HeavyConfig | null
 export function isDirty(cfg: GraphicalConfig, committed: HeavyConfig | null): boolean {
   const current = heavyOf(cfg)
   if (!committed) {
-    // Nothing committed yet: only an actually-requested overlay counts as dirty.
-    return current.addNormal || current.addCi || current.addPi
+    return HEAVY_KEYS.some((key) => current[key] !== DEFAULT_CONFIG[key])
   }
   return HEAVY_KEYS.some((k) => current[k] !== committed[k])
 }
@@ -188,6 +188,35 @@ export function configForDataset(cfg: GraphicalConfig, numericCols: string[]): G
 export function clearWeightsIfUnused(cfg: GraphicalConfig): GraphicalConfig {
   if (cfg.meanEstimator === 'Weighted Mean' || cfg.weightsColumn === null) return cfg
   return { ...cfg, weightsColumn: null }
+}
+
+/** Keep visible defaults and required companion options in the actual draft. */
+export function updateGraphicalConfig<K extends keyof GraphicalConfig>(
+  cfg: GraphicalConfig, key: K, value: GraphicalConfig[K],
+): GraphicalConfig {
+  const next = { ...cfg, [key]: value }
+  if (next.meanEstimator === 'Trimmed Mean' && next.trimParam === null) next.trimParam = 0.1
+  if (key === 'piChoice') next.bootstrapPi = value === 'Bootstrap'
+  if (next.addPi && next.piChoice === 'Bootstrap') next.bootstrapPi = true
+  return clearWeightsIfUnused(next)
+}
+
+export type GraphicalFieldErrors = Partial<Record<'column' | 'winsorLimits' | 'weightsColumn', string>>
+
+export function validateGraphicalConfig(cfg: GraphicalConfig, winsorRaw: string): GraphicalFieldErrors {
+  const errors: GraphicalFieldErrors = {}
+  if (!cfg.column) errors.column = 'Select a numeric column.'
+  const needsEstimator = cfg.addNormal || cfg.addCi || cfg.addPi
+  if (needsEstimator && cfg.meanEstimator === 'Winsorized Mean') {
+    const parts = winsorRaw.split(',').map((part) => part.trim())
+    if (parts.length !== 2 || parts.some((part) => !part || !Number.isFinite(Number(part)) || Number(part) < 0 || Number(part) >= 0.5)) {
+      errors.winsorLimits = 'Enter two fractions from 0 up to 0.5, such as 0.1, 0.1.'
+    }
+  }
+  if (needsEstimator && cfg.meanEstimator === 'Weighted Mean' && !cfg.weightsColumn) {
+    errors.weightsColumn = 'Select a weights column.'
+  }
+  return errors
 }
 
 /** Overlays the backend will refuse for this graph type, so the UI can hide them. */

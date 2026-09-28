@@ -3,16 +3,20 @@ import createPlotlyComponent from 'react-plotly.js/factory'
 import Plotly from 'plotly.js-basic-dist-min'
 import type { DistResult, DistParams, QueryOp } from '../../../hooks/useDistribution'
 import { DISTRIBUTIONS } from '../../../hooks/useDistribution'
-import ExportMenu from '../../../components/ExportMenu'
-import { downloadChartPNG } from '../../../utils/exportPNG'
+import ResultToolbar from '../../../components/ResultToolbar'
+import { downloadChartsPNG } from '../../../utils/exportPNG'
 import { downloadCSV } from '../../../utils/exportCSV'
+import { downloadPDF } from '../../../utils/exportPDF'
+import { exportFilename } from '../../../utils/exportFilename'
+import { useChartRegistry } from '../../../hooks/useChartRegistry'
 
 const Plot = createPlotlyComponent(Plotly)
 
-const CHART_DIV_ID = 'common-dist-chart'
+const CHART_ORDER = ['distribution'] as const
 
 interface CommonDistObservationProps {
   distParams: DistParams
+  appliedParams: DistParams | null
   result: DistResult | null
   isLoading: boolean
 }
@@ -123,38 +127,38 @@ function buildContinuousChart(result: DistResult, op: QueryOp, queryK: number, d
   }
 }
 
-export default function CommonDistObservation({ distParams, result }: CommonDistObservationProps) {
-  const { distName, queryOp, queryK, paramValues } = distParams
+export default function CommonDistObservation({ distParams, appliedParams, result, isLoading }: CommonDistObservationProps) {
+  const displayParams = result?.provisional ? distParams : (appliedParams ?? distParams)
+  const { distName, queryOp, queryK, paramValues } = displayParams
   const dist = DISTRIBUTIONS.find((d) => d.name === distName)
-
-  const slug = distName.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+  const registry = useChartRegistry(CHART_ORDER)
+  const baseName = `${distName}-distribution`
 
   const handleExportPNG = useCallback(() => {
-    downloadChartPNG(CHART_DIV_ID, `${slug}-chart.png`)
-  }, [slug])
+    return downloadChartsPNG(registry.charts, exportFilename(`${baseName}-chart`, 'png', 'distribution'))
+  }, [registry.charts, baseName])
 
   const handleExportCSV = useCallback(() => {
     if (!result) return
     if (dist?.type === 'discrete') {
       const { ks = [], probs = [], cumProbs = [] } = result
-      const rows: (string | number)[][] = [['k', 'P(X=k)', 'P(X<=k)']]
-      ks.forEach((k: number, i: number) => rows.push([k, probs[i] ?? 0, cumProbs[i] ?? 0]))
-      downloadCSV(rows, `${slug}-pmf.csv`)
+      const rows: (string | number | null)[][] = [['k', 'probability', 'cumulative_probability']]
+      ks.forEach((k: number, i: number) => rows.push([k, probs[i] ?? null, cumProbs[i] ?? null]))
+      downloadCSV(rows, exportFilename(`${baseName}-pmf`, 'csv', 'distribution'))
     } else {
       const { xs = [], ys = [], cdfYs = [] } = result
-      const rows: (string | number)[][] = [['x', 'f(x)', 'F(x)']]
-      xs.forEach((x: number, i: number) => rows.push([x, ys[i] ?? 0, cdfYs[i] ?? 0]))
-      downloadCSV(rows, `${slug}-pdf.csv`)
+      const rows: (string | number | null)[][] = [['x', 'density', 'cumulative_probability']]
+      xs.forEach((x: number, i: number) => rows.push([x, ys[i] ?? null, cdfYs[i] ?? null]))
+      downloadCSV(rows, exportFilename(`${baseName}-pdf`, 'csv', 'distribution'))
     }
-  }, [dist, result, slug])
+  }, [dist, result, baseName])
 
   const handleExportPDF = useCallback(async () => {
     if (!result) return
     const meanStr = typeof result.theorMean === 'number' ? result.theorMean.toFixed(4) : String(result.theorMean)
     const varStr  = typeof result.theorVariance === 'number' ? result.theorVariance.toFixed(4) : String(result.theorVariance)
-    const { downloadPDF } = await import('../../../utils/exportPDF')
-    downloadPDF({
-      divId: CHART_DIV_ID,
+    await downloadPDF({
+      charts: registry.charts,
       title: `${distName} Distribution`,
       subtitle: `Query: P(X ${queryOp} ${queryK}) = ${result.queryResult.toFixed(4)}`,
       stats: [
@@ -165,9 +169,12 @@ export default function CommonDistObservation({ distParams, result }: CommonDist
         { label: `P(X ${queryOp} ${queryK})`, value: result.queryResult.toFixed(4) },
         ...Object.entries(paramValues).map(([k, v]) => ({ label: k, value: String(v) })),
       ],
-      filename: `${slug}-report.pdf`,
+      filename: exportFilename(`${baseName}-report`, 'pdf', 'distribution'),
     })
-  }, [distName, dist, queryOp, queryK, result, paramValues, slug])
+  }, [distName, dist, queryOp, queryK, result, paramValues, baseName, registry.charts])
+
+  const exportReady = !!result && !result.provisional && !isLoading && !!appliedParams && registry.ready
+  const exportHandlers = exportReady ? { png: handleExportPNG, csv: handleExportCSV, pdf: handleExportPDF } : undefined
 
   const statCards = useMemo(() => {
     if (!result) return []
@@ -210,6 +217,8 @@ export default function CommonDistObservation({ distParams, result }: CommonDist
 
   return (
     <div className="flex flex-col gap-4">
+      <ResultToolbar title={`${distName} distribution`} exports={exportHandlers} ready={exportReady}
+        disabledReason={result?.provisional || isLoading ? 'Waiting for the authoritative backend result.' : 'Chart is still loading.'} />
 
       {/* Stat cards row */}
       <div className={`grid grid-cols-3 gap-3 transition-opacity ${result.provisional ? 'opacity-80' : ''}`}>
@@ -239,23 +248,20 @@ export default function CommonDistObservation({ distParams, result }: CommonDist
 
       {/* Chart */}
       <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-panel)] overflow-hidden">
-        <div className="px-4 py-2 border-b border-[var(--color-border)] flex items-center justify-between">
+        <div className="px-4 py-2 border-b border-[var(--color-border)]">
           <p className="text-xs font-semibold uppercase tracking-widest text-[var(--color-text-muted)]">
             {dist?.type === 'discrete' ? 'Probability Mass Function' : 'Probability Density Function'}
           </p>
-          <ExportMenu
-            onExportPNG={handleExportPNG}
-            onExportCSV={handleExportCSV}
-            onExportPDF={handleExportPDF}
-          />
         </div>
         <Plot
-          divId={CHART_DIV_ID}
           data={traces}
           layout={layout as object}
           style={{ width: '100%', height: 380 }}
           config={{ responsive: true, displayModeBar: false }}
           useResizeHandler
+          onInitialized={registry.register('distribution', `${distName} distribution`)}
+          onUpdate={registry.register('distribution', `${distName} distribution`)}
+          onPurge={registry.unregister('distribution')}
         />
       </div>
 

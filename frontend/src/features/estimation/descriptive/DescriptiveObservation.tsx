@@ -1,10 +1,18 @@
 // features/estimation/descriptive/DescriptiveObservation.tsx
 // Center panel: stat cards + grouped table + histogram/box-plot
 
-import { useState, useRef, useEffect, useMemo } from 'react'
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import Plot from 'react-plotly.js'
 import { type DescriptiveResult, type StatRow } from '../../../api/descriptive'
 import type { DescriptiveConfig } from './DescriptiveControls'
+import ResultToolbar from '../../../components/ResultToolbar'
+import { downloadCSV } from '../../../utils/exportCSV'
+import { downloadChartsPNG } from '../../../utils/exportPNG'
+import { downloadPDF } from '../../../utils/exportPDF'
+import { exportFilename } from '../../../utils/exportFilename'
+import { useChartRegistry } from '../../../hooks/useChartRegistry'
+
+const CHART_ORDER = ['descriptive'] as const
 
 // ─── Warning Snackbar ─────────────────────────────────────────────────────────
 
@@ -82,8 +90,6 @@ function StatsTable({
 }: {
   rows: StatRow[]; showConsistencyCorr: boolean; precision: number
 }) {
-  const [copied, setCopied] = useState(false)
-
   // Group by category maintaining order
   const groups: { cat: string; rows: StatRow[] }[] = []
   for (const row of rows) {
@@ -97,40 +103,12 @@ function StatsTable({
     return v.toFixed(precision)
   }
 
-  function exportCSV() {
-    const header = showConsistencyCorr
-      ? 'Category,Measure,Value,Consistency Corrected\n'
-      : 'Category,Measure,Value\n'
-    const body = rows.map((r) =>
-      showConsistencyCorr
-        ? `"${r.category}","${r.measure}",${fmt(r.value)},${fmt(r.consistencyCorr)}`
-        : `"${r.category}","${r.measure}",${fmt(r.value)}`
-    ).join('\n')
-
-    const blob = new Blob([header + body], { type: 'text/csv' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'descriptive_stats.csv'
-    a.click()
-    URL.revokeObjectURL(url)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
-
   return (
     <div className="rounded-xl shadow-sm bg-[var(--color-bg-panel)] overflow-hidden">
-      <div className="px-4 py-2.5 border-b border-[var(--color-border)]/30 flex items-center justify-between">
+      <div className="px-4 py-2.5 border-b border-[var(--color-border)]/30">
         <span className="text-[10px] uppercase tracking-widest font-semibold text-[var(--color-text-muted)]">
           Descriptive Statistics
         </span>
-        <button
-          type="button"
-          onClick={exportCSV}
-          className="text-[10px] text-[var(--color-accent)] hover:underline cursor-pointer"
-        >
-          {copied ? '✓ Saved!' : '⬇ Export CSV'}
-        </button>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
@@ -200,7 +178,11 @@ const TITLE_COLOR = '#e5e7eb'   // gray-200  — axis titles   (~7:1   on gray-9
 const ACCENT      = '#6366f1'
 const BOX_COLOR   = '#818cf8'
 
-function DescriptiveCharts({ result, colName }: { result: DescriptiveResult; colName: string }) {
+function DescriptiveCharts({ result, colName, onReady, onPurge }: {
+  result: DescriptiveResult; colName: string
+  onReady: (figure: unknown, element: HTMLElement) => void
+  onPurge: () => void
+}) {
   const wrapperRef = useRef<HTMLDivElement>(null)
   const [plotWidth, setPlotWidth] = useState<number | undefined>(undefined)
 
@@ -433,6 +415,9 @@ function DescriptiveCharts({ result, colName }: { result: DescriptiveResult; col
           layout={layout}
           config={config}
           useResizeHandler
+          onInitialized={onReady}
+          onUpdate={onReady}
+          onPurge={onPurge}
         />
       </div>
     </div>
@@ -461,42 +446,72 @@ interface DescriptiveObservationProps {
   config: DescriptiveConfig | null
   hasData: boolean
   precision: number
+  isComputing?: boolean
 }
 
 export default function DescriptiveObservation({
-  result, config, hasData, precision,
+  result, config, hasData, precision, isComputing = false,
 }: DescriptiveObservationProps) {
-  if (!result || !config) return <EmptyState hasData={hasData} />
-
-  // Collect warnings from visible rows
-  const visibleRows = result.rows.filter(r => !r.advancedId || config.advancedStats.includes(r.advancedId))
+  const registry = useChartRegistry(CHART_ORDER)
+  const visibleRows = useMemo(() => !result || !config ? []
+    : result.rows.filter((row) => !row.advancedId || config.advancedStats.includes(row.advancedId)), [result, config])
   const warnings: SnackItem[] = useMemo(() => {
-    const w = visibleRows
+    return visibleRows
       .filter(r => r.warning)
       .map((r, i) => ({ id: i, measure: r.measure, warning: r.warning! }))
-    // DEBUG: remove after confirming snackbar works
-    console.log('[DescriptiveObs] advancedStats:', config.advancedStats,
-      '| rows with warnings:', result.rows.filter(r => r.warning).map(r => r.measure),
-      '| visible warnings:', w.map(x => x.measure))
-    return w
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [result, config.advancedStats])
+  }, [visibleRows])
+
+  const baseName = config ? `descriptive-${config.column}` : 'descriptive-statistics'
+  const exportCSV = useCallback(() => {
+    if (!result || !config) throw new Error('No applied descriptive result is available.')
+    downloadCSV([
+      ['category', 'measure', 'value', 'consistency_corrected', 'robust', 'warning'],
+      ...visibleRows.map((row) => [row.category, row.measure, row.value, row.consistencyCorr, !!row.robust, row.warning ?? '']),
+    ], exportFilename(baseName, 'csv', 'descriptive-statistics'))
+  }, [result, config, visibleRows, baseName])
+  const exportPNG = useCallback(() => downloadChartsPNG(registry.charts,
+    exportFilename(`${baseName}-chart`, 'png', 'descriptive-statistics')), [registry.charts, baseName])
+  const exportPDF = useCallback(async () => {
+    if (!result || !config) throw new Error('No applied descriptive result is available.')
+    await downloadPDF({
+      title: `Descriptive Statistics - ${config.column}`,
+      subtitle: `n = ${result.summary.n}`,
+      charts: registry.charts,
+      stats: [
+        { label: 'Mean', value: String(result.summary.mean) },
+        { label: 'Median', value: String(result.summary.median) },
+        { label: 'Standard deviation', value: String(result.summary.std) },
+        { label: 'IQR', value: String(result.summary.iqr) },
+      ],
+      tables: [{ title: 'Statistics', columns: ['Category', 'Measure', 'Value', 'Consistency corrected'],
+        rows: visibleRows.map((row) => [row.category, row.measure, row.value, row.consistencyCorr]) }],
+      filename: exportFilename(`${baseName}-report`, 'pdf', 'descriptive-statistics'),
+    })
+  }, [result, config, registry.charts, visibleRows, baseName])
+  const exportReady = !!result && !!config && !isComputing && registry.ready
+
+  if (!result || !config) return <EmptyState hasData={hasData} />
 
   return (
     <div className="flex flex-col gap-5">
+      <ResultToolbar title={`Descriptive statistics — ${config.column}`}
+        exports={exportReady ? { png: exportPNG, csv: exportCSV, pdf: exportPDF } : undefined}
+        ready={exportReady} disabledReason={isComputing ? 'Waiting for the updated result.' : 'Chart is still loading.'} />
 
       {/* Warning snackbar */}
       <WarningSnackbar warnings={warnings} />
 
       {/* Statistics Table */}
       <StatsTable
-        rows={result.rows.filter(r => !r.advancedId || config.advancedStats.includes(r.advancedId))}
+        rows={visibleRows}
         showConsistencyCorr={config.showConsistencyCorr}
         precision={precision}
       />
 
       {/* Charts */}
-      <DescriptiveCharts result={result} colName={config.column} />
+      <DescriptiveCharts result={result} colName={config.column}
+        onReady={registry.register('descriptive', `Distribution of ${config.column}`)}
+        onPurge={registry.unregister('descriptive')} />
 
     </div>
   )

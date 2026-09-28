@@ -1,188 +1,245 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useData } from '../../../context/DataContext'
-import { graphicalApi, type GraphType, type GraphicalResponse } from '../../../api/graphical'
+import { graphicalApi, type GraphicalResponse } from '../../../api/graphical'
+import { inferenceApi } from '../../../api/inference'
 import {
-  DEBOUNCE_MS,
-  heavyOf,
-  isDirty as computeDirty,
-  mergeForLive,
-  overlaysNeedingRun,
-  toParams,
-  type GraphicalConfig,
-  type HeavyConfig,
+  DEBOUNCE_MS, DEFAULT_CONFIG, configForDataset, heavyOf, isDirty as computeDirty,
+  mergeForLive, overlaysNeedingRun, toParams, updateGraphicalConfig, validateGraphicalConfig,
+  type GraphicalConfig, type GraphicalFieldErrors, type HeavyConfig,
 } from './graphicalState'
 
 export type { GraphicalConfig } from './graphicalState'
 export { DEFAULT_CONFIG } from './graphicalState'
 
-/**
- * Two request paths against one endpoint: cheap display toggles refresh live
- * (debounced, previous request aborted), while estimator- and bootstrap-backed
- * overlays wait for an explicit Run — a bootstrap can be 5000 resamples.
- *
- * The rules for which is which live in `graphicalState.ts` so they can be
- * tested without rendering.
- */
+const MEANS = ['Sample Mean']
+const DEVIATIONS = ['Deviation (1 ddof)']
+interface Draft {
+  sessionId: string | null
+  cfg: GraphicalConfig
+  winsorRaw: string
+  autoBins: boolean
+}
+interface Request {
+  sessionId: string
+  filters: Record<string, string[]>
+  filename: string
+  cfg: GraphicalConfig
+  viaRun: boolean
+  owner: string
+}
+interface Applied extends Request { data: GraphicalResponse }
+
+function describeApplied({ cfg, data }: Applied): string {
+  const settings: string[] = []
+  if (cfg.graphType === 'Histogram') settings.push(`${cfg.bins ?? 'Auto'} bins`, `KDE ${cfg.addKde ? 'on' : 'off'}`)
+  if (cfg.graphType !== 'ECDF') settings.push(`Rug ${cfg.addData ? 'on' : 'off'}`)
+  else settings.push(cfg.addConfBand ? `${(cfg.ecdfConfLevel * 100).toFixed(1)}% ECDF band` : 'ECDF band off')
+  if (data.normal_curve) settings.push(`Normal curve: ${cfg.normalMuSource}`)
+  if (data.interval_bands?.length) {
+    settings.push(`${(cfg.confLevel * 100).toFixed(1)}% intervals`)
+    if (cfg.addCi) settings.push(`CI: ${cfg.ciChoice}`)
+    if (cfg.addPi) settings.push(`PI: ${cfg.piChoice}`)
+  }
+  if (data.point_estimates?.mu != null || data.point_estimates?.sigma != null) {
+    settings.push(cfg.meanEstimator, cfg.sigmaEstimator)
+    if (cfg.meanEstimator === 'Trimmed Mean') settings.push(`Trim: ${cfg.trimParam}`)
+    if (cfg.meanEstimator === 'Winsorized Mean') settings.push(`Tail limits: ${cfg.winsorLimits}`)
+    if (cfg.meanEstimator === 'Weighted Mean') settings.push(`Weights: ${cfg.weightsColumn}`)
+  }
+  const bootstraps = [cfg.bootstrapMean && 'mean', cfg.bootstrapMedian && 'median', cfg.bootstrapPi && 'prediction'].filter(Boolean)
+  if (bootstraps.length) settings.push(`Bootstrap ${bootstraps.join(', ')}: ${cfg.bootstrapSamples} resamples`)
+  return settings.join(' · ')
+}
+
+function freshDraft(sessionId: string | null, columns: string[]): Draft {
+  return { sessionId, cfg: { ...DEFAULT_CONFIG, column: columns[0] ?? '' }, winsorRaw: '0.1, 0.1', autoBins: true }
+}
+
+/** Draft survives panel unmounts; only explicit Run applies expensive overlays. */
 export function useGraphicalTabState() {
   const { state: dataState } = useData()
+  const { sessionId, filters, filename, numericCols } = dataState
+  const hasData = dataState.status === 'ready' && numericCols.length > 0
+  const filtersKey = JSON.stringify(filters)
+  const owner = JSON.stringify([sessionId, filtersKey])
+  const ownerRef = useRef(owner)
+  ownerRef.current = owner
 
-  const [result, setResult] = useState<GraphicalResponse | null>(null)
+  const [storedDraft, setDraft] = useState(() => freshDraft(sessionId, numericCols))
+  const draft = storedDraft.sessionId === sessionId ? storedDraft : freshDraft(sessionId, numericCols)
+  const cfg = configForDataset(draft.cfg, numericCols)
+  const draftRef = useRef(draft)
+  draftRef.current = { ...draft, cfg }
+  const [applied, setApplied] = useState<Applied | null>(null)
+  const [committedState, setCommitted] = useState<{ sessionId: string; config: HeavyConfig } | null>(null)
+  const committed = committedState?.sessionId === sessionId ? committedState.config : null
+  const committedRef = useRef(committed)
+  committedRef.current = committed
   const [isComputing, setIsComputing] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [isDirty, setIsDirty] = useState(false)
-
-  // Echoed back so the Observation and Notebook panels label themselves with
-  // the request the current result actually came from.
-  const [active, setActive] = useState<{ column: string; graphType: GraphType }>({
-    column: '',
-    graphType: 'Histogram',
-  })
-
-  // Overlay settings as of the last Run.
-  const [committed, setCommitted] = useState<HeavyConfig | null>(null)
-  const committedRef = useRef<HeavyConfig | null>(null)
-  const latestCfgRef = useRef<GraphicalConfig | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<GraphicalFieldErrors>({})
+  const [resetVersion, setResetVersion] = useState(0)
+  const [meanEstimators, setMeanEstimators] = useState(MEANS)
+  const [deviationEstimators, setDeviationEstimators] = useState(DEVIATIONS)
+  const [estimatorNotice, setEstimatorNotice] = useState<string | null>(null)
+  const sequence = useRef(0)
   const abortRef = useRef<AbortController | null>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lastRequest = useRef<Request | null>(null)
 
-  const sessionId = dataState.sessionId
-  const filters = dataState.filters
-
-  // Whether the displayed result came from an explicit Run. A live refresh
-  // cannot redraw a bootstrap, so only then are those overlays stale.
-  const [resultViaRun, setResultViaRun] = useState(false)
-
-  const fire = useCallback(
-    (cfg: GraphicalConfig, viaRun: boolean) => {
-      if (!sessionId) {
-        setError('No active session. Please upload a dataset first.')
-        return
-      }
-      if (!cfg.column) {
-        setResult(null)
-        return
-      }
-
-      abortRef.current?.abort()
-      const controller = new AbortController()
-      abortRef.current = controller
-
-      setIsComputing(true)
-      setError(null)
-
-      graphicalApi
-        .computeGraph(sessionId, toParams(cfg, filters), controller.signal)
-        .then((data) => {
-          if (controller.signal.aborted) return
-          setResult(data)
-          setResultViaRun(viaRun)
-          setActive({ column: cfg.column, graphType: cfg.graphType })
-          setIsComputing(false)
-        })
-        .catch((err: unknown) => {
-          if (err instanceof Error && err.name === 'AbortError') return
-          setError(err instanceof Error ? err.message : String(err))
-          setIsComputing(false)
-        })
-    },
-    [sessionId, filters]
-  )
-
-  /** Debounced path for display-only changes. */
-  const applyLive = useCallback(
-    (cfg: GraphicalConfig) => {
-      latestCfgRef.current = cfg
-      setIsDirty(computeDirty(cfg, committedRef.current))
-      if (timerRef.current) clearTimeout(timerRef.current)
-      const merged = mergeForLive(cfg, committedRef.current)
-      timerRef.current = setTimeout(() => fire(merged, false), DEBOUNCE_MS)
-    },
-    [fire]
-  )
-
-  /** Immediate path: commits the overlay settings, then computes. */
-  const run = useCallback(
-    (cfg: GraphicalConfig) => {
-      if (timerRef.current) clearTimeout(timerRef.current)
-      const heavy = heavyOf(cfg)
-      committedRef.current = heavy
-      latestCfgRef.current = cfg
-      setCommitted(heavy)
-      setIsDirty(false)
-      fire(cfg, true)
-    },
-    [fire]
-  )
-
-  const reset = useCallback(() => {
-    if (timerRef.current) clearTimeout(timerRef.current)
+  const cancel = useCallback(() => {
+    sequence.current += 1
     abortRef.current?.abort()
-    committedRef.current = null
-    latestCfgRef.current = null
-    setCommitted(null)
-    setIsDirty(false)
-    setResult(null)
-    setResultViaRun(false)
-    setError(null)
-    setIsComputing(false)
+    if (timerRef.current) clearTimeout(timerRef.current)
+    timerRef.current = null
   }, [])
 
-  // A filter change on the Data tab alters the sample, so the plot has to be
-  // recomputed — otherwise it silently disagrees with every other tab.
-  // Re-running is not enough on its own: a committed bootstrap is dropped by
-  // mergeForLive, which the stale banner then reports.
-  const filtersKey = JSON.stringify(filters)
-  const firstFilterPass = useRef(true)
+  const fire = useCallback((request: Request) => {
+    cancel()
+    const id = sequence.current
+    const controller = new AbortController()
+    abortRef.current = controller
+    lastRequest.current = request
+    setError(null)
+    setIsComputing(true)
+    graphicalApi.computeGraph(request.sessionId, toParams(request.cfg, request.filters), controller.signal)
+      .then((data) => {
+        if (id !== sequence.current || controller.signal.aborted || request.owner !== ownerRef.current) return
+        setApplied({ ...request, data })
+        if (request.viaRun) setCommitted({ sessionId: request.sessionId, config: heavyOf(request.cfg) })
+        setIsComputing(false)
+      })
+      .catch((cause: unknown) => {
+        if (id !== sequence.current || controller.signal.aborted || request.owner !== ownerRef.current) return
+        setError(cause instanceof Error ? cause.message : String(cause))
+        setIsComputing(false)
+      })
+  }, [cancel])
+
   useEffect(() => {
-    if (firstFilterPass.current) {
-      firstFilterPass.current = false
+    setDraft((previous) => previous.sessionId === sessionId
+      ? { ...previous, cfg: configForDataset(previous.cfg, numericCols) }
+      : freshDraft(sessionId, numericCols))
+    setFieldErrors({})
+  }, [sessionId, numericCols])
+
+  useEffect(() => {
+    if (!hasData || !sessionId || !cfg.column) return
+    let active = true
+    setEstimatorNotice(null)
+    inferenceApi.getEstimators({ session_id: sessionId, column: cfg.column })
+      .then((options) => {
+        if (!active) return
+        const means = options.mean_estimators.length ? options.mean_estimators : MEANS
+        const deviations = options.deviation_estimators.length ? options.deviation_estimators : DEVIATIONS
+        setMeanEstimators(means)
+        setDeviationEstimators(deviations)
+        setDraft((previous) => {
+          const current = previous.sessionId === sessionId ? previous : freshDraft(sessionId, numericCols)
+          return { ...current, cfg: {
+            ...current.cfg,
+            meanEstimator: means.includes(current.cfg.meanEstimator) ? current.cfg.meanEstimator : means[0],
+            sigmaEstimator: deviations.includes(current.cfg.sigmaEstimator) ? current.cfg.sigmaEstimator : deviations[0],
+          } }
+        })
+      })
+      .catch(() => {
+        if (!active) return
+        setMeanEstimators(MEANS)
+        setDeviationEstimators(DEVIATIONS)
+        setEstimatorNotice('Estimator choices could not load. Sample mean and sample deviation remain available.')
+        setDraft((previous) => ({ ...previous, cfg: { ...previous.cfg, meanEstimator: MEANS[0], sigmaEstimator: DEVIATIONS[0] } }))
+      })
+    return () => { active = false }
+  }, [hasData, sessionId, cfg.column, numericCols])
+
+  // Only live inputs schedule a request. Draft overlay edits update pending state.
+  useEffect(() => {
+    cancel()
+    setError(null)
+    if (!hasData || !sessionId || !cfg.column) {
+      setIsComputing(false)
       return
     }
-    const cfg = latestCfgRef.current
-    if (!cfg) return
-    if (timerRef.current) clearTimeout(timerRef.current)
-    fire(mergeForLive(cfg, committedRef.current), false)
-    setIsDirty(computeDirty(cfg, committedRef.current))
+    setIsComputing(true)
+    const request: Request = {
+      sessionId, filters, filename, owner,
+      cfg: mergeForLive(draftRef.current.cfg, committedRef.current), viaRun: false,
+    }
+    timerRef.current = setTimeout(() => fire(request), DEBOUNCE_MS)
+    return cancel
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtersKey])
+  }, [hasData, sessionId, filtersKey, cfg.column, cfg.graphType, cfg.bins, cfg.addKde,
+    cfg.addData, cfg.addConfBand, cfg.ecdfConfLevel, resetVersion, cancel, fire])
 
-  // A new upload invalidates everything computed against the old one.
-  useEffect(() => {
-    if (timerRef.current) clearTimeout(timerRef.current)
-    abortRef.current?.abort()
-    committedRef.current = null
-    latestCfgRef.current = null
-    setCommitted(null)
-    setIsDirty(false)
-    setResult(null)
-    setResultViaRun(false)
-    setError(null)
-    setIsComputing(false)
-  }, [sessionId])
+  useEffect(() => cancel, [cancel])
 
-  useEffect(() => () => {
-    if (timerRef.current) clearTimeout(timerRef.current)
-    abortRef.current?.abort()
+  const updateConfig = useCallback(<K extends keyof GraphicalConfig>(key: K, value: GraphicalConfig[K]) => {
+    setDraft((previous) => {
+      const current = previous.sessionId === sessionId ? previous : freshDraft(sessionId, numericCols)
+      return { ...current, cfg: updateGraphicalConfig(current.cfg, key, value) }
+    })
+    setFieldErrors({})
+  }, [sessionId, numericCols])
+
+  const setWinsorRaw = useCallback((winsorRaw: string) => {
+    setDraft((previous) => ({ ...previous, winsorRaw }))
+    setFieldErrors({})
   }, [])
 
-  // Overlays the last Run produced that the displayed result no longer carries,
-  // because a live refresh cannot redraw a bootstrap.
-  const staleOverlays = result && !resultViaRun ? overlaysNeedingRun(committed) : []
+  const setAutoBins = useCallback((autoBins: boolean) => {
+    setDraft((previous) => ({ ...previous, autoBins, cfg: { ...previous.cfg, bins: autoBins ? null : 20 } }))
+  }, [])
+
+  const run = useCallback(() => {
+    const current = draftRef.current
+    const errors = validateGraphicalConfig(current.cfg, current.winsorRaw)
+    setFieldErrors(errors)
+    if (Object.keys(errors).length || !sessionId || !hasData) return
+    const next = {
+      ...current.cfg,
+      winsorLimits: current.cfg.meanEstimator === 'Winsorized Mean' ? current.winsorRaw : null,
+    }
+    fire({ sessionId, filters, filename, owner, cfg: next, viaRun: true })
+  }, [sessionId, hasData, filters, filename, owner, fire])
+
+  const retry = useCallback(() => {
+    const request = lastRequest.current
+    if (request?.owner === owner) fire(request)
+  }, [owner, fire])
+
+  const reset = useCallback(() => {
+    cancel()
+    setDraft(freshDraft(sessionId, numericCols))
+    setCommitted(null)
+    committedRef.current = null
+    setApplied(null)
+    setFieldErrors({})
+    setError(null)
+    setIsComputing(false)
+    lastRequest.current = null
+    setResetVersion((value) => value + 1)
+  }, [sessionId, numericCols, cancel])
+
+  const currentApplied = hasData && applied?.sessionId === sessionId ? applied : null
+  const result = currentApplied?.data ?? null
+  const effectiveDraft = { ...cfg, winsorLimits: cfg.meanEstimator === 'Winsorized Mean' ? draft.winsorRaw : null }
+  const isDirty = computeDirty(effectiveDraft, committed)
+  const staleOverlays = result && !currentApplied?.viaRun ? overlaysNeedingRun(committed) : []
+  const isPrevious = !!currentApplied && currentApplied.owner !== owner
+  const appliedContext = currentApplied
+    ? `${currentApplied.filename} · ${currentApplied.cfg.column} · ${currentApplied.cfg.graphType} · n = ${currentApplied.data.summary.n} · ${Object.entries(currentApplied.filters).map(([key, values]) => `${key}: ${values.join(', ')}`).join('; ') || 'All rows'}`
+    : null
+  const appliedSettings = currentApplied ? describeApplied(currentApplied) : null
 
   return {
-    result,
-    column: active.column,
-    graphType: active.graphType,
-    isComputing,
-    error,
-    isDirty,
-    staleOverlays,
-    applyLive,
-    run,
-    reset,
-    hasData: dataState.status === 'ready' && dataState.numericCols.length > 0,
-    numericCols: dataState.numericCols,
-    precision: dataState.displayPrecision,
-    sessionId,
+    cfg, winsorRaw: draft.winsorRaw, autoBins: draft.autoBins, fieldErrors,
+    meanEstimators, deviationEstimators, estimatorNotice, updateConfig, setWinsorRaw, setAutoBins,
+    result, column: currentApplied?.cfg.column ?? cfg.column,
+    graphType: currentApplied?.cfg.graphType ?? cfg.graphType,
+    isComputing, error, isDirty, isPrevious, staleOverlays, appliedContext, appliedSettings,
+    run, reset, retry, hasData, numericCols, precision: dataState.displayPrecision, sessionId,
   }
 }
+
+export type GraphicalTabState = ReturnType<typeof useGraphicalTabState>

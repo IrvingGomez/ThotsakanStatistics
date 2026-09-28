@@ -127,6 +127,7 @@ export type QueryOp = '<=' | '>=' | '=' | '<' | '>'
 
 export interface DistResult extends DistributionResponse {
   provisional?: boolean
+  requestFingerprint?: string
 }
 
 export interface DistParams {
@@ -144,41 +145,47 @@ export function useDistribution({ distName, paramValues, queryOp, queryK }: Dist
   result: DistResult | null
   isLoading: boolean
   error: string | null
+  appliedParams: DistParams | null
 } {
   const [result, setResult] = useState<DistResult | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [appliedParams, setAppliedParams] = useState<DistParams | null>(null)
 
   const abortRef = useRef<AbortController | null>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const generation = useRef(0)
+  const fingerprint = JSON.stringify([distName, paramValues, queryOp, queryK])
 
   useEffect(() => {
+    const request = ++generation.current
     if (timerRef.current) clearTimeout(timerRef.current)
+    abortRef.current?.abort()
+    setIsLoading(true)
+    setError(null)
 
     try {
-      setResult({ ...computeLocalDistribution(distName, paramValues, queryOp, queryK), provisional: true })
+      setResult({ ...computeLocalDistribution(distName, paramValues, queryOp, queryK), provisional: true, requestFingerprint: fingerprint })
     } catch {
-      // keep previous result; backend will still answer
+      setResult(null)
     }
 
     timerRef.current = setTimeout(() => {
-      if (abortRef.current) abortRef.current.abort()
       const controller = new AbortController()
       abortRef.current = controller
-
-      setIsLoading(true)
-      setError(null)
 
       computeDistribution(
         { distName, params: paramValues, queryOp, queryK },
         controller.signal,
       )
         .then((data) => {
-          setResult({ ...data, provisional: false })
+          if (request !== generation.current || controller.signal.aborted) return
+          setResult({ ...data, provisional: false, requestFingerprint: fingerprint })
+          setAppliedParams({ distName, paramValues: { ...paramValues }, queryOp, queryK })
           setIsLoading(false)
         })
         .catch((err: unknown) => {
-          if (err instanceof Error && err.name === 'AbortError') return
+          if (request !== generation.current || controller.signal.aborted) return
           setError(err instanceof Error ? err.message : String(err))
           setIsLoading(false)
         })
@@ -186,8 +193,12 @@ export function useDistribution({ distName, paramValues, queryOp, queryK }: Dist
 
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current)
+      controllerCleanup()
     }
-  }, [distName, JSON.stringify(paramValues), queryOp, queryK]) // eslint-disable-line react-hooks/exhaustive-deps
+    function controllerCleanup() {
+      if (request === generation.current) abortRef.current?.abort()
+    }
+  }, [fingerprint]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  return { result, isLoading, error }
+  return { result, isLoading, error, appliedParams }
 }

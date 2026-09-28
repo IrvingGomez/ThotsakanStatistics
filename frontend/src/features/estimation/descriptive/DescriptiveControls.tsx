@@ -3,6 +3,7 @@
 
 import { useState, useCallback, useEffect } from 'react'
 import { useData } from '../../../context/DataContext'
+import { Accordion, AnalysisActions, SelectField, SwitchField, TextField } from '../../../components/ControlPrimitives'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -43,90 +44,6 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 
 function Divider() {
   return <div className="border-t border-[var(--color-border)] my-3" />
-}
-
-function SelectField({
-  label, value, onChange, options, placeholder,
-}: {
-  label: string
-  value: string
-  onChange: (v: string) => void
-  options: string[]
-  placeholder?: string
-}) {
-  return (
-    <div className="flex flex-col gap-1 mb-3">
-      <label className="text-xs text-[var(--color-text-muted)]">{label}</label>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-md px-2.5 py-1.5 text-xs bg-[var(--color-bg-input)]
-          border border-[var(--color-border-md)] text-[var(--color-text)]
-          focus:outline-none focus:border-[var(--color-accent)] cursor-pointer"
-      >
-        {placeholder && <option value="">{placeholder}</option>}
-        {options.map((o) => <option key={o} value={o}>{o}</option>)}
-      </select>
-    </div>
-  )
-}
-
-function TextInput({
-  label, value, onChange, placeholder, hint, error,
-}: {
-  label: string; value: string; onChange: (v: string) => void; placeholder?: string; hint?: string; error?: boolean
-}) {
-  return (
-    <div className="flex flex-col gap-1 mb-3">
-      <label className={`text-xs ${error ? 'text-red-400' : 'text-[var(--color-text-muted)]'}`}>{label}</label>
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className={`w-full rounded-md px-2.5 py-1.5 text-xs font-mono bg-[var(--color-bg-input)]
-          border ${error ? 'border-red-500/50' : 'border-[var(--color-border-md)]'} text-[var(--color-text)] placeholder-[var(--color-text-muted)]
-          focus:outline-none ${error ? 'focus:border-red-500' : 'focus:border-[var(--color-accent)]'}`}
-      />
-      {hint && <p className="text-[10px] text-[var(--color-text-muted)]">{hint}</p>}
-    </div>
-  )
-}
-
-function Toggle({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <div className="flex items-center gap-2 cursor-pointer mb-2" onClick={() => onChange(!value)}>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={value}
-        className={`relative w-8 h-4 rounded-full transition-colors ${value ? 'bg-[var(--color-accent)]' : 'bg-[var(--color-border-md)]'}`}
-      >
-        <span className={`absolute top-0.5 left-0.5 w-3 h-3 bg-white rounded-full transition-transform ${value ? 'translate-x-4' : ''}`} />
-      </button>
-      <span className="text-xs text-[var(--color-text)]">{label}</span>
-    </div>
-  )
-}
-
-function Accordion({ title, children, isOpen, onToggle }: { title: string; children: React.ReactNode; isOpen: boolean; onToggle: () => void }) {
-  return (
-    <div className="mb-3 border border-[var(--color-border-md)] rounded-md overflow-hidden">
-      <button
-        type="button"
-        onClick={onToggle}
-        className="w-full text-left px-3 py-2 text-xs font-semibold bg-[var(--color-bg-input)] hover:bg-[var(--color-bg-hover)] text-[var(--color-text)] flex justify-between items-center"
-      >
-        {title}
-        <span className={`transform transition-transform ${isOpen ? 'rotate-180' : ''}`}>▼</span>
-      </button>
-      {isOpen && (
-        <div className="p-3 bg-[var(--color-bg)] text-xs border-t border-[var(--color-border-md)]">
-          {children}
-        </div>
-      )}
-    </div>
-  )
 }
 
 const ADVANCED_STATS_GROUPS = [
@@ -177,12 +94,16 @@ function GroupedMultiSelect({
   winsorError?: boolean
 }) {
   const allSelected = ALL_ADVANCED_IDS.every(id => selected.includes(id))
+  const ensureDefaults = (ids: readonly string[]) => {
+    if (ids.includes('trimmed_mean') && !trimRaw.trim()) setTrimRaw('0.10')
+    if (ids.includes('winsorized_mean') && !winsorRaw.trim()) setWinsorRaw('0.10, 0.10')
+  }
 
   return (
     <div className="flex flex-col gap-2">
       {/* Select All / Clear */}
       <div className="flex gap-2 text-[10px] text-[var(--color-accent)] font-medium">
-        <button type="button" onClick={() => onChange(ALL_ADVANCED_IDS.slice())} disabled={allSelected}
+        <button type="button" onClick={() => { ensureDefaults(ALL_ADVANCED_IDS); onChange(ALL_ADVANCED_IDS.slice()) }} disabled={allSelected}
           className="hover:underline cursor-pointer disabled:opacity-40">
           Select All
         </button>
@@ -208,7 +129,7 @@ function GroupedMultiSelect({
                   ref={el => { if (el) el.indeterminate = someInGroup && !allInGroup }}
                   onChange={() => {
                     if (allInGroup) onChange(selected.filter(id => !groupIds.includes(id as never)))
-                    else onChange([...selected, ...groupIds.filter(id => !selected.includes(id))])
+                    else { ensureDefaults(groupIds); onChange([...selected, ...groupIds.filter(id => !selected.includes(id))]) }
                   }}
                   className="accent-[var(--color-accent)] cursor-pointer w-3 h-3"
                 />
@@ -223,27 +144,33 @@ function GroupedMultiSelect({
                         <input
                           type="checkbox"
                           checked={checked}
-                          onChange={() => checked ? onChange(selected.filter(id => id !== item.id)) : onChange([...selected, item.id])}
+                          onChange={() => {
+                            if (checked) {
+                              onChange(selected.filter(id => id !== item.id))
+                              if (item.id === 'trimmed_mean') setTrimRaw('')
+                              if (item.id === 'winsorized_mean') setWinsorRaw('')
+                            } else {
+                              onChange([...selected, item.id])
+                              if (item.id === 'trimmed_mean' && !trimRaw.trim()) setTrimRaw('0.10')
+                              if (item.id === 'winsorized_mean' && !winsorRaw.trim()) setWinsorRaw('0.10, 0.10')
+                            }
+                          }}
                           className="accent-[var(--color-accent)] cursor-pointer w-3.5 h-3.5 shrink-0"
                         />
                         {item.label}
                       </label>
                       {checked && item.id === 'trimmed_mean' && (
                         <div className="ml-5 mt-1 mb-1">
-                          <input type="text" value={trimRaw} onChange={e => setTrimRaw(e.target.value)}
-                            placeholder="α (e.g. 0.1)"
-                            className={`w-full rounded bg-[var(--color-bg-input)] border ${trimError ? 'border-red-500/50' : 'border-[var(--color-border-md)]'} px-2 py-1 text-[11px] font-mono focus:${trimError ? 'border-red-500' : 'border-[var(--color-accent)]'} focus:outline-none placeholder-[var(--color-text-muted)] text-[var(--color-text)]`}
-                          />
-                          <p className="text-[10px] text-[var(--color-text-muted)] mt-0.5">Fraction to trim from each tail</p>
+                          <TextField label="Trimming fraction" value={trimRaw} onChange={setTrimRaw}
+                            placeholder="0.10" hint="Fraction to trim from each tail."
+                            error={trimError ? 'Use a value from 0 up to, but not including, 0.5.' : undefined} inputMode="decimal" />
                         </div>
                       )}
                       {checked && item.id === 'winsorized_mean' && (
                         <div className="ml-5 mt-1 mb-1">
-                          <input type="text" value={winsorRaw} onChange={e => setWinsorRaw(e.target.value)}
-                            placeholder="lo, hi (e.g. 0.1, 0.1)"
-                            className={`w-full rounded bg-[var(--color-bg-input)] border ${winsorError ? 'border-red-500/50' : 'border-[var(--color-border-md)]'} px-2 py-1 text-[11px] font-mono focus:${winsorError ? 'border-red-500' : 'border-[var(--color-accent)]'} focus:outline-none placeholder-[var(--color-text-muted)] text-[var(--color-text)]`}
-                          />
-                          <p className="text-[10px] text-[var(--color-text-muted)] mt-0.5">Comma-separated pair in (0, 0.5)</p>
+                          <TextField label="Winsorization fractions" value={winsorRaw} onChange={setWinsorRaw}
+                            placeholder="0.10, 0.10" hint="Comma-separated pair from 0 up to, but not including, 0.5."
+                            error={winsorError ? 'Enter two valid fractions.' : undefined} inputMode="text" />
                         </div>
                       )}
                     </div>
@@ -262,14 +189,18 @@ function GroupedMultiSelect({
 
 function parseQuantiles(raw: string): number[] | null {
   try {
-    const vals = raw.split(',').map((s) => parseFloat(s.trim())).filter((v) => !isNaN(v) && v >= 0 && v <= 1)
+    const tokens = raw.split(',').map((s) => s.trim())
+    if (tokens.some((token) => token === '')) return null
+    const vals = tokens.map(Number).filter((v) => Number.isFinite(v) && v >= 0 && v <= 1)
     return vals.length > 0 ? vals : null
   } catch { return null }
 }
 
 function parsePair(raw: string): [number, number] | null {
-  const parts = raw.split(',').map((s) => parseFloat(s.trim()))
-  if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+  const tokens = raw.split(',').map((s) => s.trim())
+  if (tokens.some((token) => token === '')) return null
+  const parts = tokens.map(Number)
+  if (parts.length === 2 && Number.isFinite(parts[0]) && Number.isFinite(parts[1])) {
     return [parts[0], parts[1]]
   }
   return null
@@ -308,22 +239,24 @@ export default function DescriptiveControls({ onRun, onReset }: DescriptiveContr
       return
     }
 
-    const trimAlpha = trimRaw.trim() === ''
+    const trimEnabled = advancedStats.includes('trimmed_mean')
+    const trimAlpha = !trimEnabled || trimRaw.trim() === ''
       ? null
       : (() => {
-          const v = parseFloat(trimRaw)
-          if (isNaN(v) || v < 0 || v >= 0.5) return undefined
+          const v = Number(trimRaw)
+          if (!Number.isFinite(v) || v < 0 || v >= 0.5) return undefined
           return v
         })()
 
-    if (trimRaw.trim() !== '' && trimAlpha === undefined) {
+    if (trimEnabled && trimRaw.trim() !== '' && trimAlpha === undefined) {
       setError('Invalid trim alpha. Value must be between 0 (inclusive) and 0.5 (exclusive).')
       setFieldErrors(prev => ({ ...prev, trim: true }))
       return
     }
 
-    const winsorLimits = winsorRaw.trim() === '' ? null : parsePair(winsorRaw)
-    if (winsorRaw.trim() !== '' && (!winsorLimits || winsorLimits.some(l => l < 0 || l >= 0.5))) {
+    const winsorEnabled = advancedStats.includes('winsorized_mean')
+    const winsorLimits = !winsorEnabled || winsorRaw.trim() === '' ? null : parsePair(winsorRaw)
+    if (winsorEnabled && winsorRaw.trim() !== '' && (!winsorLimits || winsorLimits.some(l => l < 0 || l >= 0.5))) {
       setError('Invalid winsorize limits. Use two comma-separated values between 0 and 0.5 (exclusive), e.g. "0.1, 0.1".')
       setFieldErrors(prev => ({ ...prev, winsor: true }))
       return
@@ -355,6 +288,7 @@ export default function DescriptiveControls({ onRun, onReset }: DescriptiveContr
     setWinsorRaw('')
     setShowConsistencyCorr(true)
     setAdvancedStats([])
+    setAdvancedOpen(false)
     setError(null)
     onReset()
   }, [state.numericCols, onReset])
@@ -394,15 +328,15 @@ export default function DescriptiveControls({ onRun, onReset }: DescriptiveContr
 
       {/* Statistical Parameters */}
       <SectionLabel>Statistical Parameters</SectionLabel>
-      <TextInput
+      <TextField
         label="Quantile probabilities"
         value={quantilesRaw}
         onChange={setQuantilesRaw}
         placeholder="0.25, 0.5, 0.75"
         hint="Comma-separated, values in [0, 1]"
-        error={fieldErrors.quantiles}
+        error={fieldErrors.quantiles ? 'Enter comma-separated probabilities between 0 and 1.' : undefined}
       />
-      <Accordion title="Advanced Statistics" isOpen={advancedOpen} onToggle={() => setAdvancedOpen(!advancedOpen)}>
+      <Accordion title="Advanced Statistics" open={advancedOpen} onToggle={() => setAdvancedOpen(!advancedOpen)}>
         <GroupedMultiSelect
           selected={advancedStats}
           onChange={setAdvancedStats}
@@ -418,7 +352,7 @@ export default function DescriptiveControls({ onRun, onReset }: DescriptiveContr
       <Divider />
 
       <SectionLabel>Display Options</SectionLabel>
-      <Toggle label="Show consistency corrected" value={showConsistencyCorr} onChange={setShowConsistencyCorr} />
+      <SwitchField label="Show consistency corrected" checked={showConsistencyCorr} onChange={setShowConsistencyCorr} />
 
       <Divider />
 
@@ -428,14 +362,7 @@ export default function DescriptiveControls({ onRun, onReset }: DescriptiveContr
       )}
 
       {/* Action buttons */}
-      <button
-        type="button"
-        onClick={handleReset}
-        className="w-full mt-2 py-1.5 rounded-lg border border-[var(--color-border-md)]
-          text-[var(--color-text-muted)] text-xs hover:text-[var(--color-text)] transition-colors cursor-pointer"
-      >
-        🔄 Reset to Defaults
-      </button>
+      <AnalysisActions onReset={handleReset} resetLabel="Reset to Defaults" />
     </div>
   )
 }

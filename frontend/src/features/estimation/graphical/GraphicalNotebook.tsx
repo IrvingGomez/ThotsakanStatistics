@@ -25,9 +25,9 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 function StatRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between items-baseline py-1 text-xs">
+    <div className="flex flex-wrap justify-between items-baseline gap-x-3 py-1 text-xs">
       <span className="text-[var(--color-text-muted)]">{label}</span>
-      <span className="font-mono text-[var(--color-text)]">{value}</span>
+      <span className="font-mono break-all text-[var(--color-text)]">{value}</span>
     </div>
   )
 }
@@ -86,27 +86,18 @@ export default function GraphicalNotebook({
 
       {bands && bands.length > 0 && (
         <Section title="Intervals">
-          <div className="bg-[var(--color-bg)] rounded-md border border-[var(--color-border-md)] overflow-hidden">
-            <table className="w-full text-left text-xs text-[var(--color-text)]">
-              <thead className="bg-[var(--color-bg-input)]">
-                <tr>
-                  <th className="px-3 py-2 font-medium text-[var(--color-text-muted)]">Interval</th>
-                  <th className="px-3 py-2 font-medium text-[var(--color-text-muted)] text-right">Lower</th>
-                  <th className="px-3 py-2 font-medium text-[var(--color-text-muted)] text-right">Upper</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--color-border-md)]">
-                {bands.map((b) => (
-                  <tr key={b.label} className="hover:bg-[var(--color-bg-hover)]">
-                    <td className="px-3 py-2">{b.label}</td>
-                    <td className="px-3 py-2 font-mono text-right text-emerald-600 dark:text-emerald-400">{fmt(b.low)}</td>
-                    <td className="px-3 py-2 font-mono text-right text-emerald-600 dark:text-emerald-400">{fmt(b.high)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="space-y-2">
+            {bands.map((band) => (
+              <article key={band.label} className="rounded-md border border-[var(--color-border-md)] bg-[var(--color-bg-input)] p-3">
+                <h4 className="text-sm font-medium break-words mb-2">{band.label}</h4>
+                <dl className="grid grid-cols-2 gap-3 text-xs">
+                  <div className="min-w-0"><dt className="text-[var(--color-text-muted)]">Lower</dt><dd className="font-mono break-all mt-1">{fmt(band.low)}</dd></div>
+                  <div className="min-w-0"><dt className="text-[var(--color-text-muted)]">Upper</dt><dd className="font-mono break-all mt-1">{fmt(band.high)}</dd></div>
+                </dl>
+              </article>
+            ))}
           </div>
-          <p className="text-[10px] text-[var(--color-text-muted)] mt-2 leading-snug">
+          <p className="text-sm text-[var(--color-text-muted)] mt-2 leading-relaxed">
             A confidence interval brackets a parameter; a prediction interval
             brackets the next observation. The prediction interval is wider —
             it carries the spread of the data itself, not just the uncertainty
@@ -134,7 +125,7 @@ export default function GraphicalNotebook({
       )}
 
       <Section title="Lesson">
-        <p className="text-xs text-[var(--color-text-muted)] leading-relaxed">
+        <p className="text-sm text-[var(--color-text-muted)] leading-relaxed">
           {LESSONS[graphType] ?? ''}
         </p>
       </Section>

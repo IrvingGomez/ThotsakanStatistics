@@ -90,6 +90,9 @@ graphify-out/
 test_data.csv
 doc/*.csv
 
+# Personal research/work-plan documents unrelated to this project
+/local/
+
 # Read-only reference folders (local only, not part of the React migration)
 ThotsakanStatistics/
 Try_reflex/

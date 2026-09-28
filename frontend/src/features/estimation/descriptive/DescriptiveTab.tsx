@@ -28,7 +28,7 @@ export function ControlsSlot({ onRun, onReset, isComputing }: Pick<SlotProps, 'o
 export function ObservationSlot({ result, config, hasData, precision, isComputing }: Pick<SlotProps, 'result' | 'config' | 'hasData' | 'precision' | 'isComputing'>) {
   return (
     <div className="h-full relative">
-      <DescriptiveObservation result={result} config={config} hasData={hasData} precision={precision} />
+      <DescriptiveObservation result={result} config={config} hasData={hasData} precision={precision} isComputing={isComputing} />
       {isComputing && (
         <div className="absolute inset-0 bg-[var(--color-bg-base)]/50 backdrop-blur-sm flex items-center justify-center z-50 rounded-lg">
           <div className="bg-[var(--color-bg-elevated)] border border-[var(--color-border)] px-4 py-2 rounded-lg shadow-lg text-sm font-semibold flex items-center gap-2">

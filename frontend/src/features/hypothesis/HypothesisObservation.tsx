@@ -1,13 +1,24 @@
 import { useMemo } from 'react';
 import ReactPlotly from 'react-plotly.js';
 import type { HypothesisResponse, RejectionRegionData } from '../../api/hypothesis';
+import ResultToolbar from '../../components/ResultToolbar';
+import { useChartRegistry } from '../../hooks/useChartRegistry';
+import { downloadChartsPNG } from '../../utils/exportPNG';
+import { downloadCSV } from '../../utils/exportCSV';
+import { downloadPDF } from '../../utils/exportPDF';
+import { exportFilename } from '../../utils/exportFilename';
+
+const CHART_ORDER = ['hypothesis'] as const;
 
 interface HypothesisObservationProps {
   result: HypothesisResponse | null;
   hasData: boolean;
-  isComputing: boolean;
+  precision: number;
+  canReveal: boolean;
   revealed: boolean;
   onReveal: () => void;
+  isComputing: boolean;
+  isDirty: boolean;
 }
 
 // ponytail: Plotly parses colors itself — CSS vars don't resolve, so use literals
@@ -40,14 +51,14 @@ function clampToRange(value: number, [lo, hi]: [number, number]): number {
 }
 
 /** Label for a statistic pinned to the edge, so the real value is never hidden. */
-function offscaleAnnotation(region: RejectionRegionData): any {
+function offscaleAnnotation(region: RejectionRegionData, precision: number): any {
   const beyondUpper = region.statistic > region.x_range[1];
   return {
     x: clampToRange(region.statistic, region.x_range),
     y: region.y_max,
     xanchor: beyondUpper ? 'right' : 'left',
     yanchor: 'top',
-    text: `${statSymbol(region.dist)} = ${region.statistic.toFixed(3)} ${beyondUpper ? '→' : '←'}`,
+    text: `${statSymbol(region.dist)} = ${region.statistic.toFixed(precision)} ${beyondUpper ? '→' : '←'}`,
     showarrow: false,
     font: { color: C_STAT, size: 11 },
     bgcolor: 'rgba(0,0,0,0.35)',
@@ -76,8 +87,9 @@ function shade(region: RejectionRegionData, lo: number, hi: number, color: strin
 }
 
 export default function HypothesisObservation({
-  result, hasData, revealed, onReveal,
+  result, hasData, revealed, onReveal, precision, canReveal, isComputing, isDirty,
 }: HypothesisObservationProps) {
+  const registry = useChartRegistry(CHART_ORDER);
   const traces = useMemo(() => {
     if (!result) return [];
     const region = result.rejection_region;
@@ -109,7 +121,7 @@ export default function HypothesisObservation({
       out.push({
         x: [cv, cv], y: [0, region.y_max], type: 'scatter', mode: 'lines',
         line: { color: C_CRIT, width: 1.5, dash: 'dash' },
-        hovertemplate: `critical ${statSymbol(region.dist)} = ${cv.toFixed(4)}<extra></extra>`,
+        hovertemplate: `critical ${statSymbol(region.dist)} = ${cv.toFixed(precision)}<extra></extra>`,
       });
     });
 
@@ -120,44 +132,87 @@ export default function HypothesisObservation({
     out.push({
       x: [at, at], y: [0, region.y_max],
       type: 'scatter', mode: 'lines', line: { color: C_STAT, width: 2.5 },
-      hovertemplate: `${statSymbol(region.dist)} = ${region.statistic.toFixed(4)}<extra></extra>`,
+      hovertemplate: `${statSymbol(region.dist)} = ${region.statistic.toFixed(precision)}<extra></extra>`,
     });
 
     return out;
-  }, [result, revealed]);
+  }, [result, revealed, precision]);
 
   if (!hasData) {
     return (
-      <div className="h-full flex items-center justify-center text-[var(--color-text-muted)] border border-dashed border-[var(--color-border-md)] rounded-xl m-4">
-        Waiting for data...
+      <div className="p-6 text-sm text-[var(--color-text-muted)] border border-dashed border-[var(--color-border-md)] rounded-xl">
+        Upload a dataset in Data to start testing a hypothesis.
       </div>
     );
   }
 
   if (!result) {
     return (
-      <div className="h-full flex items-center justify-center text-[var(--color-text-muted)] border border-dashed border-[var(--color-border-md)] rounded-xl m-4">
+      <div className="p-6 text-sm text-[var(--color-text-muted)] border border-dashed border-[var(--color-border-md)] rounded-xl">
         Run a test to see the rejection region.
       </div>
     );
   }
 
   const region = result.rejection_region;
-  const dofLabel = region.dof.map((d) => (Number.isInteger(d) ? d : d.toFixed(2))).join(', ');
+  const dofLabel = region.dof.map((d) => (Number.isInteger(d) ? d : d.toFixed(precision))).join(', ');
   const inside = region.reject;
+  const baseName = `hypothesis-${result.test_type}`;
+  const canExport = revealed && !isDirty && !isComputing && registry.ready;
+  const exportHandlers = canExport ? {
+    png: () => downloadChartsPNG(registry.charts, exportFilename(`${baseName}-chart`, 'png', 'hypothesis')),
+    csv: () => downloadCSV([
+      ['section', 'metric', 'group', 'value'],
+      ['settings', 'test_type', '', result.test_type],
+      ['settings', 'alpha', '', result.alpha],
+      ['result', 'statistic', '', result.statistic],
+      ['result', 'p_value', '', result.p_value],
+      ['result', 'decision', '', result.verdict],
+      ['result', 'degrees_of_freedom', '', region.dof.join('; ')],
+      ['result', 'critical_values', '', region.critical_values.join('; ')],
+      ...((result.group_summary ?? []).flatMap((group) => [
+        ['group_summary', 'n', group.name, group.n],
+        ['group_summary', 'mean', group.name, group.mean],
+        ['group_summary', 'sd', group.name, group.sd],
+        ['group_summary', 'variance', group.name, group.var],
+      ])),
+    ], exportFilename(baseName, 'csv', 'hypothesis')),
+    pdf: () => downloadPDF({
+      title: `Hypothesis Test - ${result.test_type}`,
+      subtitle: result.verdict,
+      charts: registry.charts,
+      stats: [
+        { label: 'Alpha', value: String(result.alpha) },
+        { label: 'Statistic', value: String(result.statistic) },
+        { label: 'P-value', value: String(result.p_value) },
+        { label: 'Decision', value: result.verdict },
+        { label: 'Critical values', value: region.critical_values.join(', ') },
+      ],
+      filename: exportFilename(`${baseName}-report`, 'pdf', 'hypothesis'),
+    }),
+  } : undefined;
 
   return (
-    <div className="h-full flex flex-col p-4 gap-2">
-      <div className="flex items-baseline justify-between shrink-0">
+    <div className="analysis-observation flex flex-col gap-3">
+      <ResultToolbar title="Hypothesis test result" exports={exportHandlers} ready={canExport}
+        disabledReason={!revealed ? 'Reveal the p-value before exporting.' : isDirty ? 'Apply the changed settings before exporting.' : isComputing ? 'Waiting for the result.' : 'Chart is still loading.'} />
+      <div className="flex flex-wrap items-baseline justify-between gap-2 shrink-0">
         <h3 className="text-sm font-semibold text-[var(--color-text)]">
           Null distribution · {DIST_LABEL[region.dist]}({dofLabel})
         </h3>
-        <span className="text-[10px] text-[var(--color-text-muted)]">
-          red = reject H₀ at α = {result.alpha}
+        <span className="text-xs text-[var(--color-text-muted)]">
+          Rejection area α = {result.alpha}
         </span>
       </div>
 
-      <div className="flex-1 min-h-0">
+      <ul aria-label="Plot legend" className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-[var(--color-text-muted)]">
+        <li className="flex items-center gap-2"><span aria-hidden="true" className="w-5 border-t-2 border-[#e5e7eb]" />Solid: observed statistic</li>
+        <li className="flex items-center gap-2"><span aria-hidden="true" className="w-5 border-t-2 border-dashed border-red-400" />Dashed: critical boundary</li>
+        <li className="flex items-center gap-2"><span aria-hidden="true" className="w-5 border-t-2 border-dotted border-gray-400" />Dotted: null density</li>
+        <li className="flex items-center gap-2"><span aria-hidden="true" className="w-4 h-3 bg-red-500/30 border border-red-400" />Red area: rejection region</li>
+        {revealed && <li className="flex items-center gap-2"><span aria-hidden="true" className="w-4 h-3 bg-blue-500/50 border border-blue-400" />Blue area: p-value</li>}
+      </ul>
+      <div className="hypothesis-plot min-w-0" style={{ height: 360 }} role="img" aria-label={`Null distribution. Observed ${statSymbol(region.dist)} statistic ${region.statistic.toFixed(precision)}; critical boundaries ${region.critical_values.map(value => value.toFixed(precision)).join(', ')}. ${revealed ? `Statistic is ${inside ? 'inside' : 'outside'} the rejection region.` : 'Compare the statistic with the boundaries before revealing the decision.'}`}>
         <ReactPlotly
           data={traces}
           layout={{
@@ -169,26 +224,30 @@ export default function HypothesisObservation({
               title: { text: `${statSymbol(region.dist)} statistic`, standoff: 6 },
             },
             yaxis: { ...AXIS, range: [0, region.y_max * 1.05], title: { text: 'density', standoff: 6 } },
-            annotations: region.statistic_offscale ? [offscaleAnnotation(region)] : [],
+            annotations: region.statistic_offscale ? [offscaleAnnotation(region, precision)] : [],
           }}
           config={CONFIG}
           style={{ width: '100%', height: '100%' }}
           useResizeHandler
+          onInitialized={registry.register('hypothesis', 'Null distribution and rejection region')}
+          onUpdate={registry.register('hypothesis', 'Null distribution and rejection region')}
+          onPurge={registry.unregister('hypothesis')}
         />
       </div>
 
-      <div className="shrink-0 flex items-center justify-between gap-3">
-        <p className="text-xs text-[var(--color-text-muted)]">
+      <div className="shrink-0 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-[var(--color-text-muted)]">
           {revealed
-            ? `The blue area is the p-value: ${inside ? 'smaller' : 'larger'} than the red α region.`
-            : 'Is the black marker inside the red region?'}
+            ? `The statistic is ${inside ? 'inside' : 'outside'} the rejection region. Blue shows the p-value area; red shows α. The areas can overlap.`
+            : 'Is the solid statistic line inside the rejection region? Compare it with the dashed critical boundary.'}
         </p>
         {!revealed && (
           <button
             type="button"
             onClick={onReveal}
+            disabled={!canReveal}
             className="shrink-0 px-3 py-1.5 rounded-lg bg-[var(--color-accent)] text-white text-xs font-semibold
-              hover:bg-[var(--color-accent-hover)] transition-colors cursor-pointer"
+              hover:bg-[var(--color-accent-hover)] transition-colors cursor-pointer disabled:opacity-50"
           >
             Reveal p-value
           </button>

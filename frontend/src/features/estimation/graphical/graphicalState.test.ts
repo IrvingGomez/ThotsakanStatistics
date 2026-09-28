@@ -9,6 +9,8 @@ import {
   overlaysNeedingRun,
   supportedOverlays,
   toParams,
+  updateGraphicalConfig,
+  validateGraphicalConfig,
   type GraphicalConfig,
 } from './graphicalState'
 
@@ -25,6 +27,15 @@ describe('mergeForLive', () => {
     expect(live.addNormal).toBe(false)
     expect(live.addCi).toBe(false)
     expect(live.addPi).toBe(false)
+  })
+
+  it('does not apply draft estimators, weights or bootstrap flags before the first Run', () => {
+    const cfg = base({ meanEstimator: 'Weighted Mean', weightsColumn: 'W', bootstrapMean: true, bootstrapPi: true })
+    const live = mergeForLive(cfg, null)
+    expect(live.meanEstimator).toBe('Sample Mean')
+    expect(live.weightsColumn).toBeNull()
+    expect(live.bootstrapMean).toBe(false)
+    expect(live.bootstrapPi).toBe(false)
   })
 
   it('keeps the cheap settings the user is currently editing', () => {
@@ -103,6 +114,10 @@ describe('isDirty', () => {
     expect(isDirty(base({ addCi: true }), null)).toBe(true)
   })
 
+  it('marks edited overlay settings pending even before the first explicit Run', () => {
+    expect(isDirty(base({ confLevel: 0.99 }), null)).toBe(true)
+  })
+
   it('is clean immediately after a run', () => {
     const cfg = base({ addNormal: true, addCi: true, bootstrapMean: true })
     expect(isDirty(cfg, heavyOf(cfg))).toBe(false)
@@ -124,6 +139,35 @@ describe('isDirty', () => {
     const cfg = base({ addCi: true })
     const committed = heavyOf(cfg)
     expect(isDirty({ ...cfg, ...over }, committed)).toBe(true)
+  })
+})
+
+describe('overlay input defaults and validation', () => {
+  it('commits the visible trim default when the method is selected', () => {
+    const next = updateGraphicalConfig(base(), 'meanEstimator', 'Trimmed Mean')
+    expect(next.trimParam).toBe(0.1)
+    expect(toParams(next, {}).trim_param).toBe(0.1)
+  })
+
+  it('enables bootstrap prediction when selected and clears it for analytic methods', () => {
+    const bootstrap = updateGraphicalConfig(base({ addPi: true }), 'piChoice', 'Bootstrap')
+    expect(bootstrap.bootstrapPi).toBe(true)
+    expect(updateGraphicalConfig(bootstrap, 'piChoice', 'Mean').bootstrapPi).toBe(false)
+  })
+
+  it('requires valid winsor fractions only when an overlay needs them', () => {
+    const cfg = base({ addNormal: true, meanEstimator: 'Winsorized Mean' })
+    expect(validateGraphicalConfig(cfg, '0.1, 0.1')).toEqual({})
+    for (const invalid of ['0.1', '0.1,', '-0.1, 0.1', '0.5, 0.1', 'NaN, 0.1']) {
+      expect(validateGraphicalConfig(cfg, invalid)).toHaveProperty('winsorLimits')
+    }
+    expect(validateGraphicalConfig({ ...cfg, addNormal: false }, '')).toEqual({})
+  })
+
+  it('requires a weights column for weighted overlays', () => {
+    const cfg = base({ addCi: true, meanEstimator: 'Weighted Mean' })
+    expect(validateGraphicalConfig(cfg, '')).toHaveProperty('weightsColumn')
+    expect(validateGraphicalConfig({ ...cfg, weightsColumn: 'W' }, '')).toEqual({})
   })
 })
 

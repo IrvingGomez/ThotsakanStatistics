@@ -221,14 +221,14 @@ Porting features from `ThotsakanStatistics/` (Gradio) to the React + FastAPI hyb
 | Feature | Frontend | Backend | Status |
 |---|---|---|---|
 | Home tab | Done | N/A | Complete |
-| Data tab | Done (local parsing) | Done (upload route + session store) | Partial — frontend not yet wired to backend sessions |
+| Data tab | Done (uploads + holds `sessionId`) | Done (upload route + session store) | Complete — `DataContext.loadFile` POSTs to `/api/data/upload`; all tabs send `x-session-id`. Open issue: 30-min session TTL expires while the UI still shows the table |
 | 12 common distributions | Done (API) | Done | Complete |
 | Descriptive statistics | Done (API) | Done | Complete |
 | Normal PDF / CI | Retired (backend route kept) | Done | Superseded by Graphical Analysis |
 | Inference (CI/PI/regions) | Done (API) | Done | Complete |
 | Graphical analysis | Done (API) | Done | Complete |
 | Hypothesis testing | Done (API) | Done | Complete — 4 tests, plus α / critical values / verdict |
-| Linear regression | Not started | Stub (`core/linear_regression/` empty) | Not started |
+| Linear regression | Not started | Stub (`core/linear_regression/` empty) | Not started — the only feature left to migrate |
 
 ## Documentation
 

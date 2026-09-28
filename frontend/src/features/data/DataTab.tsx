@@ -81,7 +81,7 @@ function ColumnTypes() {
   const allCols = state.dataset.headers
 
   return (
-    <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-panel)] overflow-hidden">
+    <div id="column-types" tabIndex={-1} aria-label="Column Types" className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-panel)] overflow-hidden scroll-mt-4">
       <div className="px-4 py-2.5 border-b border-[var(--color-border)] flex items-center gap-2">
         <span className="text-[10px] uppercase tracking-widest font-semibold text-[var(--color-text-muted)]">
           Column Types

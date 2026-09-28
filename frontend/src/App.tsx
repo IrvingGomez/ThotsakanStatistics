@@ -1,4 +1,4 @@
-import { useState, Suspense, lazy, useMemo } from 'react'
+import { useState, Suspense, lazy, useMemo, useRef, useEffect } from 'react'
 import { ErrorBoundary } from 'react-error-boundary'
 import LogoBar from './layout/LogoBar'
 import Header from './layout/Header'
@@ -131,6 +131,20 @@ export default function App() {
   // ── Navigation ──────────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<TabId>('home')
   const [subTabMap, setSubTabMap] = useState<Partial<Record<TabId, string>>>(DEFAULT_SUB_TAB)
+  const openColumnTypesRef = useRef(false)
+
+  function handleOpenColumnTypes() {
+    openColumnTypesRef.current = true
+    setActiveTab('data')
+  }
+
+  useEffect(() => {
+    if (activeTab !== 'data' || !openColumnTypesRef.current) return
+    openColumnTypesRef.current = false
+    const section = document.getElementById('column-types')
+    section?.focus({ preventScroll: true })
+    section?.scrollIntoView({ block: 'start' })
+  }, [activeTab])
 
   function handleTabChange(tab: string) {
     const t = tab as TabId
@@ -161,7 +175,7 @@ export default function App() {
     queryK: probQueryK,
   }), [probDistName, probParamValues, probQueryOp, probQueryK])
 
-  const { result: probResult, isLoading: probLoading } = useDistribution(probDistParams)
+  const { result: probResult, isLoading: probLoading, appliedParams: probAppliedParams } = useDistribution(probDistParams)
 
   function handleDistChange(name: string) {
     const dist = DISTRIBUTIONS.find((d) => d.name === name)!
@@ -212,12 +226,19 @@ export default function App() {
           }}
           onQueryOpChange={setProbQueryOp}
           onQueryKChange={setProbQueryK}
+          onReset={() => {
+            const dist = DISTRIBUTIONS.find((entry) => entry.name === probDistName)!
+            setProbParamValues(Object.fromEntries(dist.params.map((param) => [param.key, param.default])))
+            setProbQueryOp('<=')
+            setProbQueryK(5)
+          }}
         />
       )
       observation = (
         <Suspense fallback={<ChartFallback />}>
           <CommonDistObservation
             distParams={probDistParams}
+            appliedParams={probAppliedParams}
             result={probResult}
             isLoading={probLoading}
           />
@@ -242,66 +263,34 @@ export default function App() {
       footerDataset = 'Graphical Analysis'
       controls = (
         <Suspense fallback={<ChartFallback />}>
-          <GraphicalControlsSlot
-            onLive={graphical.applyLive}
-            onRun={graphical.run}
-            onReset={graphical.reset}
-            isComputing={graphical.isComputing}
-            isDirty={graphical.isDirty}
-          />
+          <GraphicalControlsSlot state={graphical} />
         </Suspense>
       )
       observation = (
         <Suspense fallback={<ChartFallback />}>
-          <GraphicalObservationSlot
-            result={graphical.result}
-            column={graphical.column}
-            graphType={graphical.graphType}
-            hasData={graphical.hasData}
-            isComputing={graphical.isComputing}
-            staleOverlays={graphical.staleOverlays}
-            error={graphical.error}
-          />
+          <GraphicalObservationSlot state={graphical} />
         </Suspense>
       )
       notebook = (
         <Suspense fallback={<ChartFallback />}>
-          <GraphicalNotebookSlot
-            result={graphical.result}
-            column={graphical.column}
-            graphType={graphical.graphType}
-            precision={graphical.precision}
-            staleOverlays={graphical.staleOverlays}
-          />
+          <GraphicalNotebookSlot state={graphical} />
         </Suspense>
       )
     } else if (activeSubTab === 'inference') {
       footerDataset = 'Statistical Inference'
       controls = (
         <Suspense fallback={<ChartFallback />}>
-          <InferenceControlsSlot onRun={inference.handleRun} onReset={inference.handleReset} isComputing={inference.isComputing} />
+          <InferenceControlsSlot state={inference} />
         </Suspense>
       )
       observation = (
         <Suspense fallback={<ChartFallback />}>
-          <InferenceObservationSlot
-            ciResult={inference.ciResult}
-            piResult={inference.piResult}
-            regionResult={inference.regionResult}
-            hasData={inference.hasData}
-            precision={inference.precision}
-            isComputing={inference.isComputing}
-          />
+          <InferenceObservationSlot state={inference} />
         </Suspense>
       )
       notebook = (
         <Suspense fallback={<ChartFallback />}>
-          <InferenceNotebookSlot
-            ciResult={inference.ciResult}
-            piResult={inference.piResult}
-            regionResult={inference.regionResult}
-            precision={inference.precision}
-          />
+          <InferenceNotebookSlot state={inference} />
         </Suspense>
       )
     } else if (activeSubTab === 'descriptive') {
@@ -341,34 +330,17 @@ export default function App() {
     footerDataset = 'Hypothesis Testing'
     controls = (
       <Suspense fallback={<ChartFallback />}>
-        <HypothesisControlsSlot
-          onRun={hypothesis.handleRun}
-          onLiveChange={hypothesis.handleLiveChange}
-          onReset={hypothesis.handleReset}
-          isComputing={hypothesis.isComputing}
-          error={hypothesis.error}
-        />
+        <HypothesisControlsSlot state={hypothesis} onOpenColumnTypes={handleOpenColumnTypes} />
       </Suspense>
     )
     observation = (
       <Suspense fallback={<ChartFallback />}>
-        <HypothesisObservationSlot
-          result={hypothesis.result}
-          hasData={hypothesis.hasData}
-          isComputing={hypothesis.isComputing}
-          revealed={hypothesis.revealed}
-          onReveal={hypothesis.onReveal}
-        />
+        <HypothesisObservationSlot state={hypothesis} />
       </Suspense>
     )
     notebook = (
       <Suspense fallback={<ChartFallback />}>
-        <HypothesisNotebookSlot
-          result={hypothesis.result}
-          precision={hypothesis.precision}
-          revealed={hypothesis.revealed}
-          onReveal={hypothesis.onReveal}
-        />
+        <HypothesisNotebookSlot state={hypothesis} />
       </Suspense>
     )
 

@@ -1,292 +1,183 @@
-import { useMemo, useState } from 'react';
-import type { IntervalsResponse, ConfidenceRegionsResponse } from '../../../api/inference';
-import ReactPlotly from 'react-plotly.js';
+﻿import ReactPlotly from 'react-plotly.js'
+import type { IntervalsResponse } from '../../../api/inference'
+import { useMemo } from 'react'
+import type { InferenceState } from './useInferenceTabState'
+import InferenceResultStatus from './InferenceResultStatus'
+import { coveragePercent, intervalRange, parseIntervalRows, pointEstimate, quantityLabel, type IntervalRow } from './inferencePresentation'
+import ResultToolbar from '../../../components/ResultToolbar'
+import { useChartRegistry } from '../../../hooks/useChartRegistry'
+import { downloadChartsPNG } from '../../../utils/exportPNG'
+import { downloadCSV } from '../../../utils/exportCSV'
+import { downloadPDF } from '../../../utils/exportPDF'
+import { exportFilename } from '../../../utils/exportFilename'
 
-interface InferenceObservationProps {
-  ciRow?: IntervalsResponse | null;
-  piRow?: IntervalsResponse | null;
-  regionData?: ConfidenceRegionsResponse | null;
-  isComputing: boolean;
-  hasData: boolean;
-  precision: number;
+const AXIS = { gridcolor: 'rgba(148,163,184,0.18)', zeroline: false, fixedrange: true }
+const BASE_LAYOUT = { autosize: true, paper_bgcolor: 'transparent', plot_bgcolor: 'transparent', font: { color: '#cbd5e1', size: 12 }, showlegend: false, dragmode: false as const }
+const CONFIG = { responsive: true, displayModeBar: false }
+const COLORS = ['#fb923c', '#facc15', '#4ade80', '#38bdf8', '#c084fc']
+
+function bracketTraces(rows: IntervalRow[], estimates: IntervalsResponse['point_estimates'], color: string, precision: number): any[] {
+  return rows.flatMap((row, index) => {
+    const estimate = pointEstimate(row.Statistic, estimates)
+    return [
+      { x: [row.Lower, row.Upper], y: [index, index], type: 'scatter', mode: 'lines+markers', line: { color, width: 3 }, marker: { color, size: 5 }, name: quantityLabel(row.Statistic), hovertemplate: '%{x:.' + precision + 'f}<extra></extra>' },
+      ...(estimate !== null ? [{ x: [estimate], y: [index], type: 'scatter', mode: 'markers', marker: { color, size: 9, symbol: 'diamond' }, name: 'Sample estimate', hovertemplate: 'Sample estimate: %{x:.' + precision + 'f}<extra></extra>' }] : []),
+    ]
+  })
 }
-
-type Row = { Statistic: string; Lower: number; Upper: number; Method: string };
-type PE = { mean: number; median: number; deviation: number };
-
-function parseRows(r?: IntervalsResponse | null): Row[] {
-  if (!r?.table) return [];
-  try { return JSON.parse(r.table); } catch { return []; }
+function IntervalPlot({ rows, result, range, color, variable, precision, onReady, onPurge }: {
+  rows: IntervalRow[]; result: IntervalsResponse; range?: [number, number]; color: string; variable: string; precision: number
+  onReady: (figure: unknown, element: HTMLElement) => void; onPurge: () => void
+}) {
+  const height = Math.max(145, rows.length * 38 + 74)
+  return <>
+    <ReactPlotly data={bracketTraces(rows, result.point_estimates, color, precision)} layout={{
+      ...BASE_LAYOUT, height, margin: { l: 90, r: 24, b: 48, t: 10 },
+      xaxis: { ...AXIS, range, title: { text: variable, standoff: 8 } },
+      yaxis: { ...AXIS, tickvals: rows.map((_, index) => index), ticktext: rows.map(row => quantityLabel(row.Statistic)), range: [rows.length - 0.4, -0.6] },
+    }} useResizeHandler style={{ width: '100%', height }} config={CONFIG}
+      onInitialized={onReady} onUpdate={onReady} onPurge={onPurge} />
+    <ul className="text-xs text-[var(--color-text-muted)] px-2 space-y-1 mb-3">
+      {rows.map((row, index) => <li key={row.Statistic + index} className="break-words"><strong>{quantityLabel(row.Statistic)}:</strong> {row.Method}</li>)}
+    </ul>
+  </>
 }
-
-// ponytail: null for rows with no point estimate — an IQR interval centres on
-// (q1+q3)/2 and a bootstrap interval on averaged quantiles, neither is the median
-function pointFor(stat: string, pe: PE): number | null {
-  const s = stat.toLowerCase();
-  if (s.includes('mean')) return pe.mean;
-  if (s.includes('median')) return pe.median;
-  if (s.includes('deviation')) return pe.deviation;
-  return null;
-}
-
-// ponytail: line + dot per interval, no end-caps — reads fine without them
-function bracketTraces(rows: Row[], pe: PE, color: string, yaxis = 'y'): any[] {
-  const lineX: (number | null)[] = [];
-  const lineY: (number | null)[] = [];
-  rows.forEach((r, i) => { lineX.push(r.Lower, r.Upper, null); lineY.push(i, i, null); });
-  const pts = rows
-    .map((r, i) => ({ x: pointFor(r.Statistic, pe), y: i, r }))
-    .filter((p) => p.x !== null);
-  return [
-    { x: lineX, y: lineY, xaxis: 'x', yaxis, type: 'scatter', mode: 'lines', line: { color, width: 2 }, hoverinfo: 'skip' },
-    {
-      x: pts.map((p) => p.x),
-      y: pts.map((p) => p.y),
-      xaxis: 'x',
-      yaxis,
-      type: 'scatter',
-      mode: 'markers',
-      marker: { color, size: 9, symbol: 'diamond' },
-      customdata: pts.map((p) => [p.r.Lower, p.r.Upper, p.r.Method]),
-      hovertemplate: '[%{customdata[0]:.4g}, %{customdata[1]:.4g}]<br>%{customdata[2]}<extra></extra>',
-    },
-  ];
-}
-
-const yTicks = (rows: Row[]) => ({
-  tickvals: rows.map((_, i) => i),
-  ticktext: rows.map((r) => `${r.Statistic} · ${r.Method}`),
-  range: [-0.7, rows.length - 0.3],
-});
-
-// ponytail: Plotly parses colors itself — CSS vars don't resolve, so use literals
-const C_PI = '#3b82f6';
-const C_CI = '#10b981';
-const C_DEV = '#f59e0b';
-const C_REGION = ['#f97316', '#eab308', '#22c55e', '#0ea5e9', '#a855f7'];
-
-const AXIS = { gridcolor: 'rgba(128,128,128,0.15)', zeroline: false };
-const BASE_LAYOUT = {
-  autosize: true,
-  paper_bgcolor: 'transparent',
-  plot_bgcolor: 'transparent',
-  font: { color: '#888', size: 11 },
-  showlegend: false,
-};
-const CONFIG = { responsive: true, displayModeBar: false };
-const FILL = '100%';
-
-export default function InferenceObservation({ ciRow, piRow, regionData, hasData }: InferenceObservationProps) {
-  const ciRows = useMemo(() => parseRows(ciRow), [ciRow]);
-  const piRows = useMemo(() => parseRows(piRow), [piRow]);
-  const [zoomCI, setZoomCI] = useState(true);
-
-  if (!hasData) {
-    return (
-      <div className="h-full flex items-center justify-center text-[var(--color-text-muted)] border border-dashed border-[var(--color-border-md)] rounded-xl m-4">
-        Waiting for data...
-      </div>
-    );
-  }
-
-  if (regionData) {
-    // ponytail: Plotly's {start, end, size} draws EVENLY SPACED contours, so the
-    // requested coverage levels need one trace each. Legend names double as labels.
+export default function InferenceObservation({ state }: { state: InferenceState }) {
+  const ciRows = parseIntervalRows(state.ciResult)
+  const piRows = parseIntervalRows(state.piResult)
+  const region = state.regionResult
+  const variable = state.appliedConfig?.column ?? ''
+  const result = state.ciResult ?? state.piResult
+  const hasResult = !!(result || region)
+  const chartOrder = useMemo(() => {
+    if (region) return ['region']
+    if (!result) return []
+    const order: string[] = []
+    if ((result.histogram?.binEdges?.length ?? 0) > 1) order.push('observed')
+    if (piRows.length) order.push('prediction')
+    if (ciRows.some((row) => quantityLabel(row.Statistic) !== 'Deviation')) order.push('location')
+    if (ciRows.some((row) => quantityLabel(row.Statistic) === 'Deviation')) order.push('deviation')
+    return order
+  }, [region, result, ciRows, piRows])
+  const registry = useChartRegistry(chartOrder)
+  let content
+  if (region) {
     const data: any[] = [{
-      z: regionData.z_matrix,
-      x: regionData.mu_grid,
-      y: regionData.sigma_grid,
-      type: 'heatmap',
-      colorscale: 'Viridis',
-      colorbar: { title: { text: 'relative likelihood', side: 'right' }, thickness: 12, x: 1.02 },
-      hovertemplate: 'μ %{x:.4g}<br>σ %{y:.4g}<br>L %{z:.3f}<extra></extra>',
-    }];
-
-    regionData.levels.forEach((level, i) => {
-      const prob = regionData.probs[i];
-      data.push({
-        z: regionData.z_matrix,
-        x: regionData.mu_grid,
-        y: regionData.sigma_grid,
-        type: 'contour',
-        contours: { start: level, end: level, size: 1, coloring: 'lines' },
-        line: { color: C_REGION[i % C_REGION.length], width: 2 },
-        name: `${(prob * 100).toFixed(0)}% region`,
-        showlegend: true,
-        showscale: false,
-        hoverinfo: 'skip',
-      });
-    });
-
-    data.push({
-      x: [regionData.mu_hat],
-      y: [regionData.sigma_hat],
-      mode: 'markers',
-      type: 'scatter',
-      name: 'MLE (μ̂, σ̂)',
-      marker: { color: '#ef4444', size: 11, symbol: 'x' },
-      hovertemplate: 'MLE: μ %{x:.4g}, σ %{y:.4g}<extra></extra>',
-    });
-
-    if (regionData.mu_ci && regionData.sigma_ci) {
-      data.push({
-        x: [regionData.mu_ci[0], regionData.mu_ci[1], regionData.mu_ci[1], regionData.mu_ci[0], regionData.mu_ci[0]],
-        y: [regionData.sigma_ci[0], regionData.sigma_ci[0], regionData.sigma_ci[1], regionData.sigma_ci[1], regionData.sigma_ci[0]],
-        mode: 'lines',
-        type: 'scatter',
-        name: 'Marginal CIs (μ × σ)',
-        line: { color: '#ef4444', dash: 'dash', width: 2 },
-        hoverinfo: 'skip',
-      });
-    }
-
-    return (
-      <div className="flex flex-col h-full w-full relative group p-2">
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--color-text-muted)] px-2">
-          Joint Confidence Regions for (μ, σ)
-        </p>
-        <ReactPlotly
-          data={data}
-          layout={{
-            ...BASE_LAYOUT,
-            margin: { l: 60, r: 90, b: 78, t: 10, pad: 4 },
-            xaxis: { ...AXIS, title: { text: 'μ (mean)', standoff: 6 } },
-            yaxis: { ...AXIS, title: { text: 'σ (deviation)', standoff: 6 } },
-            showlegend: true,
-            legend: { x: 0, y: -0.16, orientation: 'h', font: { size: 10 } },
-          }}
-          useResizeHandler={true}
-          style={{ width: '100%', height: '100%' }}
-          config={CONFIG}
-        />
+      z: region.z_matrix, x: region.mu_grid, y: region.sigma_grid, type: 'heatmap', colorscale: 'Viridis',
+      colorbar: { title: { text: 'Relative likelihood', side: 'right' }, thickness: 12, x: 1.02 },
+      hovertemplate: 'Mean %{x:.' + state.precision + 'f}<br>Deviation %{y:.' + state.precision + 'f}<br>Relative likelihood %{z:.3f}<extra></extra>',
+    }]
+    region.levels.forEach((level, index) => data.push({
+      z: region.z_matrix, x: region.mu_grid, y: region.sigma_grid, type: 'contour',
+      contours: { start: level, end: level, size: 1, coloring: 'lines' },
+      line: { color: COLORS[index % COLORS.length], width: 2 }, name: coveragePercent(region.probs[index]) + ' region', showlegend: true, showscale: false, hoverinfo: 'skip',
+    }))
+    data.push({ x: [region.mu_hat], y: [region.sigma_hat], mode: 'markers', type: 'scatter', name: 'Estimated mean and deviation', showlegend: true, marker: { color: '#f87171', size: 11, symbol: 'x' }, hovertemplate: 'Mean %{x:.' + state.precision + 'f}<br>Deviation %{y:.' + state.precision + 'f}<extra></extra>' })
+    if (state.appliedConfig?.add_ci_box && region.mu_ci && region.sigma_ci) data.push({
+      x: [region.mu_ci[0], region.mu_ci[1], region.mu_ci[1], region.mu_ci[0], region.mu_ci[0]], y: [region.sigma_ci[0], region.sigma_ci[0], region.sigma_ci[1], region.sigma_ci[1], region.sigma_ci[0]],
+      mode: 'lines', type: 'scatter', name: 'Separate marginal intervals', showlegend: true, line: { color: '#f87171', dash: 'dash', width: 2 }, hoverinfo: 'skip',
+    })
+    content = <section>
+      <h3 className="font-semibold text-base px-2">Joint confidence regions</h3>
+      <p className="text-sm text-[var(--color-text-muted)] px-2 mt-2">Contours show uncertainty about mean and deviation together. The cross marks their estimates; the dashed box, when shown, combines separate marginal intervals.</p>
+      <div role="img" aria-label={'Joint confidence regions for ' + variable + '. Estimates and coverage levels are available in the results panel.'}>
+        <ReactPlotly data={data} layout={{ ...BASE_LAYOUT, height: 470, margin: { l: 62, r: 80, b: 130, t: 20 }, xaxis: { ...AXIS, title: { text: 'Mean (μ)', standoff: 8 } }, yaxis: { ...AXIS, title: { text: 'Deviation (σ)', standoff: 8 } }, showlegend: true, legend: { x: 0, y: -0.25, orientation: 'h', font: { size: 11 } } }} useResizeHandler style={{ width: '100%', height: 470 }} config={CONFIG}
+          onInitialized={registry.register('region', 'Joint confidence regions')}
+          onUpdate={registry.register('region', 'Joint confidence regions')}
+          onPurge={registry.unregister('region')} />
       </div>
-    );
-  }
-
-  if (ciRow || piRow) {
-    const ctx = ciRow ?? piRow!;
-    const pe = ctx.point_estimates;
-    const edges = ctx.histogram?.binEdges ?? [];
-    const centers = edges.slice(0, -1).map((lo, i) => (lo + edges[i + 1]) / 2);
-    const binWidth = edges.length > 1 ? edges[1] - edges[0] : 1;
-
-    const ciLoc = ciRows.filter((r) => !r.Statistic.toLowerCase().includes('deviation'));
-    const devRow = ciRows.find((r) => r.Statistic.toLowerCase().includes('deviation'));
-
-    // Panel 2 x-range: fit tight around the (usually narrow) location CIs
-    let ciRange: [number, number] | undefined;
-    if (ciLoc.length) {
-      const lo = Math.min(...ciLoc.map((r) => r.Lower));
-      const hi = Math.max(...ciLoc.map((r) => r.Upper));
-      const pad = (hi - lo) * 0.15 || Math.abs(hi || 1) * 0.02;
-      ciRange = [lo - pad, hi + pad];
-    }
-
-    const hasPI = piRows.length > 0;
-    const p1Height = hasPI ? 300 : 220;
-
-    return (
-      <div className="flex flex-col h-full w-full overflow-y-auto custom-scrollbar gap-2 p-2">
-        {/* Panel 1 — histogram of observations (+ prediction intervals when present) */}
-        {centers.length > 0 && (
-          <div className="shrink-0">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--color-text-muted)] px-2">
-              {hasPI ? 'Observations & Prediction Intervals' : 'Observations'}
-            </p>
-            <ReactPlotly
-              data={[
-                {
-                  x: centers, y: ctx.histogram.counts, type: 'bar',
-                  marker: { color: 'rgba(120,140,170,0.55)' }, width: binWidth,
-                  hovertemplate: 'count %{y}<extra></extra>',
-                },
-                ...(hasPI ? bracketTraces(piRows, pe, C_PI, 'y2') : []),
-              ]}
-              layout={{
-                ...BASE_LAYOUT,
-                height: p1Height,
-                margin: { l: 165, r: 16, b: 40, t: 10, pad: 4 },
-                xaxis: { ...AXIS, anchor: hasPI ? 'y2' : 'y', title: { text: 'value', standoff: 6 } },
-                yaxis: { ...AXIS, domain: hasPI ? [0.4, 1] : [0, 1], title: 'count' },
-                ...(hasPI ? { yaxis2: { ...AXIS, domain: [0, 0.28], ...yTicks(piRows) } } : {}),
-              }}
-              useResizeHandler
-              style={{ width: FILL, height: p1Height }}
-              config={CONFIG}
-            />
-          </div>
-        )}
-
-        {/* Panel 2 — Mean & Median CIs over the histogram, shared x-axis, zoom toggle */}
-        {ciLoc.length > 0 && (
-          <div className="shrink-0">
-            <div className="flex items-center justify-between px-2">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--color-text-muted)]">
-                Confidence Intervals — Mean &amp; Median
-              </p>
-              <button
-                type="button"
-                onClick={() => setZoomCI((z) => !z)}
-                className="text-[10px] px-2 py-0.5 rounded border border-[var(--color-border-md)] text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors cursor-pointer"
-              >
-                {zoomCI ? 'Fit to data' : 'Zoom to CI'}
-              </button>
-            </div>
-            <ReactPlotly
-              data={[
-                ...(centers.length > 0 ? [{
-                  x: centers, y: ctx.histogram.counts, type: 'bar',
-                  marker: { color: 'rgba(120,140,170,0.55)' }, width: binWidth,
-                  hovertemplate: 'count %{y}<extra></extra>',
-                }] : []),
-                ...bracketTraces(ciLoc, pe, C_CI, 'y2'),
-              ]}
-              layout={{
-                ...BASE_LAYOUT,
-                height: 300,
-                margin: { l: 165, r: 16, b: 40, t: 10, pad: 4 },
-                xaxis: {
-                  ...AXIS, anchor: 'y2', title: { text: 'value', standoff: 6 },
-                  ...(zoomCI && ciRange ? { range: ciRange } : { autorange: true }),
-                },
-                yaxis: { ...AXIS, domain: [0.4, 1], title: 'count' },
-                yaxis2: { ...AXIS, domain: [0, 0.28], ...yTicks(ciLoc) },
-              }}
-              useResizeHandler
-              style={{ width: FILL, height: 300 }}
-              config={CONFIG}
-            />
-          </div>
-        )}
-
-        {/* Panel 3 — dispersion CI, spread units */}
-        {devRow && (
-          <div className="shrink-0">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--color-text-muted)] px-2">
-              Deviation CI
-            </p>
-            <ReactPlotly
-              data={bracketTraces([devRow], pe, C_DEV)}
-              layout={{
-                ...BASE_LAYOUT,
-                height: 110,
-                margin: { l: 165, r: 16, b: 34, t: 6, pad: 4 },
-                xaxis: { ...AXIS, title: { text: 'σ (data units)', standoff: 6 } },
-                yaxis: { ...AXIS, ...yTicks([devRow]) },
-              }}
-              useResizeHandler
-              style={{ width: FILL, height: 110 }}
-              config={CONFIG}
-            />
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  return (
-    <div className="h-full flex items-center justify-center text-[var(--color-text-muted)]">
-      Run estimation to see plots or results.
+    </section>
+  } else if (result) {
+    const edges = result.histogram?.binEdges ?? []
+    const centers = edges.slice(0, -1).map((lower, index) => (lower + edges[index + 1]) / 2)
+    const locationRows = ciRows.filter(row => quantityLabel(row.Statistic) !== 'Deviation')
+    const deviationRows = ciRows.filter(row => quantityLabel(row.Statistic) === 'Deviation')
+    const commonRange = intervalRange([...edges, ...locationRows.flatMap(row => [row.Lower, row.Upper]), ...piRows.flatMap(row => [row.Lower, row.Upper])])
+    const ciRange = intervalRange(locationRows.flatMap(row => [row.Lower, row.Upper]))
+    content = <div className="space-y-5">
+      <p className="text-sm text-[var(--color-text-muted)] px-2">Lines show interval bounds; diamonds show sample estimates where applicable. Exact bounds and methods are in the results panel.</p>
+      {centers.length > 0 && <section>
+        <h3 className="text-base font-semibold px-2">Observed values</h3>
+        <ReactPlotly data={[{ x: centers, y: result.histogram.counts, type: 'bar', marker: { color: 'rgba(148,163,184,0.7)' }, width: edges[1] - edges[0], hovertemplate: 'Count %{y}<extra></extra>' }]} layout={{ ...BASE_LAYOUT, height: 220, margin: { l: 90, r: 24, b: 48, t: 12 }, xaxis: { ...AXIS, range: commonRange, title: { text: variable, standoff: 8 } }, yaxis: { ...AXIS, title: { text: 'Count' } } }} useResizeHandler style={{ width: '100%', height: 220 }} config={CONFIG}
+          onInitialized={registry.register('observed', 'Observed values')}
+          onUpdate={registry.register('observed', 'Observed values')}
+          onPurge={registry.unregister('observed')} />
+      </section>}
+      {piRows.length > 0 && <section>
+        <h3 className="text-base font-semibold px-2">Prediction intervals</h3>
+        <p className="text-xs text-[var(--color-text-muted)] px-2 mt-1">One future observation · same x-axis scale as observed values</p>
+        <IntervalPlot rows={piRows} result={state.piResult!} range={commonRange} color="#60a5fa" variable={variable} precision={state.precision}
+          onReady={registry.register('prediction', 'Prediction intervals')} onPurge={registry.unregister('prediction')} />
+      </section>}
+      {locationRows.length > 0 && <section>
+        <div className="flex items-center justify-between gap-3 flex-wrap px-2">
+          <h3 className="text-base font-semibold">Mean and median confidence intervals</h3>
+          <button type="button" aria-pressed={state.draft.zoomCI} onClick={() => state.setDraft({ zoomCI: !state.draft.zoomCI })} className="px-3 py-2 rounded-md border border-[var(--color-border-md)] text-xs">{state.draft.zoomCI ? 'Use common scale' : 'Zoom to intervals'}</button>
+        </div>
+        <p role="status" className={'text-xs px-2 mt-2 ' + (state.draft.zoomCI ? 'text-amber-300' : 'text-[var(--color-text-muted)]')}>{state.draft.zoomCI ? 'Zoomed to confidence intervals — different x-axis scale from observed values and predictions.' : 'Same x-axis scale as observed values and prediction intervals.'}</p>
+        <IntervalPlot rows={locationRows} result={state.ciResult!} range={state.draft.zoomCI ? ciRange : commonRange} color="#34d399" variable={variable} precision={state.precision}
+          onReady={registry.register('location', 'Mean and median confidence intervals')} onPurge={registry.unregister('location')} />
+      </section>}
+      {deviationRows.length > 0 && <section>
+        <h3 className="text-base font-semibold px-2">Deviation confidence intervals</h3>
+        <p className="text-xs text-[var(--color-text-muted)] px-2 mt-1">Spread of the data · separate deviation axis</p>
+        <IntervalPlot rows={deviationRows} result={state.ciResult!} color="#fbbf24" variable={'Deviation of ' + variable + ' (data units)'} precision={state.precision}
+          onReady={registry.register('deviation', 'Deviation confidence intervals')} onPurge={registry.unregister('deviation')} />
+      </section>}
     </div>
-  );
+  }
+  const baseName = `inference-${variable || 'analysis'}`
+  const exportCSV = () => {
+    if (region) {
+      const rows: (string | number)[][] = [
+        ['# mu_hat', region.mu_hat, ''], ['# sigma_hat', region.sigma_hat, ''],
+        ['# coverage_probabilities', region.probs.join('; '), ''],
+        ['mu', 'sigma', 'relative_likelihood'],
+      ]
+      region.mu_grid.forEach((mu, xIndex) => region.sigma_grid.forEach((sigma, yIndex) => {
+        rows.push([mu, sigma, region.z_matrix[yIndex]?.[xIndex] ?? ''])
+      }))
+      downloadCSV(rows, exportFilename(`${baseName}-confidence-region`, 'csv', 'inference'))
+      return
+    }
+    const rows: (string | number)[][] = [[
+      'record_type', 'result_type', 'statistic', 'method', 'lower', 'upper', 'point_estimate', 'status', 'message',
+    ]]
+    ;[
+      ...ciRows.map((row) => ({ row, type: 'confidence', source: state.ciResult! })),
+      ...piRows.map((row) => ({ row, type: 'prediction', source: state.piResult! })),
+    ].forEach(({ row, type, source }) => rows.push([
+      'interval', type, quantityLabel(row.Statistic), row.Method, row.Lower ?? '', row.Upper ?? '',
+      pointEstimate(row.Statistic, source.point_estimates) ?? '', 'complete', '',
+    ]))
+    if (state.partialResult) rows.push(['omitted', '', '', '', '', '', '', 'omitted', state.error ?? 'One requested section failed.'])
+    downloadCSV(rows, exportFilename(`${baseName}-intervals`, 'csv', 'inference'))
+  }
+  const exportPNG = () => downloadChartsPNG(registry.charts, exportFilename(`${baseName}-charts`, 'png', 'inference'))
+  const exportPDF = async () => {
+    const intervalRows = [...ciRows.map((row) => ['Confidence', quantityLabel(row.Statistic), row.Method, row.Lower, row.Upper]),
+      ...piRows.map((row) => ['Prediction', quantityLabel(row.Statistic), row.Method, row.Lower, row.Upper])]
+    await downloadPDF({
+      title: `Statistical Inference - ${variable}`,
+      subtitle: state.appliedConfig?.estimationType,
+      charts: registry.charts,
+      stats: [
+        { label: 'Variable', value: variable },
+        { label: 'Alpha', value: String(state.appliedConfig?.alpha ?? '') },
+        ...(state.partialResult ? [{ label: 'Partial result', value: state.error ?? 'One requested section failed.' }] : []),
+      ],
+      tables: intervalRows.length ? [{ title: 'Intervals', columns: ['Type', 'Statistic', 'Method', 'Lower', 'Upper'], rows: intervalRows }] : [],
+      filename: exportFilename(`${baseName}-report`, 'pdf', 'inference'),
+    })
+  }
+  const exportReady = hasResult && !state.isComputing && registry.ready
+
+  return <div className="analysis-panel analysis-observation p-3">
+    <InferenceResultStatus state={state} />
+    <ResultToolbar title={`Inference — ${variable || 'results'}`}
+      exports={exportReady ? { png: exportPNG, csv: exportCSV, pdf: exportPDF } : undefined}
+      ready={exportReady} disabledReason={state.isComputing ? 'Waiting for the applied result.' : 'Charts are still loading.'} />
+    {!hasResult && !state.isComputing && !state.error && <p className="text-sm text-[var(--color-text-muted)] p-6">{state.hasData ? 'Choose settings, then select Update to see interval plots.' : 'Upload a CSV in Data to begin.'}</p>}
+    {content}
+  </div>
 }

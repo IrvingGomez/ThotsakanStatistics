@@ -18,9 +18,9 @@ export default function Footer({
   version = '0.1.0-alpha',
 }: FooterProps) {
   return (
-    <footer className="h-7 flex items-center gap-4 px-5 shrink-0
+    <footer className="app-footer min-h-8 flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-1 shrink-0 min-w-0
       bg-[var(--color-bg-panel)] border-t border-[var(--color-border)]
-      text-[10px] text-[var(--color-text-muted)]">
+      text-xs text-[var(--color-text-muted)]">
 
       {/* Affiliation micro-logos */}
       <div className="flex items-center gap-2">
@@ -37,7 +37,7 @@ export default function Footer({
 
       <span className="border-l border-[var(--color-border)] h-3" />
 
-      <span>Dataset: <span className="text-[var(--color-text)]">{dataset}</span></span>
+      <span className="min-w-0 break-words">Analysis: <span className="text-[var(--color-text)]">{dataset}</span></span>
 
       {rows !== undefined && cols !== undefined && (
         <span>{rows} rows × {cols} cols</span>

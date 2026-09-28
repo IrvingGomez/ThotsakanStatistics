@@ -1,5 +1,6 @@
 import { useMemo, useState, useEffect } from 'react'
 import DualInput from '../../../components/DualInput'
+import { AnalysisActions, SelectField, TextField } from '../../../components/ControlPrimitives'
 import { DISTRIBUTIONS, type QueryOp } from '../../../hooks/useDistribution'
 
 interface CommonDistControlsProps {
@@ -14,6 +15,7 @@ interface CommonDistControlsProps {
   onParamChange: (key: string, value: number) => void
   onQueryOpChange: (op: QueryOp) => void
   onQueryKChange: (k: number) => void
+  onReset: () => void
 }
 
 const QUERY_OPS: QueryOp[] = ['<=', '>=', '=', '<', '>']
@@ -30,6 +32,7 @@ export default function CommonDistControls({
   onParamChange,
   onQueryOpChange,
   onQueryKChange,
+  onReset,
 }: CommonDistControlsProps) {
   const availableDists = useMemo(
     () => DISTRIBUTIONS.filter((d) => d.type === modelType),
@@ -39,23 +42,29 @@ export default function CommonDistControls({
   const currentDist = DISTRIBUTIONS.find((d) => d.name === distName)
 
   const [queryKText, setQueryKText] = useState(String(queryK))
+  const [queryError, setQueryError] = useState<string | undefined>()
+  const [resetGeneration, setResetGeneration] = useState(0)
 
   useEffect(() => {
     setQueryKText(String(queryK))
+    setQueryError(undefined)
   }, [queryK])
 
-  const handleQueryKChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const raw = e.target.value
+  const handleQueryKChange = (raw: string) => {
     setQueryKText(raw)
-    const parsed = parseFloat(raw)
-    if (!isNaN(parsed) && raw !== '-' && raw !== '') {
+    const trimmed = raw.trim()
+    const valid = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(trimmed)
+    const parsed = valid ? Number(trimmed) : Number.NaN
+    if (Number.isFinite(parsed)) {
+      setQueryError(undefined)
       onQueryKChange(parsed)
-    }
+    } else setQueryError('Enter a complete numeric query value.')
   }
 
   const handleQueryKBlur = () => {
-    if (queryKText === '-' || queryKText === '' || isNaN(parseFloat(queryKText))) {
+    if (queryError) {
       setQueryKText(String(queryK))
+      setQueryError(undefined)
     }
   }
 
@@ -68,11 +77,12 @@ export default function CommonDistControls({
           text-[var(--color-text-muted)] mb-2">
           Model Type
         </p>
-        <div className="flex rounded-md overflow-hidden border border-[var(--color-border-md)]">
+        <div className="flex rounded-md overflow-hidden border border-[var(--color-border-md)]" role="group" aria-label="Model type">
           {(['discrete', 'continuous'] as const).map((t) => (
             <button
               key={t}
               type="button"
+              aria-pressed={modelType === t}
               onClick={() => onModelTypeChange(t)}
               className={`flex-1 py-1.5 text-sm capitalize transition-colors cursor-pointer
                 ${modelType === t
@@ -87,24 +97,8 @@ export default function CommonDistControls({
       </div>
 
       {/* Distribution dropdown */}
-      <div>
-        <label className="block text-xs font-semibold uppercase tracking-widest
-          text-[var(--color-text-muted)] mb-2">
-          Distribution
-        </label>
-        <select
-          value={distName}
-          onChange={(e) => onDistChange(e.target.value)}
-          className="w-full rounded-md px-3 py-2 text-sm
-            bg-[var(--color-bg-input)] border border-[var(--color-border-md)]
-            text-[var(--color-text)] cursor-pointer
-            focus:outline-none focus:border-[var(--color-accent)]"
-        >
-          {availableDists.map((d) => (
-            <option key={d.name} value={d.name}>{d.name} Distribution</option>
-          ))}
-        </select>
-      </div>
+      <SelectField label="Distribution" value={distName} onChange={onDistChange}
+        options={availableDists.map((dist) => ({ value: dist.name, label: `${dist.name} Distribution` }))} />
 
       <div className="h-px bg-[var(--color-border)]" />
 
@@ -125,6 +119,7 @@ export default function CommonDistControls({
                 max={param.max}
                 step={param.step}
                 decimals={param.decimals}
+                resetSignal={resetGeneration}
                 onChange={(v) => onParamChange(param.key, param.integer ? Math.round(v) : v)}
               />
             ))}
@@ -142,34 +137,11 @@ export default function CommonDistControls({
         </p>
         <div className="flex gap-2 mb-3">
           {/* Op select */}
-          <div className="flex flex-col gap-1">
-            <span className="text-xs text-[var(--color-text-muted)]">Op</span>
-            <select
-              value={queryOp}
-              onChange={(e) => onQueryOpChange(e.target.value as QueryOp)}
-              className="rounded-md px-2 py-1.5 text-sm w-16
-                bg-[var(--color-bg-input)] border border-[var(--color-border-md)]
-                text-[var(--color-text)] cursor-pointer
-                focus:outline-none focus:border-[var(--color-accent)]"
-            >
-              {QUERY_OPS.map((op) => (
-                <option key={op} value={op}>{op}</option>
-              ))}
-            </select>
-          </div>
+          <div className="w-20"><SelectField label="Op" value={queryOp}
+            onChange={(value) => onQueryOpChange(value as QueryOp)} options={QUERY_OPS} /></div>
           {/* Value input */}
-          <div className="flex flex-col gap-1 flex-1">
-            <span className="text-xs text-[var(--color-text-muted)]">Value (k)</span>
-            <input
-              type="number"
-              value={queryKText}
-              step={modelType === 'discrete' ? 1 : 0.1}
-              onChange={handleQueryKChange}
-              onBlur={handleQueryKBlur}
-              className="rounded-md px-3 py-1.5 text-sm w-full
-                bg-[var(--color-bg-input)] border border-[var(--color-border-md)]
-                text-[var(--color-text)] focus:outline-none focus:border-[var(--color-accent)]"
-            />
+          <div className="flex-1"><TextField label="Value (k)" value={queryKText} error={queryError}
+            inputMode="decimal" onChange={handleQueryKChange} onBlur={handleQueryKBlur} />
           </div>
         </div>
         {/* Live query result */}
@@ -183,6 +155,13 @@ export default function CommonDistControls({
           </p>
         </div>
       </div>
+
+      <AnalysisActions onReset={() => {
+        setResetGeneration(value => value + 1)
+        setQueryKText('5')
+        setQueryError(undefined)
+        onReset()
+      }} resetLabel="Reset to defaults" />
 
     </div>
   )

@@ -8,6 +8,12 @@ interface DualInputProps {
   step: number
   unit?: string
   decimals?: number
+  hint?: string
+  error?: string
+  disabled?: boolean
+  resetSignal?: unknown
+  textValue?: string
+  onTextChange?: (value: string) => void
   onChange: (value: number) => void
 }
 
@@ -19,26 +25,52 @@ export default function DualInput({
   step,
   unit = '',
   decimals = 2,
+  hint,
+  error,
+  disabled = false,
+  resetSignal,
+  textValue,
+  onTextChange,
   onChange,
 }: DualInputProps) {
   const id = useId()
+  const labelId = `${id}-label`
 
   // ── Internal text state for the number input ──────────────────────────────
   // This decouples the display from the controlled value so the user can
   // freely type (including clearing the field, typing a minus sign, etc.)
   // without the value snapping on every keystroke.
-  const [text, setText] = useState(value.toFixed(decimals))
+  const [text, setText] = useState(textValue ?? value.toFixed(decimals))
   const commitTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lastCommitted = useRef(value)
+
+  const cancelCommit = useCallback(() => {
+    if (commitTimer.current) clearTimeout(commitTimer.current)
+    commitTimer.current = null
+  }, [])
+
+  useEffect(() => cancelCommit, [cancelCommit])
+
+  useEffect(() => {
+    cancelCommit()
+    setText(textValue ?? value.toFixed(decimals))
+    lastCommitted.current = value
+  // A reset signal deliberately resynchronizes even when the numeric value is unchanged.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resetSignal])
 
   // Sync external value → internal text (when value changes from slider or parent)
-  const lastCommitted = useRef(value)
   useEffect(() => {
-    // Only sync if the external value actually changed (not from our own commit)
+    cancelCommit()
     if (Math.abs(value - lastCommitted.current) > 1e-9) {
       setText(value.toFixed(decimals))
       lastCommitted.current = value
     }
-  }, [value, decimals])
+  }, [value, decimals, min, max, step, disabled, cancelCommit])
+
+  useEffect(() => {
+    if (textValue !== undefined) setText(textValue)
+  }, [textValue])
 
   const clamp = useCallback(
     (v: number) => Math.min(max, Math.max(min, v)),
@@ -47,12 +79,16 @@ export default function DualInput({
 
   // Round to step precision to avoid floating-point display artifacts
   const roundToStep = useCallback(
-    (v: number) => {
-      const inv = 1 / step
-      return Math.round(v * inv) / inv
-    },
-    [step]
+    (v: number) => min + Math.round((v - min) / step) * step,
+    [min, step]
   )
+
+  const parseText = useCallback((raw: string) => {
+    const trimmed = raw.trim()
+    if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(trimmed)) return null
+    const parsed = Number(trimmed)
+    return Number.isFinite(parsed) ? parsed : null
+  }, [])
 
   const commitValue = useCallback(
     (v: number) => {
@@ -68,6 +104,7 @@ export default function DualInput({
     const v = Number(e.target.value)
     const clamped = clamp(roundToStep(v))
     setText(clamped.toFixed(decimals))
+    onTextChange?.(clamped.toFixed(decimals))
     commitValue(clamped)
   }
 
@@ -75,23 +112,26 @@ export default function DualInput({
   function handleTextChange(e: React.ChangeEvent<HTMLInputElement>) {
     const raw = e.target.value
     setText(raw)
-    if (commitTimer.current) clearTimeout(commitTimer.current)
+    onTextChange?.(raw)
+    cancelCommit()
     commitTimer.current = setTimeout(() => {
-      const v = parseFloat(raw)
-      if (!isNaN(v)) commitValue(v)
+      const parsed = parseText(raw)
+      if (parsed !== null && parsed >= min && parsed <= max) commitValue(parsed)
     }, 400)
   }
 
   // Commit on blur (user clicks away) or Enter
   function handleTextCommit() {
-    if (commitTimer.current) clearTimeout(commitTimer.current)
-    const v = parseFloat(text)
-    if (isNaN(v)) {
-      // Revert to current value
-      setText(value.toFixed(decimals))
+    cancelCommit()
+    const parsed = parseText(text)
+    if (parsed === null || parsed < min || parsed > max) {
+      const restored = lastCommitted.current.toFixed(decimals)
+      setText(restored)
+      onTextChange?.(restored)
     } else {
-      const clamped = clamp(roundToStep(v))
+      const clamped = clamp(roundToStep(parsed))
       setText(clamped.toFixed(decimals))
+      onTextChange?.(clamped.toFixed(decimals))
       commitValue(clamped)
     }
   }
@@ -104,11 +144,13 @@ export default function DualInput({
       e.preventDefault()
       const v = clamp(roundToStep(value + step))
       setText(v.toFixed(decimals))
+      onTextChange?.(v.toFixed(decimals))
       commitValue(v)
     } else if (e.key === 'ArrowDown') {
       e.preventDefault()
       const v = clamp(roundToStep(value - step))
       setText(v.toFixed(decimals))
+      onTextChange?.(v.toFixed(decimals))
       commitValue(v)
     }
   }
@@ -119,7 +161,7 @@ export default function DualInput({
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center justify-between">
-        <label htmlFor={id} className="text-sm font-medium text-[var(--color-text)]">
+        <label id={labelId} htmlFor={id} className="text-sm font-medium text-[var(--color-text)]">
           {label}
         </label>
         <span className="text-xs font-mono tabular-nums text-[var(--color-accent)]">
@@ -134,6 +176,9 @@ export default function DualInput({
         max={max}
         step={step}
         value={value}
+        disabled={disabled}
+        aria-invalid={!!error}
+        aria-describedby={[hint ? `${id}-hint` : '', error ? `${id}-error` : ''].filter(Boolean).join(' ') || undefined}
         onChange={handleSlider}
         style={{
           background: `linear-gradient(to right, var(--color-accent) ${pct}%, var(--color-border-md) ${pct}%)`,
@@ -160,9 +205,14 @@ export default function DualInput({
       />
 
       <input
+        id={`${id}-value`}
         type="text"
+        aria-labelledby={labelId}
         inputMode="decimal"
         value={text}
+        disabled={disabled}
+        aria-invalid={!!error}
+        aria-describedby={[hint ? `${id}-hint` : '', error ? `${id}-error` : ''].filter(Boolean).join(' ') || undefined}
         onChange={handleTextChange}
         onBlur={handleTextCommit}
         onKeyDown={handleKeyDown}
@@ -172,6 +222,8 @@ export default function DualInput({
           text-[var(--color-text)]
           focus:outline-none focus:border-[var(--color-accent)]"
       />
+      {hint && <p id={`${id}-hint`} className="text-xs text-[var(--color-text-muted)]">{hint}</p>}
+      {error && <p id={`${id}-error`} className="text-xs text-red-400">{error}</p>}
     </div>
   )
 }

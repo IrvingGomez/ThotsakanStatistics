@@ -9,6 +9,8 @@ interface DragHandleProps {
   'aria-valuemin'?: number
   'aria-valuemax'?: number
   tabIndex?: number
+  'aria-label'?: string
+  onKeyDown?: (event: React.KeyboardEvent) => void
 }
 
 export default function DragHandle({

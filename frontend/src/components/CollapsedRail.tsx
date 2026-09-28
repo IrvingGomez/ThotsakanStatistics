@@ -19,6 +19,9 @@ export default function CollapsedRail({ side, label, onExpand }: CollapsedRailPr
       {/* Expand button */}
       <button
         type="button"
+        aria-label={`Show ${label.toLowerCase()}`}
+        aria-expanded="false"
+        aria-controls={isLeft ? 'lab-settings' : 'lab-notebook'}
         onClick={onExpand}
         className="w-7 h-7 flex items-center justify-center rounded
           text-[var(--color-text-muted)] hover:text-[var(--color-text)]

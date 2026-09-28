@@ -41,13 +41,14 @@ export interface DescriptiveInput {
   filters: Record<string, string[]> | null
 }
 
-export async function computeDescriptiveStats(input: DescriptiveInput): Promise<DescriptiveResult> {
+export async function computeDescriptiveStats(input: DescriptiveInput, signal?: AbortSignal): Promise<DescriptiveResult> {
   const res = await fetch('/api/descriptive/compute', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'x-session-id': input.sessionId
     },
+    signal,
     body: JSON.stringify({
       session_id: input.sessionId,
       column: input.column,

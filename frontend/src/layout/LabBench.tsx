@@ -1,8 +1,7 @@
-import { type ReactNode, useCallback, useRef } from 'react'
+import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { useLocalStorageState } from '../hooks/useLocalStorageState'
 import { useResizablePanel } from '../hooks/useResizablePanel'
 import { useSidebarKeyboard } from '../hooks/useSidebarKeyboard'
-import { useContainerBreakpoint } from '../hooks/useContainerBreakpoint'
 import DragHandle from '../components/DragHandle'
 import CollapsedRail from '../components/CollapsedRail'
 
@@ -48,7 +47,30 @@ interface LabBenchProps {
 }
 
 export default function LabBench({ controls, observation, notebook }: LabBenchProps) {
-  const containerElRef = useRef<HTMLElement | null>(null)
+  const containerElRef = useRef<HTMLDivElement | null>(null)
+  const [stacked, setStacked] = useState(() => window.matchMedia('(max-width: 1199px)').matches)
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 1199px)')
+    const update = () => setStacked(media.matches)
+    media.addEventListener('change', update)
+    return () => media.removeEventListener('change', update)
+  }, [])
+
+  useEffect(() => {
+    const observation = containerElRef.current?.querySelector('main')
+    if (!observation || typeof ResizeObserver === 'undefined') return
+    let previousWidth = -1
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry.contentRect.width === previousWidth) return
+      previousWidth = entry.contentRect.width
+      // Plotly listens to window resize, while sidebar resizing changes only
+      // its container. Notify it without remounting charts or their settings.
+      window.dispatchEvent(new Event('resize'))
+    })
+    observer.observe(observation)
+    return () => observer.disconnect()
+  }, [])
 
   // 1. Persisted sidebar widths + collapsed states
   const [state, setState] = useLocalStorageState<SidebarState>({
@@ -96,83 +118,78 @@ export default function LabBench({ controls, observation, notebook }: LabBenchPr
 
   // 3. Keyboard shortcuts
   useSidebarKeyboard({
+    enabled: !stacked,
     onToggleLeft: () => setLeftCollapsed(!state.leftCollapsed),
     onToggleRight: () => setRightCollapsed(!state.rightCollapsed),
   })
 
-  // 4. Responsive breakpoints
-  const breakpointRef = useContainerBreakpoint({
-    breakpoints: [
-      { width: 1024, onBelow: () => setRightCollapsed(true), onAbove: () => {} },
-      {
-        width: 768,
-        onBelow: () => {
-          setLeftCollapsed(true)
-          setRightCollapsed(true)
-        },
-        onAbove: () => {},
-      },
-    ],
-  })
-
-  // Combine refs (container element + breakpoint observer)
-  const setContainerRef = useCallback(
-    (node: HTMLElement | null) => {
-      containerElRef.current = node
-      breakpointRef(node)
-    },
-    [breakpointRef],
-  )
-
   const anyDragging = leftPanel.isDragging || rightPanel.isDragging
+  const leftHidden = !stacked && state.leftCollapsed
+  const rightHidden = !stacked && state.rightCollapsed
 
   return (
-    <div ref={setContainerRef} className="flex flex-1 overflow-hidden min-h-0 relative">
+    <div ref={containerElRef} className="lab-bench">
       {/* Drag overlay — captures pointer events during resize */}
       {anyDragging && <div className="drag-overlay" />}
 
       {/* ── Left sidebar ── */}
-      {state.leftCollapsed ? (
+      {leftHidden && (
         <CollapsedRail side="left" label="Controls" onExpand={() => setLeftCollapsed(false)} />
-      ) : (
+      )}
         <aside
-          style={{ width: leftPanel.width }}
-          className={`shrink-0 overflow-y-auto border-r border-[var(--color-border)]
-            bg-[var(--color-bg-panel)] px-4 py-4
+          id="lab-settings"
+          aria-label="Analysis settings"
+          hidden={leftHidden}
+          style={{ width: stacked ? undefined : leftPanel.width }}
+          className={`lab-settings
             ${leftPanel.shouldTransition ? 'sidebar-transition' : ''}`}
         >
+          {!stacked && <button type="button" onClick={() => setLeftCollapsed(true)} aria-controls="lab-settings" aria-expanded="true" className="panel-collapse">Hide settings</button>}
+          {stacked && <h2 className="text-base font-semibold mb-4">Settings</h2>}
           {controls}
         </aside>
-      )}
 
       {/* Left drag handle */}
-      {!state.leftCollapsed && (
-        <DragHandle {...leftPanel.handleProps} isDragging={leftPanel.isDragging} inSnapZone={leftPanel.inSnapZone} />
+      {!stacked && !state.leftCollapsed && (
+        <DragHandle {...leftPanel.handleProps} aria-label="Resize settings" onKeyDown={(event) => {
+          if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+            event.preventDefault()
+            leftPanel.setWidth(leftPanel.width + (event.key === 'ArrowRight' ? 16 : -16))
+          } else if (event.key === 'Enter') setLeftCollapsed(true)
+        }} isDragging={leftPanel.isDragging} inSnapZone={leftPanel.inSnapZone} />
       )}
 
       {/* ── Center ── */}
-      <main className="flex-1 min-w-[500px] overflow-y-auto bg-[var(--color-bg-base)] px-5 py-4">
+      <main id="lab-observation" aria-label="Observation" className="lab-observation">
         {observation}
       </main>
 
       {/* Right drag handle */}
-      {!state.rightCollapsed && (
-        <DragHandle {...rightPanel.handleProps} isDragging={rightPanel.isDragging} inSnapZone={rightPanel.inSnapZone} />
+      {!stacked && !state.rightCollapsed && (
+        <DragHandle {...rightPanel.handleProps} aria-label="Resize notebook" onKeyDown={(event) => {
+          if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+            event.preventDefault()
+            rightPanel.setWidth(rightPanel.width + (event.key === 'ArrowLeft' ? 16 : -16))
+          } else if (event.key === 'Enter') setRightCollapsed(true)
+        }} isDragging={rightPanel.isDragging} inSnapZone={rightPanel.inSnapZone} />
       )}
 
       {/* ── Right sidebar ── */}
-      {state.rightCollapsed ? (
+      {rightHidden && (
         <CollapsedRail side="right" label="Notebook" onExpand={() => setRightCollapsed(false)} />
-      ) : (
+      )}
         <aside
-          style={{ width: rightPanel.width }}
-          className={`shrink-0 overflow-y-auto border-l border-[var(--color-border)]
-            bg-[var(--color-bg-panel)] px-4 py-4
+          id="lab-notebook"
+          aria-label="Analysis notebook"
+          hidden={rightHidden}
+          style={{ width: stacked ? undefined : rightPanel.width }}
+          className={`lab-notebook
             ${rightPanel.shouldTransition ? 'sidebar-transition' : ''}`}
         >
+          {!stacked && <button type="button" onClick={() => setRightCollapsed(true)} aria-controls="lab-notebook" aria-expanded="true" className="panel-collapse">Hide notebook</button>}
+          {stacked && <h2 className="text-base font-semibold mb-4">Notebook</h2>}
           {notebook}
         </aside>
-      )}
     </div>
   )
 }

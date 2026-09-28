@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import { useData } from '../../context/DataContext';
 import type { GroupSpec } from '../../api/hypothesis';
 
@@ -12,13 +13,18 @@ export default function GroupBuilder({
   onChange,
   categoricalCols,
   showName = true,
+  sampleCount,
+  describedBy,
 }: {
   label: string;
   value: GroupSpec;
   onChange: (next: GroupSpec) => void;
   categoricalCols: string[];
   showName?: boolean;
+  sampleCount?: number;
+  describedBy?: string;
 }) {
+  const id = useId();
   const { getUniqueValues } = useData();
   const levels = value.column ? getUniqueValues(value.column) : [];
 
@@ -34,24 +40,27 @@ export default function GroupBuilder({
 
     // Mirrors the Gradio app: the name follows the first selection until the
     // student types their own.
-    const autoNamed = !value.name || value.name === value.values[0];
+    const autoNamed = !value.name || value.name === label || value.name === value.values[0];
     const name = autoNamed ? (selected[0] ?? '') : value.name;
     onChange({ ...value, values: selected, name });
   };
 
   return (
-    <div className="mb-3 border border-[var(--color-border-md)] rounded-md overflow-hidden">
+    <fieldset className="mb-3 min-w-0 border border-[var(--color-border-md)] rounded-md overflow-hidden">
+      <legend className="sr-only">{label}</legend>
       <div className="bg-[var(--color-bg-input)] px-3 py-1.5 text-xs font-semibold text-[var(--color-text)] border-b border-[var(--color-border-md)] flex justify-between items-center">
         <span>{label}</span>
-        <span className="text-[10px] font-normal text-[var(--color-text-muted)]">
-          {value.values.length} selected
+        <span className="text-xs font-normal text-[var(--color-text-muted)]">
+          {value.values.length} selected{sampleCount !== undefined ? ` · n = ${sampleCount}` : ''}
         </span>
       </div>
 
       <div className="p-2.5">
         <div className="flex flex-col gap-1 mb-2">
-          <label className="text-xs text-[var(--color-text-muted)]">Column</label>
+          <label htmlFor={id + '-column'} className="text-sm text-[var(--color-text-muted)]">Grouping column</label>
           <select
+            id={id + '-column'}
+            aria-describedby={describedBy}
             value={value.column}
             onChange={(e) => setColumn(e.target.value)}
             className="w-full rounded-md px-2.5 py-1.5 text-xs bg-[var(--color-bg-input)] border border-[var(--color-border-md)] text-[var(--color-text)] focus:outline-none focus:border-[var(--color-accent)] cursor-pointer"
@@ -64,46 +73,49 @@ export default function GroupBuilder({
         {value.column && (
           <>
             <div className="flex justify-between items-center mb-1">
-              <label className="text-xs text-[var(--color-text-muted)]">Values</label>
+              <span id={id + '-values'} className="text-sm text-[var(--color-text-muted)]">Categories</span>
               <div className="flex gap-2">
                 <button
                   type="button"
                   onClick={() => onChange({ ...value, values: levels })}
-                  className="text-[10px] text-[var(--color-accent)] hover:underline cursor-pointer"
+                  aria-label={`Select all categories for ${label}`}
+                  className="text-xs text-[var(--color-accent)] hover:underline cursor-pointer p-1"
                 >
                   All
                 </button>
                 <button
                   type="button"
                   onClick={() => onChange({ ...value, values: [] })}
-                  className="text-[10px] text-[var(--color-text-muted)] hover:underline cursor-pointer"
+                  aria-label={`Clear categories for ${label}`}
+                  className="text-xs text-[var(--color-text-muted)] hover:underline cursor-pointer p-1"
                 >
                   Clear
                 </button>
               </div>
             </div>
 
-            <div className="max-h-32 overflow-y-auto custom-scrollbar rounded-md border border-[var(--color-border-md)] bg-[var(--color-bg)] p-1.5 mb-2">
+            <div role="group" aria-labelledby={id + '-values'} aria-describedby={describedBy} className="max-h-40 overflow-y-auto custom-scrollbar rounded-md border border-[var(--color-border-md)] bg-[var(--color-bg-base)] p-1.5 mb-2">
               {levels.length === 0 && (
-                <p className="text-[10px] text-[var(--color-text-muted)] px-1 py-0.5">No values found.</p>
+                <p className="text-xs text-[var(--color-text-muted)] px-1 py-0.5">No values found.</p>
               )}
               {levels.map((level) => (
-                <label key={level} className="flex items-center gap-2 cursor-pointer px-1 py-0.5 rounded hover:bg-[var(--color-bg-hover)]">
+                <label key={level} className="flex items-center gap-2 cursor-pointer px-1 py-1.5 rounded hover:bg-[var(--color-bg-hover)]">
                   <input
                     type="checkbox"
                     checked={value.values.includes(level)}
                     onChange={() => toggleValue(level)}
                     className="accent-[var(--color-accent)] cursor-pointer"
                   />
-                  <span className="text-xs text-[var(--color-text)] truncate" title={level}>{level}</span>
+                  <span className="text-sm text-[var(--color-text)] break-words min-w-0">{level}</span>
                 </label>
               ))}
             </div>
 
             {showName && (
               <div className="flex flex-col gap-1">
-                <label className="text-xs text-[var(--color-text-muted)]">Name</label>
+                <label htmlFor={id + '-name'} className="text-sm text-[var(--color-text-muted)]">Group name</label>
                 <input
+                  id={id + '-name'}
                   type="text"
                   value={value.name}
                   onChange={(e) => onChange({ ...value, name: e.target.value })}
@@ -115,6 +127,6 @@ export default function GroupBuilder({
           </>
         )}
       </div>
-    </div>
+    </fieldset>
   );
 }
