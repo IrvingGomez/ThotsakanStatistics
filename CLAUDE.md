@@ -18,6 +18,9 @@ thotsakan-stats/
 │   ├── services/          # Orchestration (cleaned from controllers/)
 │   ├── api/               # FastAPI routes + Pydantic schemas
 │   └── sessions/          # In-memory dataset store with TTL
+├── docker-compose.yml     # Production-style stack (nginx + backend, :8080)
+├── docker-compose.dev.yml # Hot-reload dev stack (:5173 + :8000)
+├── .github/workflows/     # docker.yml — builds/pushes images to GHCR
 ├── ThotsakanStatistics/   # Original Gradio app (READ-ONLY reference)
 ├── Try_reflex/            # Legacy Reflex prototype (READ-ONLY reference)
 └── doc/
@@ -50,6 +53,15 @@ pytest                            # Run tests
 ```bash
 npm run dev        # Runs frontend + backend concurrently (via concurrently)
 ```
+
+### Docker (from project root)
+
+```bash
+docker compose up --build                       # prod-style: http://localhost:8080 (nginx proxies /api → backend)
+docker compose -f docker-compose.dev.yml up     # dev with hot reload: :5173 + :8000
+```
+
+`backend/Dockerfile` and `frontend/Dockerfile` (multi-stage: Vite build → nginx) build the two images; `frontend/nginx.conf.template` proxies `/api` using `BACKEND_URL`. The backend must run a single uvicorn worker because sessions are in-memory. `.github/workflows/docker.yml` builds both images (only on the `dev` branch: pushes to GHCR on push to `dev`, build-only on PRs targeting `dev`) and smoke-tests the compose stack.
 
 No linting is configured yet (no ESLint/Prettier).
 

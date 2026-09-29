@@ -1,0 +1,35 @@
+# Development stack with hot reload (Vite on :5173, uvicorn --reload on :8000).
+#   docker compose -f docker-compose.dev.yml up --build
+services:
+  backend:
+    image: python:3.12-slim
+    working_dir: /app
+    volumes:
+      - ./backend:/app
+      - backend-site-packages:/usr/local/lib/python3.12/site-packages
+    environment:
+      MPLBACKEND: Agg
+      PYTHONDONTWRITEBYTECODE: "1"
+    command: >
+      sh -c "pip install -q -r requirements.txt -r requirements-dev.txt &&
+             uvicorn main:app --reload --host 0.0.0.0 --port 8000"
+    ports:
+      - "8000:8000"
+
+  frontend:
+    image: node:22-alpine
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+      - frontend-node-modules:/app/node_modules
+    environment:
+      VITE_PROXY_TARGET: http://backend:8000
+    command: sh -c "npm ci && npm run dev -- --host 0.0.0.0"
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+
+volumes:
+  backend-site-packages:
+  frontend-node-modules:

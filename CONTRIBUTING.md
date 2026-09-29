@@ -58,6 +58,15 @@ npm run dev                        # Vite dev server
 npm install && npm run dev
 ```
 
+### With Docker
+
+```bash
+docker compose -f docker-compose.dev.yml up      # hot-reload dev stack (:5173 + :8000)
+docker compose up --build                        # production-style stack (:8080)
+```
+
+CI (`.github/workflows/docker.yml`) builds both images on pushes to `dev` and on PRs targeting `dev` that touch `backend/` or `frontend/` and smoke-tests the compose stack. Make sure `docker compose up --build` still works if you change dependencies or a Dockerfile.
+
 Never commit virtual environments, `node_modules/` or `__pycache__/`.
 
 ## Workflow

@@ -1,0 +1,18 @@
+# Production-style stack: nginx serves the built frontend on :8080 and
+# proxies /api to the backend (same origin, so no CORS needed).
+#   docker compose up --build
+services:
+  backend:
+    build: ./backend
+    image: thotsakan-stats-backend
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    image: thotsakan-stats-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${WEB_PORT:-8080}:80"

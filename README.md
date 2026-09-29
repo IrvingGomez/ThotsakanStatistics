@@ -137,6 +137,7 @@ Just as the mythical giant **Thotsakan (ทศกัณฐ์)** has 10 faces an
 - **Node.js** ≥ 18
 - **Python** ≥ 3.11
 - **npm** (ships with Node.js)
+- *(Optional)* **Docker** with Compose v2 — see [Run with Docker](#-run-with-docker)
 
 ### 1. Clone the repository
 
@@ -192,6 +193,32 @@ uvicorn main:app --reload  # → http://localhost:8000
 
 - Open [http://localhost:5173](http://localhost:5173) — the Thotsakan Statistics lab should load.
 - Health check: [http://localhost:8000/api/health](http://localhost:8000/api/health) should return `{"status": "ok"}`.
+
+### 🐳 Run with Docker
+
+No Node.js or Python install needed — only Docker with Compose.
+
+**Production-style stack** (nginx serves the built frontend and proxies `/api` to the backend):
+```bash
+docker compose up --build       # → http://localhost:8080
+WEB_PORT=3000 docker compose up # use a different host port
+```
+
+**Development stack** (hot reload; source is bind-mounted):
+```bash
+docker compose -f docker-compose.dev.yml up   # frontend → :5173, backend → :8000
+```
+
+**Prebuilt images** are published to GitHub Container Registry by the `Docker images` workflow on every push to `dev` (tags: `dev`, `sha-<commit>`):
+```bash
+docker pull ghcr.io/irvinggomez/thotsakanstatistics-backend:dev
+docker pull ghcr.io/irvinggomez/thotsakanstatistics-frontend:dev
+```
+
+Notes:
+- The backend runs a **single** uvicorn worker on purpose — datasets live in an in-memory session store, so extra workers would not share sessions.
+- The frontend image reads `BACKEND_URL` (default `http://backend:8000`) to know where to proxy `/api`.
+- Run tests inside the dev stack: `docker compose -f docker-compose.dev.yml exec backend pytest`.
 
 ---
 
