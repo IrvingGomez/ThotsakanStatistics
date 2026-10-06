@@ -12,3 +12,6 @@ Reset everything with `rm -rf dev-playground`. Files may be root-owned on the ho
 
 ## Fix: "No module named 'pip'" in the backend container
 The first version bind-mounted the (empty) playground dir over `/usr/local/lib/python3.12/site-packages`, hiding pip itself (named volumes were pre-filled from the image; bind mounts are not). Now packages install with `pip install --target /deps`, with `PYTHONPATH=/deps` and `python -m uvicorn`, so the image's Python stays intact. Verified by running the dev stack: backend `/api/health` OK, frontend on :5173, and an upload through the Vite proxy wrote `dev-playground/uploads/<id>.csv`.
+
+## Fix: silent backend dev container
+`pip install -q` printed nothing for the several minutes a cold install takes, and Python buffered pip's output when not on a TTY. The dev command is now `backend/dev-start.sh`: it prints `[dev]` status lines and full pip progress (`PYTHONUNBUFFERED=1`), and skips the install on later starts when `requirements*.txt` are unchanged (hash stored in `/deps/.requirements-hash`). Verified cold (progress visible, server healthy) and warm restart.

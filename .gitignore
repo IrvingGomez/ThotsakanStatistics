@@ -99,3 +99,6 @@ Try_reflex/
 
 # Local dev playground (docker-compose.dev.yml bind mounts)
 /dev-playground/
+
+# Extra
+.secret
