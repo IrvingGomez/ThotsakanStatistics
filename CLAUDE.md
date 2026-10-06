@@ -123,6 +123,8 @@ backend/
 └── requirements.txt       # scipy, statsmodels, pingouin, fastapi, uvicorn
 ```
 
+**Auth:** every `/api` route except `/api/health` and `/api/auth/*` is gated by `api/deps.require_user` (signed HttpOnly session cookie issued after verifying a Google ID token; only `@AUTH_ALLOWED_DOMAIN`). Config comes from the root `.env` (`.env.example`, `backend/config.py`). Frontend: `AuthContext` + `LoginGate` wrap the app in `main.tsx`. Backend tests bypass the gate via `tests/conftest.py`.
+
 **Request flow:** `React hook → POST /api/... → api/routes/ → services/ → core/ → JSON response`
 
 **Key rules:**
@@ -247,4 +249,5 @@ Porting features from `ThotsakanStatistics/` (Gradio) to the React + FastAPI hyb
 - `doc/DESIGN_PROPOSAL.md` — component architecture, tab/panel slot pattern, DualInput spec, implementation phases
 - `doc/identity.md` — brand philosophy, UX pillars, what the app is and is NOT
 - `doc/context.md` — high-level workspace onboarding, architecture layers, data flow
+- `doc/AUTH.md` — Google sign-in setup (OAuth client, `.env`, Docker, troubleshooting)
 - `doc/migration_plan.md` — phased migration roadmap from Gradio to React + FastAPI

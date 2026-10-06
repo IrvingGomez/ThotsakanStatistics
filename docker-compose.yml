@@ -1,14 +1,28 @@
 # Production-style stack: nginx serves the built frontend on :8080 and
 # proxies /api to the backend (same origin, so no CORS needed).
+# Configuration comes from ./.env (copy .env.example).
 #   docker compose up --build
 services:
   backend:
-    build: ./backend
+    build:
+      context: ./backend
+      args:
+        BASE_REGISTRY: ${BASE_REGISTRY:-mirror.gcr.io/library}
     image: thotsakan-stats-backend
+    environment:
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      AUTH_ALLOWED_DOMAIN: ${AUTH_ALLOWED_DOMAIN:-cmkl.ac.th}
+      AUTH_SECRET_KEY: ${AUTH_SECRET_KEY:-}
+      AUTH_SESSION_HOURS: ${AUTH_SESSION_HOURS:-12}
+      AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}
+      AUTH_DISABLED: ${AUTH_DISABLED:-false}
     restart: unless-stopped
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        BASE_REGISTRY: ${BASE_REGISTRY:-mirror.gcr.io/library}
     image: thotsakan-stats-frontend
     restart: unless-stopped
     depends_on:

@@ -1,27 +1,40 @@
 # Development stack with hot reload (Vite on :5173, uvicorn --reload on :8000).
+# Everything the containers generate (pip/npm installs, uploaded CSVs) is kept in
+# ./dev-playground/ (git-ignored) so it is visible on the host; delete it to reset.
 #   docker compose -f docker-compose.dev.yml up --build
 services:
   backend:
-    image: python:3.12-slim
+    image: ${BASE_REGISTRY:-mirror.gcr.io/library}/python:3.12-slim
+    # hostname: backend
     working_dir: /app
     volumes:
       - ./backend:/app
-      - backend-site-packages:/usr/local/lib/python3.12/site-packages
+      - ./dev-playground/backend/site-packages:/deps
+      - ./dev-playground/uploads:/playground/uploads
     environment:
       MPLBACKEND: Agg
       PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONPATH: /deps
+      UPLOAD_DUMP_DIR: /playground/uploads
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      AUTH_ALLOWED_DOMAIN: ${AUTH_ALLOWED_DOMAIN:-cmkl.ac.th}
+      AUTH_SECRET_KEY: ${AUTH_SECRET_KEY:-}
+      AUTH_SESSION_HOURS: ${AUTH_SESSION_HOURS:-12}
+      AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}
+      AUTH_DISABLED: ${AUTH_DISABLED:-false}
     command: >
-      sh -c "pip install -q -r requirements.txt -r requirements-dev.txt &&
-             uvicorn main:app --reload --host 0.0.0.0 --port 8000"
+      sh -c "pip install -q --target /deps -r requirements.txt -r requirements-dev.txt &&
+             python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000"
     ports:
-      - "8000:8000"
+      - "8097:8000"
 
   frontend:
-    image: node:22-alpine
+    image: ${BASE_REGISTRY:-mirror.gcr.io/library}/node:22-alpine
+    # hostname: frontend
     working_dir: /app
     volumes:
       - ./frontend:/app
-      - frontend-node-modules:/app/node_modules
+      - ./dev-playground/frontend/node_modules:/app/node_modules
     environment:
       VITE_PROXY_TARGET: http://backend:8000
     command: sh -c "npm ci && npm run dev -- --host 0.0.0.0"
@@ -29,7 +42,3 @@ services:
       - "5173:5173"
     depends_on:
       - backend
-
-volumes:
-  backend-site-packages:
-  frontend-node-modules:

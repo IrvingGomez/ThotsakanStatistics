@@ -8,3 +8,7 @@ pingouin>=0.5.4
 matplotlib>=3.9.1
 seaborn>=0.13.2
 python-multipart>=0.0.9
+google-auth>=2.30.0
+requests>=2.32.0
+PyJWT>=2.8.0
+python-dotenv>=1.0.1

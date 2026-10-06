@@ -70,6 +70,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build and start the stack
+        # No Google credentials in CI; the auth gate itself is covered by pytest.
+        env:
+          AUTH_DISABLED: "true"
         run: docker compose up --build --wait --wait-timeout 180
       - name: Check frontend and proxied API
         run: |

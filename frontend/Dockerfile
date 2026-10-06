@@ -1,11 +1,14 @@
-FROM node:22-alpine AS build
+# Official images via a mirror that needs no Docker Hub login; override with BASE_REGISTRY.
+ARG BASE_REGISTRY=mirror.gcr.io/library
+FROM ${BASE_REGISTRY}/node:22-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
 RUN npm run build
 
-FROM nginx:1.27-alpine
+ARG BASE_REGISTRY
+FROM ${BASE_REGISTRY}/nginx:1.27-alpine
 # BACKEND_URL is substituted into the template at container start (nginx image feature).
 ENV BACKEND_URL=http://backend:8000
 COPY nginx.conf.template /etc/nginx/templates/default.conf.template

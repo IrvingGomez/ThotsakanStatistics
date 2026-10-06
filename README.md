@@ -194,9 +194,19 @@ uvicorn main:app --reload  # → http://localhost:8000
 - Open [http://localhost:5173](http://localhost:5173) — the Thotsakan Statistics lab should load.
 - Health check: [http://localhost:8000/api/health](http://localhost:8000/api/health) should return `{"status": "ok"}`.
 
+### 🔐 Configure Google sign-in
+
+Access is limited to `@cmkl.ac.th` Google accounts. Configuration lives in a root `.env` file (git-ignored):
+
+```bash
+cp .env.example .env   # then fill in GOOGLE_CLIENT_ID and AUTH_SECRET_KEY
+```
+
+The file documents every variable, including how to create the OAuth client ID in Google Cloud Console. Full walkthrough: [`doc/AUTH.md`](doc/AUTH.md). For quick local work without Google, set `AUTH_DISABLED=true` (never in production).
+
 ### 🐳 Run with Docker
 
-No Node.js or Python install needed — only Docker with Compose.
+No Node.js or Python install needed — only Docker with Compose. Both stacks read the root `.env` (see above).
 
 **Production-style stack** (nginx serves the built frontend and proxies `/api` to the backend):
 ```bash

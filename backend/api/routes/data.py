@@ -2,6 +2,8 @@ from fastapi import APIRouter, UploadFile, File, HTTPException
 import uuid
 import pandas as pd
 import io
+import os
+from pathlib import Path
 
 from sessions.store import set_session
 
@@ -25,6 +27,12 @@ async def upload_dataset(file: UploadFile = File(...)):
         
         # Store df
         set_session(session_id, df)
+
+        # Dev only: keep a copy of the raw upload on disk (see docker-compose.dev.yml).
+        dump_dir = os.getenv("UPLOAD_DUMP_DIR")
+        if dump_dir:
+            Path(dump_dir).mkdir(parents=True, exist_ok=True)
+            (Path(dump_dir) / f"{session_id}.csv").write_bytes(content)
         
         numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
         categorical_cols = df.select_dtypes(exclude=['number']).columns.tolist()

@@ -3,3 +3,5 @@ dist/
 .vite/
 Dockerfile
 .dockerignore
+.env
+.env.*
