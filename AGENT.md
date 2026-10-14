@@ -1,4 +1,4 @@
-# CLAUDE.md
+# AGENT.md
 
 Guidance for Claude Code and other AI coding agents working in this repository. Also follow [`CONTRIBUTING.md`](CONTRIBUTING.md) (coding standards, testing, commit/PR process) and [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md). If either conflicts with a user request, say so and ask before going ahead.
 
