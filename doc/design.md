@@ -4,6 +4,8 @@
 
 This page is the product law. If a feature doesn't fit the lab identity, we don't build it. Items marked *(vision)* aren't implemented yet.
 
+> **Scope for the December release:** the version deployed to Apex is an *analysis tool* in the style of jamovi / JASP. It reports numbers and plots, and the user makes every decision. The guided reveal flow, notebook reflection prompts and gamification described below are next semester's work. The rules every tab follows are in [`interaction_contract.md`](interaction_contract.md).
+
 ## 1. Vision
 
 Thotsakan Statistics (ทศกัณฐ์ สถิติ) is not a calculator. It is a web-based **virtual statistics laboratory** for Thai university students. Statistics is about intuition, not memorizing formulas. Students should touch, break and manipulate data the way scientists do, instead of only listening.
@@ -35,8 +37,8 @@ Every analysis screen is a **lab bench** with three panels:
 | Panel | Role | Rules |
 |---|---|---|
 | **Controls** (Thotsakan's hands, 280 px) | Selects, DualInput sliders, switches, Run/Reset | Every number has coarse (slider) and fine (typed) control. *(vision)* A budget, e.g. "1,000 Baht, 10 Baht per sample". |
-| **Observation** (Thotsakan's eyes, flexible) | Plotly charts, export toolbar | **Show, don't tell.** For example, the Hypothesis tab hides the p-value, verdict and raw table until the student asks, so the rejection region speaks first. Charts are interactive (hover, zoom); no static images. |
-| **Notebook** (Thotsakan's brain, 320 px) | Key numbers, verdict, interpretation, collapsible details | We don't grade. We give numbers, an interpretation and a prompt: *"You increased n to 10,000. Why did the curve narrow?"* |
+| **Observation** (Thotsakan's eyes, flexible) | Plotly charts, export toolbar | **Show, don't tell** *(guided mode, after December; the December analysis tool always shows its numbers and never declares a verdict)*. Charts are interactive (hover, zoom); no static images. |
+| **Notebook** (Thotsakan's brain, 320 px) | Key numbers, verdict, interpretation, collapsible details | We don't grade. December: technical details, assumptions checked and formula reference. *(Guided mode, after December: an interpretation and a prompt such as "You increased n to 10,000. Why did the curve narrow?")* |
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
