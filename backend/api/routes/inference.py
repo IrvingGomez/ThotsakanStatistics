@@ -7,7 +7,7 @@ from api.schemas.inference import (
     InferenceParams, IntervalsResponse,
     ConfidenceRegionsParams, ConfidenceRegionsResponse
 )
-from services.inference import get_estimators, calculate_intervals, calculate_regions
+from services.inference import get_estimators, calculate_ci, calculate_pi, calculate_regions
 
 router = APIRouter(prefix="/api/inference", tags=["inference"])
 
@@ -31,7 +31,7 @@ def compute_ci(params: InferenceParams, df: pd.DataFrame = Depends(get_session_d
         weights = df[params.weights_column]
     
     try:
-        ci_table, _, _, _, _, ctx = calculate_intervals(data, params, weights)
+        ci_table, ctx = calculate_ci(data, params, weights)
         return IntervalsResponse(table=ci_table.to_json(orient="records"), **ctx)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -48,7 +48,7 @@ def compute_pi(params: InferenceParams, df: pd.DataFrame = Depends(get_session_d
         weights = df[params.weights_column]
     
     try:
-        _, pi_table, _, _, _, ctx = calculate_intervals(data, params, weights)
+        pi_table, ctx = calculate_pi(data, params, weights)
         return IntervalsResponse(table=pi_table.to_json(orient="records"), **ctx)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

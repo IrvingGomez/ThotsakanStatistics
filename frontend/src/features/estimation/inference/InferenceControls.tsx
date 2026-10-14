@@ -63,10 +63,7 @@ export default function InferenceControls({ state }: { state: InferenceState }) 
         hint="Number of resamples. More resamples take longer." error={fieldErrors.samplesStr} />}
     </>}
     {Object.keys(fieldErrors).length > 0 && <p role="alert" className="text-sm text-red-400">Check the highlighted fields.</p>}
-    <p className="mt-2 text-sm text-[var(--color-text-muted)]">{state.manualRun ? 'Bootstrap is slower, so it runs when you select Update.' : 'Results update automatically.'}</p>
-    {state.manualRun && state.isDirty && <p role="status" className="text-sm text-amber-300">Settings changed - select Update to apply.</p>}
-    <AnalysisActions primaryLabel={state.manualRun ? (state.isComputing ? 'Computing...' : 'Update') : undefined}
-      onPrimary={state.manualRun ? () => void state.handleRun() : undefined}
-      primaryDisabled={state.isComputing} onReset={state.handleReset} />
+    <p className="mt-2 text-sm text-[var(--color-text-muted)]">{info.anyBootstrap && !isRegions ? 'Results update automatically. Bootstrap takes a moment.' : 'Results update automatically.'}</p>
+    <AnalysisActions onReset={state.handleReset} />
   </form>
 }

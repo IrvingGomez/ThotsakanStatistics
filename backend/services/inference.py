@@ -162,6 +162,24 @@ def calculate_intervals(data: pd.Series, params: InferenceParams, weights: pd.Se
 
     return ci_table, pi_table, mean_ci, sigma_ci, median_ci, context
 
+# The CI and PI endpoints each need only their own half. Without this, a bootstrap request would
+# also resample for the intervals it never returns, roughly doubling the wait.
+_WITHOUT_PI = dict(pi_mean_normal=False, pi_median_normal=False, pi_iqr_normal=False, bootstrap_pi=False)
+_WITHOUT_CI_BOOTSTRAP = dict(bootstrap_mean=False, bootstrap_median=False, bootstrap_deviation=False)
+
+
+def calculate_ci(data: pd.Series, params: InferenceParams, weights: pd.Series = None):
+    ci_table, _, _, _, _, context = calculate_intervals(data, params.model_copy(update=_WITHOUT_PI), weights)
+    return ci_table, context
+
+
+def calculate_pi(data: pd.Series, params: InferenceParams, weights: pd.Series = None):
+    _, pi_table, _, _, _, context = calculate_intervals(
+        data, params.model_copy(update=_WITHOUT_CI_BOOTSTRAP), weights
+    )
+    return pi_table, context
+
+
 # Confidence regions always use the sample mean and the standard deviation with one degree of
 # freedom, with normal-theory marginal intervals, whatever else the request carries.
 _REGION_FIXED = dict(

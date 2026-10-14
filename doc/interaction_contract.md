@@ -14,7 +14,7 @@ Rules every analysis tab (Descriptive, Inference, Graphical, Hypothesis, and lat
 
 ## 2. Running
 
-6. **Results update automatically** (short debounce) on every change. The only explicit Run/Update button is for heavy work — currently Inference bootstrap.
+6. **Results update automatically** on every change, after a short pause (about 250 ms; longer, about 700 ms, while bootstrap is on). There are no Run/Update buttons — only Reset. Heavy work is made cheaper instead (each endpoint computes only what it returns) and a burst of changes collapses into one request.
 7. One wording for the "settings changed" state, one for computing, one for error with Retry. Use the shared status component; do not write per-tab messages.
 
 ## 3. Results

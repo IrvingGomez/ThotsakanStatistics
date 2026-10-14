@@ -98,10 +98,8 @@ describe('Inference student workflow', () => {
     expect(state.draft.advancedOpen).toBe(true)
     expect(state.draft.selected).toContain('ci.mean.boot')
     expect(inferenceApi.computeCI).toHaveBeenCalledTimes(1)
-    expect(state.isDirty).toBe(true)
-    expect(panelText('observation')).toContain('Settings changed — select Update')
-    expect(panelText('notebook')).toContain('Settings changed — select Update')
     expect(panelText('notebook')).toContain('95% confidence · α = 0.05')
+    expect(panelText('notebook')).not.toContain('Update')
   })
 
   it('updates on its own after a short pause, and treats zoom/disclosures as display settings', async () => {
@@ -121,24 +119,30 @@ describe('Inference student workflow', () => {
     expect(panelText('observation')).not.toContain('Settings changed')
   })
 
-  it('waits for Update only while a bootstrap option is ticked', async () => {
+  it('updates bootstrap options on its own too, after a longer pause', async () => {
     vi.useFakeTimers()
     await act(async () => state.setDraft({ selected: withBootstrap('ci.mean.boot') }))
-    await act(async () => state.setDraft({ alphaStr: '0.1' }))
-    await pause()
-    expect(inferenceApi.computeCI).toHaveBeenCalledTimes(1)
-    expect(state.manualRun).toBe(true)
-    expect(state.isDirty).toBe(true)
-    const update = [...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'Update')!
-    await act(async () => update.click())
+    await pause(300)
+    expect(inferenceApi.computeCI).toHaveBeenCalledTimes(1) // still waiting: bootstrap is slower
+    await pause(500)
     expect(inferenceApi.computeCI).toHaveBeenCalledTimes(2)
-    expect(vi.mocked(inferenceApi.computeCI).mock.lastCall![0]).toMatchObject({ alpha: 0.1, bootstrap_mean: true, ci_mean_normal: true })
-    // un-ticking the last bootstrap option returns to automatic updates
+    expect(vi.mocked(inferenceApi.computeCI).mock.lastCall![0]).toMatchObject({ bootstrap_mean: true, ci_mean_normal: true })
+    await act(async () => state.setDraft({ samplesStr: '2000' }))
+    await pause(800)
+    expect(vi.mocked(inferenceApi.computeCI).mock.lastCall![0]).toMatchObject({ bootstrap_samples: 2000 })
+    // un-ticking the last bootstrap option returns to the short pause
     await act(async () => state.setDraft({ selected: [...DEFAULT_SELECTED] }))
-    await pause()
-    expect(inferenceApi.computeCI).toHaveBeenCalledTimes(3)
+    await pause(300)
     expect(vi.mocked(inferenceApi.computeCI).mock.lastCall![0]).toMatchObject({ bootstrap_mean: false })
     expect(container.textContent).not.toContain('Update')
+  })
+
+  it('collapses a burst of changes into one request', async () => {
+    vi.useFakeTimers()
+    for (const alphaStr of ['0.01', '0.02', '0.03', '0.04']) await act(async () => state.setDraft({ alphaStr }))
+    await pause()
+    expect(inferenceApi.computeCI).toHaveBeenCalledTimes(2) // the initial run + one for the whole burst
+    expect(vi.mocked(inferenceApi.computeCI).mock.lastCall![0]).toMatchObject({ alpha: 0.04 })
   })
 
   it('rejects invalid fields with associated labels, hints and errors', async () => {
@@ -308,7 +312,6 @@ describe('Inference student workflow', () => {
     expect(container.textContent).not.toContain('Using bootstrap')
     expect(container.textContent).not.toContain('Assuming normality')
     expect(container.textContent).not.toContain('σ estimator')
-    expect(state.manualRun).toBe(false)
   })
 
   it('draws a bootstrap row next to the normal row and labels them apart', async () => {

@@ -138,3 +138,35 @@ def test_regions_table_is_omitted_when_the_box_is_off():
     from services.inference import calculate_regions
 
     assert calculate_regions(DATA, _region_params(add_ci_box=False))["table"] is None
+
+
+def test_ci_and_pi_halves_match_the_full_calculation():
+    from services.inference import calculate_ci, calculate_pi
+
+    params = _params(bootstrap_mean=True, bootstrap_pi=True, bootstrap_samples=200)
+    full_ci, full_pi, _, _, _, _ = calculate_intervals(DATA, params)
+    ci, ci_ctx = calculate_ci(DATA, params)
+    pi, pi_ctx = calculate_pi(DATA, params)
+    # normal-theory rows are deterministic, so they must be identical; bootstrap rows only need to exist
+    stable = lambda table: [r for r in json.loads(table.to_json(orient="records")) if not r["Method"].startswith("Bootstrap")]
+    assert stable(ci) == stable(full_ci)
+    assert stable(pi) == stable(full_pi)
+    assert [r["Method"] for r in _rows(ci, "Mean")][-1] == "Bootstrap (B=200)"
+    assert _rows(pi, "Bootstrap")
+    assert ci_ctx["n"] == pi_ctx["n"] == 40
+
+
+def test_ci_half_does_not_resample_for_prediction_and_vice_versa(monkeypatch):
+    import services.inference as module
+    from services.inference import calculate_ci, calculate_pi
+
+    calls = []
+    monkeypatch.setattr(module, "pi_bootstrap", lambda **kw: calls.append("pi") or (0.0, 1.0))
+    real = module.ci_mean_bootstrap
+    monkeypatch.setattr(module, "ci_mean_bootstrap", lambda **kw: calls.append("ci") or real(**kw))
+    params = _params(bootstrap_mean=True, bootstrap_pi=True, bootstrap_samples=50)
+    calculate_ci(DATA, params)
+    assert calls == ["ci"]
+    calls.clear()
+    calculate_pi(DATA, params)
+    assert calls == ["pi"]

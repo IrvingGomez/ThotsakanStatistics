@@ -8,7 +8,7 @@ export default function InferenceResultStatus({ state }: { state: InferenceState
   const hasResult = !!(state.ciResult || state.piResult || state.regionResult)
   const n = state.ciResult?.n ?? state.piResult?.n ?? context?.n
   const bootstrap = cfg ? [cfg.bootstrap_mean && 'mean CI', cfg.bootstrap_median && 'median CI', cfg.bootstrap_deviation && 'deviation CI', cfg.bootstrap_pi && 'prediction intervals'].filter(Boolean) : []
-  return <StatusBanner isComputing={state.isComputing} error={state.error} hasResult={hasResult} isDirty={state.isDirty && state.manualRun} onRetry={state.handleRetry} dirtyMessage="Settings changed — select Update to apply. Results below use the run settings shown here." resultNotice={state.partialResult ? 'Partial result — only successful intervals are shown.' : undefined}>
+  return <StatusBanner isComputing={state.isComputing} error={state.error} hasResult={hasResult} onRetry={state.handleRetry} resultNotice={state.partialResult ? 'Partial result — only successful intervals are shown.' : undefined}>
     {cfg && context && <div className="space-y-1 break-words">
       <p className="font-semibold">{cfg.column} <span className="font-normal text-[var(--color-text-muted)]">· n = {n}</span></p>
       <p>{cfg.estimationType === 'Confidence Regions' ? 'Region coverage: ' + (state.regionResult?.probs ?? cfg.probs.split(',').map(Number)).map(coveragePercent).join(', ') : coveragePercent(1 - cfg.alpha) + ' confidence · α = ' + cfg.alpha}</p>

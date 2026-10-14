@@ -4,6 +4,8 @@ import { inferenceApi, type InferenceParams, type IntervalsResponse, type Confid
 import { DEFAULT_SELECTED, DEFAULT_SIGMA_ESTIMATOR, REGION_FLAGS, methodFlags, selectionInfo } from './inferenceOptions'
 
 const AUTO_RUN_DELAY_MS = 250
+/** Bootstrap resamples thousands of times, so wait a little longer for the user to stop adjusting. */
+const BOOTSTRAP_RUN_DELAY_MS = 700
 
 export type InferenceConfig = {
   column: string
@@ -51,8 +53,7 @@ export const initialInferenceDraft = (column = ''): InferenceDraft => ({
   crProbs: '0.1, 0.5, 0.75, 0.89, 0.95', crEpsMu: '0.1, 0.1', crEpsSigma: '0.05, 0.05',
   addCiBox: true, advancedOpen: false, zoomCI: false,
 })
-/** Heavy work (bootstrap) is the only thing that waits for an explicit Update; everything else runs on its own. */
-export const needsManualRun = (draft: InferenceDraft) =>
+const usesBootstrap = (draft: InferenceDraft) =>
   draft.estimationType !== 'Confidence Regions' && selectionInfo(draft.selected).anyBootstrap
 export function validateInferenceDraft(draft: InferenceDraft): Partial<Record<keyof InferenceDraft, string>> {
   const errors: Partial<Record<keyof InferenceDraft, string>> = {}
@@ -221,12 +222,11 @@ export function useInferenceTabState() {
       void runRef.current(next)
       return
     }
-    // Any other change that affects the result updates on its own after a short pause. Only
-    // bootstrap waits for the Update button (it is the one heavy computation).
+    // Any other change that affects the result updates on its own after a short pause.
     if (JSON.stringify(computationDraft(next)) === JSON.stringify(computationDraft(previous))) return
     cancelAutoRun()
-    if (needsManualRun(next)) return
-    autoRun.current = setTimeout(() => { autoRun.current = null; void runRef.current(draftRef.current) }, AUTO_RUN_DELAY_MS)
+    autoRun.current = setTimeout(() => { autoRun.current = null; void runRef.current(draftRef.current) },
+      usesBootstrap(next) ? BOOTSTRAP_RUN_DELAY_MS : AUTO_RUN_DELAY_MS)
   }, [cancelAutoRun])
   const handleRun = useCallback(() => runRef.current(draftRef.current), [])
   const handleRetry = useCallback(() => { if (lastSubmitted.current) void runRef.current(lastSubmitted.current) }, [])
@@ -238,10 +238,9 @@ export function useInferenceTabState() {
   }, [clearResult, dataState.numericCols])
   const activate = useCallback(() => setActivated(true), [])
   const isDirty = !!appliedDraft && JSON.stringify(computationDraft(draft)) !== JSON.stringify(computationDraft(appliedDraft))
-  const manualRun = needsManualRun(draft)
   return {
     draft, setDraft, appliedConfig, appliedContext, ciResult, piResult, regionResult,
-    isComputing, error, isDirty, manualRun, partialResult, fieldErrors, deviationEstimators, estimatorError,
+    isComputing, error, isDirty, partialResult, fieldErrors, deviationEstimators, estimatorError,
     handleRun, handleRetry, handleReset, activate, hasData, resetGeneration,
     numericCols: dataState.numericCols, precision: dataState.displayPrecision,
     sessionId: dataState.sessionId, filename: dataState.filename,
