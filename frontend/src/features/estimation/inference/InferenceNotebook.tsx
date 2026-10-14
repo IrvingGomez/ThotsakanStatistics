@@ -1,7 +1,9 @@
 ﻿import type { ConfidenceRegionsResponse, IntervalsResponse } from '../../../api/inference'
 import type { InferenceState } from './useInferenceTabState'
 import InferenceResultStatus from './InferenceResultStatus'
-import { coveragePercent, formatInferenceNumber, parseIntervalRows, pointEstimate, quantityLabel } from './inferencePresentation'
+import { coveragePercent, formatInferenceNumber, parseIntervalRows, pointEstimate, quantityLabel, rowLabel } from './inferencePresentation'
+import { ResultCard } from '../../../components/notebook/NotebookParts'
+import { EmptyState } from '../../../components/StatusBanner'
 
 function IntervalCards({ title, result, precision }: { title: string; result: IntervalsResponse; precision: number }) {
   const rows = parseIntervalRows(result)
@@ -12,8 +14,7 @@ function IntervalCards({ title, result, precision }: { title: string; result: In
     <div className="grid gap-3">
       {rows.map((row, index) => {
         const estimate = pointEstimate(row.Statistic, result.point_estimates)
-        return <article key={row.Statistic + '-' + index} className="rounded-lg border border-[var(--color-border-md)] bg-[var(--color-bg-input)] p-3 min-w-0">
-          <h4 className="font-semibold text-sm">{quantityLabel(row.Statistic)}{title === 'Prediction intervals' ? ' method' : ''}</h4>
+        return <ResultCard key={row.Statistic + '-' + row.Method + '-' + index} title={rowLabel(row) + (title === 'Prediction intervals' ? ' method' : '')}>
           <dl className="grid grid-cols-2 gap-3 mt-3 text-sm">
             <div className="min-w-0"><dt className="text-xs text-[var(--color-text-muted)]">Lower bound</dt><dd className="font-mono break-all mt-1">{formatInferenceNumber(row.Lower, precision)}</dd></div>
             <div className="min-w-0"><dt className="text-xs text-[var(--color-text-muted)]">Upper bound</dt><dd className="font-mono break-all mt-1">{formatInferenceNumber(row.Upper, precision)}</dd></div>
@@ -24,7 +25,7 @@ function IntervalCards({ title, result, precision }: { title: string; result: In
             <p className="mt-2 break-words">{row.Statistic} · {row['Interval Type'] ?? title}</p>
             {estimate !== null && <p className="mt-1">Sample {quantityLabel(row.Statistic).toLowerCase()}: <span className="font-mono break-all">{formatInferenceNumber(estimate, precision)}</span></p>}
           </details>
-        </article>
+        </ResultCard>
       })}
     </div>
   </section>
@@ -54,7 +55,7 @@ export default function InferenceNotebook({ state }: { state: InferenceState }) 
   return <div className="analysis-panel p-4">
     <h2 className="text-lg font-bold mb-3">Statistical inference</h2>
     <InferenceResultStatus state={state} />
-    {!hasResult && !state.isComputing && !state.error && <p className="text-sm text-[var(--color-text-muted)] py-6">{state.hasData ? 'Choose settings, then select Update to calculate intervals.' : 'Upload a CSV in Data to begin.'}</p>}
+    {!hasResult && !state.isComputing && !state.error && <EmptyState message={state.hasData ? 'Choose a variable to calculate intervals.' : 'Upload a CSV in Data to begin.'} />}
     {state.ciResult && <IntervalCards title="Confidence intervals" result={state.ciResult} precision={state.precision} />}
     {state.piResult && <IntervalCards title="Prediction intervals" result={state.piResult} precision={state.precision} />}
     {state.regionResult && <RegionSummary result={state.regionResult} precision={state.precision} showCiBox={state.appliedConfig?.add_ci_box ?? true} />}

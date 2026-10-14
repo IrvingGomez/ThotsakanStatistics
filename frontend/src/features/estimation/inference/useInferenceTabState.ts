@@ -1,10 +1,13 @@
 ﻿import { useCallback, useEffect, useRef, useState } from 'react'
 import { useData } from '../../../context/DataContext'
 import { inferenceApi, type InferenceParams, type IntervalsResponse, type ConfidenceRegionsResponse } from '../../../api/inference'
+import { DEFAULT_SELECTED, DEFAULT_SIGMA_ESTIMATOR, REGION_FLAGS, methodFlags, selectionInfo } from './inferenceOptions'
+
+const AUTO_RUN_DELAY_MS = 250
 
 export type InferenceConfig = {
   column: string
-  estimationType: 'Confidence Intervals' | 'Prediction Intervals' | 'Confidence and Prediction Intervals' | 'Confidence Regions'
+  estimationType: 'Confidence and Prediction Intervals' | 'Confidence Regions'
   alpha: number
   mean_estimator: string
   median_estimator: string
@@ -14,47 +17,53 @@ export type InferenceConfig = {
   bootstrap_deviation: boolean
   bootstrap_pi: boolean
   bootstrap_samples: number
+  ci_mean_normal: boolean
+  ci_median_normal: boolean
+  ci_deviation_normal: boolean
+  pi_mean_normal: boolean
+  pi_median_normal: boolean
+  pi_iqr_normal: boolean
+  wantsCI: boolean
+  wantsPI: boolean
   probs: string
   eps_mu: string
   eps_sigma: string
   add_ci_box: boolean
-  mu_ci_source: string
 }
 export type InferenceDraft = {
   column: string
   estimationType: InferenceConfig['estimationType']
   alphaStr: string
   sigmaEst: string
-  bootstrapMean: boolean
-  bootstrapMedian: boolean
-  bootstrapDeviation: boolean
-  bootstrapPi: boolean
+  /** Ticked ids of INTERVAL_TREE; only the visible ones count (see inferenceOptions.ts). */
+  selected: string[]
   samplesStr: string
   crProbs: string
   crEpsMu: string
   crEpsSigma: string
   addCiBox: boolean
-  muCiSource: string
   advancedOpen: boolean
-  bootstrapOpen: boolean
-  estimatorsOpen: boolean
   zoomCI: boolean
 }
 export const initialInferenceDraft = (column = ''): InferenceDraft => ({
   column, estimationType: 'Confidence and Prediction Intervals', alphaStr: '0.05',
-  sigmaEst: 'Deviation (1 ddof)', bootstrapMean: false, bootstrapMedian: false,
-  bootstrapDeviation: false, bootstrapPi: false, samplesStr: '1000',
+  sigmaEst: DEFAULT_SIGMA_ESTIMATOR, selected: [...DEFAULT_SELECTED], samplesStr: '1000',
   crProbs: '0.1, 0.5, 0.75, 0.89, 0.95', crEpsMu: '0.1, 0.1', crEpsSigma: '0.05, 0.05',
-  addCiBox: true, muCiSource: 'Mean-based CI', advancedOpen: false,
-  bootstrapOpen: false, estimatorsOpen: false, zoomCI: false,
+  addCiBox: true, advancedOpen: false, zoomCI: false,
 })
+/** Heavy work (bootstrap) is the only thing that waits for an explicit Update; everything else runs on its own. */
+export const needsManualRun = (draft: InferenceDraft) =>
+  draft.estimationType !== 'Confidence Regions' && selectionInfo(draft.selected).anyBootstrap
 export function validateInferenceDraft(draft: InferenceDraft): Partial<Record<keyof InferenceDraft, string>> {
   const errors: Partial<Record<keyof InferenceDraft, string>> = {}
   if (!draft.column) errors.column = 'Choose a numeric variable.'
   const alpha = Number(draft.alphaStr)
   if (!draft.alphaStr.trim() || !Number.isFinite(alpha) || alpha <= 0 || alpha >= 1) errors.alphaStr = 'Enter a number greater than 0 and less than 1.'
-  const bootstrap = draft.bootstrapMean || draft.bootstrapMedian || draft.bootstrapDeviation || draft.bootstrapPi
-  if (draft.estimationType !== 'Confidence Regions' && bootstrap && (!draft.samplesStr.trim() || !Number.isInteger(Number(draft.samplesStr)) || Number(draft.samplesStr) <= 0)) errors.samplesStr = 'Enter a positive whole number of resamples.'
+  if (draft.estimationType !== 'Confidence Regions') {
+    const info = selectionInfo(draft.selected)
+    if (!info.wantsCI && !info.wantsPI) errors.selected = 'Tick at least one interval method to calculate.'
+    if (info.anyBootstrap && (!draft.samplesStr.trim() || !Number.isInteger(Number(draft.samplesStr)) || Number(draft.samplesStr) <= 0)) errors.samplesStr = 'Enter a positive whole number of resamples.'
+  }
   if (draft.estimationType === 'Confidence Regions') {
     const parts = (value: string) => value.split(',').map(part => part.trim() ? Number(part) : NaN)
     if (parts(draft.crProbs).some(value => !Number.isFinite(value) || value <= 0 || value >= 1)) errors.crProbs = 'Use comma-separated values between 0 and 1, such as 0.5, 0.95.'
@@ -66,18 +75,25 @@ export function validateInferenceDraft(draft: InferenceDraft): Partial<Record<ke
   return errors
 }
 function configFromDraft(draft: InferenceDraft): InferenceConfig {
+  const regions = draft.estimationType === 'Confidence Regions'
+  const info = selectionInfo(draft.selected)
+  // A hidden option is never sent: the deviation estimator only counts while a normality-based
+  // option that uses it is ticked, and regions always use the fixed defaults.
+  const flags = regions ? REGION_FLAGS : methodFlags(draft.selected)
   return {
     column: draft.column, estimationType: draft.estimationType, alpha: Number(draft.alphaStr),
-    mean_estimator: 'Sample Mean', median_estimator: 'Sample Median', sigma_estimator: draft.sigmaEst,
-    bootstrap_mean: draft.bootstrapMean, bootstrap_median: draft.bootstrapMedian,
-    bootstrap_deviation: draft.bootstrapDeviation, bootstrap_pi: draft.bootstrapPi,
-    bootstrap_samples: Number(draft.samplesStr) || 1000,
+    mean_estimator: 'Sample Mean', median_estimator: 'Sample Median',
+    sigma_estimator: !regions && info.needsDeviationEstimator ? draft.sigmaEst : DEFAULT_SIGMA_ESTIMATOR,
+    ...flags,
+    bootstrap_samples: !regions && info.anyBootstrap ? Number(draft.samplesStr) || 1000 : 1000,
+    wantsCI: regions ? false : info.wantsCI, wantsPI: regions ? false : info.wantsPI,
     probs: draft.crProbs, eps_mu: draft.crEpsMu, eps_sigma: draft.crEpsSigma,
-    add_ci_box: draft.addCiBox, mu_ci_source: draft.muCiSource,
+    add_ci_box: draft.addCiBox,
   }
 }
+/** The settings that change a result. Display-only settings (zoom, panel state) never re-run anything. */
 function computationDraft(draft: InferenceDraft) {
-  const { advancedOpen: _advanced, bootstrapOpen: _bootstrap, estimatorsOpen: _estimators, zoomCI: _zoom, ...settings } = draft
+  const { advancedOpen: _advanced, zoomCI: _zoom, ...settings } = draft
   return settings
 }
 export function useInferenceTabState() {
@@ -95,9 +111,15 @@ export function useInferenceTabState() {
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof InferenceDraft, string>>>({})
   const [partialResult, setPartialResult] = useState(false)
   const [activated, setActivated] = useState(false)
+  const [resetGeneration, setResetGeneration] = useState(0)
   const [deviationEstimators, setDeviationEstimators] = useState(['Deviation (1 ddof)'])
   const [estimatorError, setEstimatorError] = useState<string | null>(null)
   const generation = useRef(0)
+  const autoRun = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const cancelAutoRun = useCallback(() => {
+    if (autoRun.current) clearTimeout(autoRun.current)
+    autoRun.current = null
+  }, [])
   const lastSubmitted = useRef<InferenceDraft | null>(null)
   const hasData = dataState.status === 'ready' && dataState.numericCols.length > 0
   const dataKey = JSON.stringify([dataState.sessionId, dataState.status, dataState.filters, dataState.numericCols])
@@ -105,11 +127,12 @@ export function useInferenceTabState() {
   currentDataKey.current = dataKey
   const clearResult = useCallback(() => {
     generation.current += 1
+    cancelAutoRun()
     setCiResult(null); setPiResult(null); setRegionResult(null)
     setAppliedDraft(null); setAppliedConfig(null); setAppliedContext(null)
     setIsComputing(false); setError(null); setPartialResult(false)
     lastSubmitted.current = null
-  }, [])
+  }, [cancelAutoRun])
   const run = useCallback(async (submitted: InferenceDraft) => {
     const errors = validateInferenceDraft(submitted)
     if (!dataState.numericCols.includes(submitted.column)) errors.column = 'Choose an available numeric variable.'
@@ -129,6 +152,8 @@ export function useInferenceTabState() {
       mean_estimator: cfg.mean_estimator, median_estimator: cfg.median_estimator, sigma_estimator: cfg.sigma_estimator,
       bootstrap_mean: cfg.bootstrap_mean, bootstrap_median: cfg.bootstrap_median,
       bootstrap_deviation: cfg.bootstrap_deviation, bootstrap_pi: cfg.bootstrap_pi, bootstrap_samples: cfg.bootstrap_samples,
+      ci_mean_normal: cfg.ci_mean_normal, ci_median_normal: cfg.ci_median_normal, ci_deviation_normal: cfg.ci_deviation_normal,
+      pi_mean_normal: cfg.pi_mean_normal, pi_median_normal: cfg.pi_median_normal, pi_iqr_normal: cfg.pi_iqr_normal,
       trim_param: null, winsor_limits: null, weights_column: null,
       filters: Object.keys(dataState.filters).length ? dataState.filters : null,
     }
@@ -136,13 +161,13 @@ export function useInferenceTabState() {
       if (cfg.estimationType === 'Confidence Regions') {
         const result = await inferenceApi.computeRegions({
           ...params, probs: cfg.probs.split(',').map(Number), eps_mu: cfg.eps_mu.split(',').map(Number), eps_sigma: cfg.eps_sigma.split(',').map(Number),
-          add_ci_box: cfg.add_ci_box, mu_ci_source: cfg.mu_ci_source,
+          add_ci_box: cfg.add_ci_box,
         })
         if (ownsRequest()) setRegionResult(result)
       } else {
         const requests: { label: string; promise: Promise<IntervalsResponse>; apply: (result: IntervalsResponse) => void }[] = []
-        if (cfg.estimationType.includes('Confidence')) requests.push({ label: 'Confidence intervals', promise: inferenceApi.computeCI(params), apply: setCiResult })
-        if (cfg.estimationType.includes('Prediction')) requests.push({ label: 'Prediction intervals', promise: inferenceApi.computePI(params), apply: setPiResult })
+        if (cfg.wantsCI) requests.push({ label: 'Confidence intervals', promise: inferenceApi.computeCI(params), apply: setCiResult })
+        if (cfg.wantsPI) requests.push({ label: 'Prediction intervals', promise: inferenceApi.computePI(params), apply: setPiResult })
         const outcomes = await Promise.allSettled(requests.map(item => item.promise))
         if (!ownsRequest()) return
         const failures: string[] = []
@@ -164,6 +189,8 @@ export function useInferenceTabState() {
   }, [dataKey, dataState, getNumericData, hasData])
   const runRef = useRef(run)
   runRef.current = run
+  const hasDataRef = useRef(hasData)
+  hasDataRef.current = hasData
   useEffect(() => {
     clearResult()
     setFieldErrors({})
@@ -171,7 +198,7 @@ export function useInferenceTabState() {
     draftRef.current = next; updateDraft(next)
     if (activated && hasData) void runRef.current(next)
   }, [dataKey, activated, clearResult, hasData])
-  useEffect(() => () => { generation.current += 1 }, [])
+  useEffect(() => () => { generation.current += 1; cancelAutoRun() }, [cancelAutoRun])
   useEffect(() => {
     if (!activated || !hasData || !dataState.sessionId || !draft.column) return
     let cancelled = false
@@ -188,21 +215,34 @@ export function useInferenceTabState() {
     const next = { ...previous, ...patch }
     draftRef.current = next; updateDraft(next)
     setFieldErrors(current => Object.fromEntries(Object.entries(current).filter(([key]) => !(key in patch))))
-    if (next.column !== previous.column || next.estimationType !== previous.estimationType) void runRef.current(next)
-  }, [])
+    if (!hasDataRef.current) return
+    if (next.column !== previous.column || next.estimationType !== previous.estimationType) {
+      cancelAutoRun()
+      void runRef.current(next)
+      return
+    }
+    // Any other change that affects the result updates on its own after a short pause. Only
+    // bootstrap waits for the Update button (it is the one heavy computation).
+    if (JSON.stringify(computationDraft(next)) === JSON.stringify(computationDraft(previous))) return
+    cancelAutoRun()
+    if (needsManualRun(next)) return
+    autoRun.current = setTimeout(() => { autoRun.current = null; void runRef.current(draftRef.current) }, AUTO_RUN_DELAY_MS)
+  }, [cancelAutoRun])
   const handleRun = useCallback(() => runRef.current(draftRef.current), [])
   const handleRetry = useCallback(() => { if (lastSubmitted.current) void runRef.current(lastSubmitted.current) }, [])
   const handleReset = useCallback(() => {
     clearResult()
     const next = initialInferenceDraft(dataState.numericCols[0])
     draftRef.current = next; updateDraft(next); setFieldErrors({})
+    setResetGeneration(value => value + 1)
   }, [clearResult, dataState.numericCols])
   const activate = useCallback(() => setActivated(true), [])
   const isDirty = !!appliedDraft && JSON.stringify(computationDraft(draft)) !== JSON.stringify(computationDraft(appliedDraft))
+  const manualRun = needsManualRun(draft)
   return {
     draft, setDraft, appliedConfig, appliedContext, ciResult, piResult, regionResult,
-    isComputing, error, isDirty, partialResult, fieldErrors, deviationEstimators, estimatorError,
-    handleRun, handleRetry, handleReset, activate, hasData,
+    isComputing, error, isDirty, manualRun, partialResult, fieldErrors, deviationEstimators, estimatorError,
+    handleRun, handleRetry, handleReset, activate, hasData, resetGeneration,
     numericCols: dataState.numericCols, precision: dataState.displayPrecision,
     sessionId: dataState.sessionId, filename: dataState.filename,
   }

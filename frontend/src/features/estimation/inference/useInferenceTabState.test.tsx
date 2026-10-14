@@ -6,6 +6,7 @@ import InferenceControls from './InferenceControls'
 import InferenceNotebook from './InferenceNotebook'
 import InferenceObservation from './InferenceObservation'
 import { useInferenceTabState, type InferenceState } from './useInferenceTabState'
+import { DEFAULT_SELECTED } from './inferenceOptions'
 
 function dataFixture() {
   return {
@@ -76,7 +77,13 @@ beforeEach(async () => {
   vi.spyOn(inferenceApi, 'computeRegions').mockResolvedValue(region)
   await render()
 })
+const withBootstrap = (...ids: string[]) => [...DEFAULT_SELECTED, ...ids]
+async function pause(ms = 300) {
+  await act(async () => { await vi.advanceTimersByTimeAsync(ms) })
+}
+
 afterEach(async () => {
+  vi.useRealTimers()
   await act(async () => root.unmount())
   container.remove()
   vi.restoreAllMocks()
@@ -84,45 +91,69 @@ afterEach(async () => {
 
 describe('Inference student workflow', () => {
   it('preserves drafts and disclosure state when controls leave and return', async () => {
-    await act(async () => state.setDraft({ alphaStr: '0.', bootstrapOpen: true, estimatorsOpen: true }))
+    await act(async () => state.setDraft({ alphaStr: '0.', advancedOpen: true, selected: withBootstrap('ci.mean.boot') }))
     await render(false)
     await render(true)
     expect(state.draft.alphaStr).toBe('0.')
-    expect(state.draft.bootstrapOpen).toBe(true)
-    expect(state.draft.estimatorsOpen).toBe(true)
+    expect(state.draft.advancedOpen).toBe(true)
+    expect(state.draft.selected).toContain('ci.mean.boot')
     expect(inferenceApi.computeCI).toHaveBeenCalledTimes(1)
     expect(state.isDirty).toBe(true)
-    expect(panelText('observation')).toContain('Settings changed — update results')
-    expect(panelText('notebook')).toContain('Settings changed — update results')
+    expect(panelText('observation')).toContain('Settings changed — select Update')
+    expect(panelText('notebook')).toContain('Settings changed — select Update')
     expect(panelText('notebook')).toContain('95% confidence · α = 0.05')
   })
 
-  it('keeps numerical edits pending until Update and treats zoom/disclosures as display settings', async () => {
-    await act(async () => state.setDraft({ zoomCI: true, bootstrapOpen: true }))
+  it('updates on its own after a short pause, and treats zoom/disclosures as display settings', async () => {
+    vi.useFakeTimers()
+    await act(async () => state.setDraft({ zoomCI: true, advancedOpen: true }))
+    await pause()
+    expect(inferenceApi.computeCI).toHaveBeenCalledTimes(1)
     expect(state.isDirty).toBe(false)
     await act(async () => state.setDraft({ alphaStr: '0.1' }))
-    expect(state.isDirty).toBe(true)
     expect(inferenceApi.computeCI).toHaveBeenCalledTimes(1)
-    await startRun()
+    await pause()
+    expect(inferenceApi.computeCI).toHaveBeenCalledTimes(2)
+    expect(vi.mocked(inferenceApi.computeCI).mock.lastCall![0]).toMatchObject({ alpha: 0.1 })
     expect(state.isDirty).toBe(false)
     expect(state.appliedConfig?.alpha).toBe(0.1)
     expect(panelText('observation')).toContain('90% confidence · α = 0.1')
+    expect(panelText('observation')).not.toContain('Settings changed')
+  })
+
+  it('waits for Update only while a bootstrap option is ticked', async () => {
+    vi.useFakeTimers()
+    await act(async () => state.setDraft({ selected: withBootstrap('ci.mean.boot') }))
+    await act(async () => state.setDraft({ alphaStr: '0.1' }))
+    await pause()
+    expect(inferenceApi.computeCI).toHaveBeenCalledTimes(1)
+    expect(state.manualRun).toBe(true)
+    expect(state.isDirty).toBe(true)
+    const update = [...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'Update')!
+    await act(async () => update.click())
+    expect(inferenceApi.computeCI).toHaveBeenCalledTimes(2)
+    expect(vi.mocked(inferenceApi.computeCI).mock.lastCall![0]).toMatchObject({ alpha: 0.1, bootstrap_mean: true, ci_mean_normal: true })
+    // un-ticking the last bootstrap option returns to automatic updates
+    await act(async () => state.setDraft({ selected: [...DEFAULT_SELECTED] }))
+    await pause()
+    expect(inferenceApi.computeCI).toHaveBeenCalledTimes(3)
+    expect(vi.mocked(inferenceApi.computeCI).mock.lastCall![0]).toMatchObject({ bootstrap_mean: false })
+    expect(container.textContent).not.toContain('Update')
   })
 
   it('rejects invalid fields with associated labels, hints and errors', async () => {
-    await act(async () => state.setDraft({ alphaStr: '', bootstrapMean: true, samplesStr: '2.5' }))
+    await act(async () => state.setDraft({ alphaStr: '', selected: withBootstrap('ci.mean.boot'), samplesStr: '2.5' }))
     await startRun()
     expect(inferenceApi.computeCI).toHaveBeenCalledTimes(1)
+    // α and the bootstrap count are DualInputs: a slider and a text box each, both flagged
     const invalid = [...container.querySelectorAll<HTMLInputElement>('[aria-invalid="true"]')]
-    expect(invalid).toHaveLength(2)
+    expect(invalid).toHaveLength(4)
     for (const input of invalid) {
-      expect(container.querySelector('label[for="' + input.id + '"]')).not.toBeNull()
+      expect(input.labels?.length || input.getAttribute('aria-labelledby') || input.getAttribute('aria-label')).toBeTruthy()
       const describedBy = input.getAttribute('aria-describedby')!.split(' ')
       expect(describedBy.every(id => document.getElementById(id))).toBe(true)
     }
     expect(document.activeElement).toBe(invalid[0])
-    const bootstrap = [...container.querySelectorAll('button')].find(button => button.textContent?.includes('Bootstrap resampling'))!
-    expect(bootstrap.getAttribute('aria-expanded')).toBe('true')
   })
 
   it('allows only the newest request to publish output and loading status', async () => {
@@ -223,10 +254,76 @@ describe('Inference student workflow', () => {
       session_id: 'session-a', column: 'Breath', alpha: 0.05,
       mean_estimator: 'Sample Mean', median_estimator: 'Sample Median', sigma_estimator: 'Deviation (1 ddof)',
       bootstrap_mean: false, bootstrap_median: false, bootstrap_deviation: false, bootstrap_pi: false,
-      bootstrap_samples: 1000, trim_param: null, winsor_limits: null, weights_column: null, filters: null,
+      bootstrap_samples: 1000, ci_mean_normal: true, ci_median_normal: true, ci_deviation_normal: true,
+      pi_mean_normal: true, pi_median_normal: true, pi_iqr_normal: true,
+      trim_param: null, winsor_limits: null, weights_column: null, filters: null,
     }
     expect(vi.mocked(inferenceApi.computeCI).mock.calls[0][0]).toEqual(expected)
     expect(vi.mocked(inferenceApi.computePI).mock.calls[0][0]).toEqual(expected)
+  })
+
+  it('sends per-method flags and only requests the interval families that are ticked', async () => {
+    await act(async () => state.setDraft({ selected: withBootstrap('ci.mean.boot', 'pi.boot'), samplesStr: '500' }))
+    await startRun()
+    const ci = vi.mocked(inferenceApi.computeCI).mock.lastCall![0]
+    expect(ci).toMatchObject({ bootstrap_mean: true, bootstrap_pi: true, bootstrap_samples: 500, ci_mean_normal: true, pi_iqr_normal: true })
+    // hidden under an unticked parent: ci.mean.normal stays ticked but must not be sent, and no CI request is made
+    vi.mocked(inferenceApi.computeCI).mockClear()
+    vi.mocked(inferenceApi.computePI).mockClear()
+    await act(async () => state.setDraft({ selected: ['ci.mean', 'ci.mean.normal', 'pi', 'pi.normal', 'pi.normal.median'] }))
+    await startRun()
+    expect(inferenceApi.computeCI).not.toHaveBeenCalled()
+    expect(vi.mocked(inferenceApi.computePI).mock.lastCall![0]).toMatchObject({
+      ci_mean_normal: false, pi_mean_normal: false, pi_median_normal: true, pi_iqr_normal: false, bootstrap_pi: false,
+    })
+  })
+
+  it('asks for at least one interval instead of sending an empty request', async () => {
+    vi.mocked(inferenceApi.computeCI).mockClear()
+    await act(async () => state.setDraft({ selected: [] }))
+    await startRun()
+    expect(state.fieldErrors.selected).toBe('Tick at least one interval method to calculate.')
+    expect(inferenceApi.computeCI).not.toHaveBeenCalled()
+  })
+
+  it('sends the deviation estimator only while a normality-based option that uses it is ticked', async () => {
+    await act(async () => state.setDraft({ sigmaEst: 'MAD (bias corrected)' }))
+    await startRun()
+    expect(vi.mocked(inferenceApi.computeCI).mock.lastCall![0].sigma_estimator).toBe('MAD (bias corrected)')
+    expect(container.textContent).toContain('σ estimator')
+    await act(async () => state.setDraft({ selected: ['ci', 'ci.deviation', 'ci.deviation.boot'] }))
+    await startRun()
+    expect(vi.mocked(inferenceApi.computeCI).mock.lastCall![0].sigma_estimator).toBe('Deviation (1 ddof)')
+    expect(container.textContent).not.toContain('σ estimator')
+  })
+
+  it('pins confidence regions to the sample mean and std (ddof=1) whatever else is ticked', async () => {
+    await act(async () => state.setDraft({ sigmaEst: 'MAD (bias corrected)', selected: withBootstrap('ci.mean.boot', 'ci.deviation.boot') }))
+    await act(async () => state.setDraft({ estimationType: 'Confidence Regions' }))
+    expect(vi.mocked(inferenceApi.computeRegions).mock.lastCall![0]).toMatchObject({
+      mean_estimator: 'Sample Mean', sigma_estimator: 'Deviation (1 ddof)',
+      bootstrap_mean: false, bootstrap_deviation: false, bootstrap_pi: false,
+    })
+    expect(vi.mocked(inferenceApi.computeRegions).mock.lastCall![0]).not.toHaveProperty('mu_ci_source')
+    expect(container.textContent).not.toContain('Using bootstrap')
+    expect(container.textContent).not.toContain('Assuming normality')
+    expect(container.textContent).not.toContain('σ estimator')
+    expect(state.manualRun).toBe(false)
+  })
+
+  it('draws a bootstrap row next to the normal row and labels them apart', async () => {
+    vi.mocked(inferenceApi.computeCI).mockResolvedValue({
+      ...intervals(),
+      table: JSON.stringify([
+        { Statistic: 'Mean', Lower: 29, Upper: 31, Method: 't (df=4)', 'Interval Type': 'Confidence' },
+        { Statistic: 'Mean', Lower: 28, Upper: 32, Method: 'Bootstrap (B=500)', 'Interval Type': 'Confidence' },
+      ]),
+    })
+    await act(async () => state.setDraft({ selected: withBootstrap('ci.mean.boot') }))
+    await startRun()
+    const titles = [...container.querySelectorAll('[data-panel="notebook"] article h4')].map(node => node.textContent)
+    expect(titles.slice(0, 2)).toEqual(['Mean', 'Mean – bootstrap'])
+    expect(panelText('observation')).toContain('Mean – bootstrap:')
   })
 
   it('shares the observed/CI/PI location scale until zoom is explicitly selected', async () => {
@@ -258,9 +355,10 @@ describe('Inference student workflow', () => {
     const traces = () => JSON.parse(container.querySelector<HTMLElement>('[data-plot]')!.dataset.plot!) as { name: string }[]
     expect(traces().some(trace => trace.name === 'Separate marginal intervals')).toBe(false)
     expect(panelText('notebook')).toContain('Coverage: 50%, 95%')
+    vi.useFakeTimers()
     await act(async () => state.setDraft({ addCiBox: true }))
     expect(traces().some(trace => trace.name === 'Separate marginal intervals')).toBe(false)
-    await startRun()
+    await pause()
     expect(traces().some(trace => trace.name === 'Separate marginal intervals')).toBe(true)
     expect(panelText('notebook')).toContain('The dashed box combines separate marginal intervals')
   })

@@ -3,7 +3,8 @@ import type { IntervalsResponse } from '../../../api/inference'
 import { useMemo } from 'react'
 import type { InferenceState } from './useInferenceTabState'
 import InferenceResultStatus from './InferenceResultStatus'
-import { coveragePercent, intervalRange, parseIntervalRows, pointEstimate, quantityLabel, type IntervalRow } from './inferencePresentation'
+import { coveragePercent, intervalRange, parseIntervalRows, pointEstimate, quantityLabel, rowLabel, type IntervalRow } from './inferencePresentation'
+import { PLOT_AXIS, PLOT_COLORS, PLOT_CONFIG, baseLayout } from '../../../plot/theme'
 import ResultToolbar from '../../../components/ResultToolbar'
 import { useChartRegistry } from '../../../hooks/useChartRegistry'
 import { downloadChartsPNG } from '../../../utils/exportPNG'
@@ -11,34 +12,40 @@ import { downloadCSV } from '../../../utils/exportCSV'
 import { downloadPDF } from '../../../utils/exportPDF'
 import { exportFilename } from '../../../utils/exportFilename'
 
-const AXIS = { gridcolor: 'rgba(148,163,184,0.18)', zeroline: false, fixedrange: true }
-const BASE_LAYOUT = { autosize: true, paper_bgcolor: 'transparent', plot_bgcolor: 'transparent', font: { color: '#cbd5e1', size: 12 }, showlegend: false, dragmode: false as const }
-const CONFIG = { responsive: true, displayModeBar: false }
+const AXIS = { ...PLOT_AXIS, fixedrange: true }
+const BASE_LAYOUT = baseLayout({ autosize: true, dragmode: false })
+const CONFIG = PLOT_CONFIG
+/** The same quantity has the same color in every tab (plot/theme.ts). */
+const colorOfRow = (row: IntervalRow) => {
+  const label = quantityLabel(row.Statistic)
+  return label === 'Mean' ? PLOT_COLORS.ciMean : label === 'Median' ? PLOT_COLORS.ciMedian : label === 'Deviation' ? PLOT_COLORS.ciDeviation : PLOT_COLORS.pi
+}
 const COLORS = ['#fb923c', '#facc15', '#4ade80', '#38bdf8', '#c084fc']
 
-function bracketTraces(rows: IntervalRow[], estimates: IntervalsResponse['point_estimates'], color: string, precision: number): any[] {
+function bracketTraces(rows: IntervalRow[], estimates: IntervalsResponse['point_estimates'], colorOf: (row: IntervalRow) => string, precision: number): any[] {
   return rows.flatMap((row, index) => {
+    const color = colorOf(row)
     const estimate = pointEstimate(row.Statistic, estimates)
     return [
-      { x: [row.Lower, row.Upper], y: [index, index], type: 'scatter', mode: 'lines+markers', line: { color, width: 3 }, marker: { color, size: 5 }, name: quantityLabel(row.Statistic), hovertemplate: '%{x:.' + precision + 'f}<extra></extra>' },
+      { x: [row.Lower, row.Upper], y: [index, index], type: 'scatter', mode: 'lines+markers', line: { color, width: 3 }, marker: { color, size: 5 }, name: rowLabel(row), hovertemplate: '%{x:.' + precision + 'f}<extra></extra>' },
       ...(estimate !== null ? [{ x: [estimate], y: [index], type: 'scatter', mode: 'markers', marker: { color, size: 9, symbol: 'diamond' }, name: 'Sample estimate', hovertemplate: 'Sample estimate: %{x:.' + precision + 'f}<extra></extra>' }] : []),
     ]
   })
 }
-function IntervalPlot({ rows, result, range, color, variable, precision, onReady, onPurge }: {
-  rows: IntervalRow[]; result: IntervalsResponse; range?: [number, number]; color: string; variable: string; precision: number
+function IntervalPlot({ rows, result, range, colorOf, variable, precision, onReady, onPurge }: {
+  rows: IntervalRow[]; result: IntervalsResponse; range?: [number, number]; colorOf: (row: IntervalRow) => string; variable: string; precision: number
   onReady: (figure: unknown, element: HTMLElement) => void; onPurge: () => void
 }) {
   const height = Math.max(145, rows.length * 38 + 74)
   return <>
-    <ReactPlotly data={bracketTraces(rows, result.point_estimates, color, precision)} layout={{
+    <ReactPlotly data={bracketTraces(rows, result.point_estimates, colorOf, precision)} layout={{
       ...BASE_LAYOUT, height, margin: { l: 90, r: 24, b: 48, t: 10 },
       xaxis: { ...AXIS, range, title: { text: variable, standoff: 8 } },
-      yaxis: { ...AXIS, tickvals: rows.map((_, index) => index), ticktext: rows.map(row => quantityLabel(row.Statistic)), range: [rows.length - 0.4, -0.6] },
+      yaxis: { ...AXIS, tickvals: rows.map((_, index) => index), ticktext: rows.map(row => rowLabel(row)), range: [rows.length - 0.4, -0.6] },
     }} useResizeHandler style={{ width: '100%', height }} config={CONFIG}
       onInitialized={onReady} onUpdate={onReady} onPurge={onPurge} />
     <ul className="text-xs text-[var(--color-text-muted)] px-2 space-y-1 mb-3">
-      {rows.map((row, index) => <li key={row.Statistic + index} className="break-words"><strong>{quantityLabel(row.Statistic)}:</strong> {row.Method}</li>)}
+      {rows.map((row, index) => <li key={row.Statistic + row.Method + index} className="break-words"><strong>{rowLabel(row)}:</strong> {row.Method}</li>)}
     </ul>
   </>
 }
@@ -72,10 +79,10 @@ export default function InferenceObservation({ state }: { state: InferenceState 
       contours: { start: level, end: level, size: 1, coloring: 'lines' },
       line: { color: COLORS[index % COLORS.length], width: 2 }, name: coveragePercent(region.probs[index]) + ' region', showlegend: true, showscale: false, hoverinfo: 'skip',
     }))
-    data.push({ x: [region.mu_hat], y: [region.sigma_hat], mode: 'markers', type: 'scatter', name: 'Estimated mean and deviation', showlegend: true, marker: { color: '#f87171', size: 11, symbol: 'x' }, hovertemplate: 'Mean %{x:.' + state.precision + 'f}<br>Deviation %{y:.' + state.precision + 'f}<extra></extra>' })
+    data.push({ x: [region.mu_hat], y: [region.sigma_hat], mode: 'markers', type: 'scatter', name: 'Estimated mean and deviation', showlegend: true, marker: { color: PLOT_COLORS.outlier, size: 11, symbol: 'x' }, hovertemplate: 'Mean %{x:.' + state.precision + 'f}<br>Deviation %{y:.' + state.precision + 'f}<extra></extra>' })
     if (state.appliedConfig?.add_ci_box && region.mu_ci && region.sigma_ci) data.push({
       x: [region.mu_ci[0], region.mu_ci[1], region.mu_ci[1], region.mu_ci[0], region.mu_ci[0]], y: [region.sigma_ci[0], region.sigma_ci[0], region.sigma_ci[1], region.sigma_ci[1], region.sigma_ci[0]],
-      mode: 'lines', type: 'scatter', name: 'Separate marginal intervals', showlegend: true, line: { color: '#f87171', dash: 'dash', width: 2 }, hoverinfo: 'skip',
+      mode: 'lines', type: 'scatter', name: 'Separate marginal intervals', showlegend: true, line: { color: PLOT_COLORS.outlier, dash: 'dash', width: 2 }, hoverinfo: 'skip',
     })
     content = <section>
       <h3 className="font-semibold text-base px-2">Joint confidence regions</h3>
@@ -98,7 +105,7 @@ export default function InferenceObservation({ state }: { state: InferenceState 
       <p className="text-sm text-[var(--color-text-muted)] px-2">Lines show interval bounds; diamonds show sample estimates where applicable. Exact bounds and methods are in the results panel.</p>
       {centers.length > 0 && <section>
         <h3 className="text-base font-semibold px-2">Observed values</h3>
-        <ReactPlotly data={[{ x: centers, y: result.histogram.counts, type: 'bar', marker: { color: 'rgba(148,163,184,0.7)' }, width: edges[1] - edges[0], hovertemplate: 'Count %{y}<extra></extra>' }]} layout={{ ...BASE_LAYOUT, height: 220, margin: { l: 90, r: 24, b: 48, t: 12 }, xaxis: { ...AXIS, range: commonRange, title: { text: variable, standoff: 8 } }, yaxis: { ...AXIS, title: { text: 'Count' } } }} useResizeHandler style={{ width: '100%', height: 220 }} config={CONFIG}
+        <ReactPlotly data={[{ x: centers, y: result.histogram.counts, type: 'bar', marker: { color: PLOT_COLORS.dataSoft }, width: edges[1] - edges[0], hovertemplate: 'Count %{y}<extra></extra>' }]} layout={{ ...BASE_LAYOUT, height: 220, margin: { l: 90, r: 24, b: 48, t: 12 }, xaxis: { ...AXIS, range: commonRange, title: { text: variable, standoff: 8 } }, yaxis: { ...AXIS, title: { text: 'Count' } } }} useResizeHandler style={{ width: '100%', height: 220 }} config={CONFIG}
           onInitialized={registry.register('observed', 'Observed values')}
           onUpdate={registry.register('observed', 'Observed values')}
           onPurge={registry.unregister('observed')} />
@@ -106,7 +113,7 @@ export default function InferenceObservation({ state }: { state: InferenceState 
       {piRows.length > 0 && <section>
         <h3 className="text-base font-semibold px-2">Prediction intervals</h3>
         <p className="text-xs text-[var(--color-text-muted)] px-2 mt-1">One future observation · same x-axis scale as observed values</p>
-        <IntervalPlot rows={piRows} result={state.piResult!} range={commonRange} color="#60a5fa" variable={variable} precision={state.precision}
+        <IntervalPlot rows={piRows} result={state.piResult!} range={commonRange} colorOf={() => PLOT_COLORS.pi} variable={variable} precision={state.precision}
           onReady={registry.register('prediction', 'Prediction intervals')} onPurge={registry.unregister('prediction')} />
       </section>}
       {locationRows.length > 0 && <section>
@@ -115,13 +122,13 @@ export default function InferenceObservation({ state }: { state: InferenceState 
           <button type="button" aria-pressed={state.draft.zoomCI} onClick={() => state.setDraft({ zoomCI: !state.draft.zoomCI })} className="px-3 py-2 rounded-md border border-[var(--color-border-md)] text-xs">{state.draft.zoomCI ? 'Use common scale' : 'Zoom to intervals'}</button>
         </div>
         <p role="status" className={'text-xs px-2 mt-2 ' + (state.draft.zoomCI ? 'text-amber-300' : 'text-[var(--color-text-muted)]')}>{state.draft.zoomCI ? 'Zoomed to confidence intervals — different x-axis scale from observed values and predictions.' : 'Same x-axis scale as observed values and prediction intervals.'}</p>
-        <IntervalPlot rows={locationRows} result={state.ciResult!} range={state.draft.zoomCI ? ciRange : commonRange} color="#34d399" variable={variable} precision={state.precision}
+        <IntervalPlot rows={locationRows} result={state.ciResult!} range={state.draft.zoomCI ? ciRange : commonRange} colorOf={colorOfRow} variable={variable} precision={state.precision}
           onReady={registry.register('location', 'Mean and median confidence intervals')} onPurge={registry.unregister('location')} />
       </section>}
       {deviationRows.length > 0 && <section>
         <h3 className="text-base font-semibold px-2">Deviation confidence intervals</h3>
         <p className="text-xs text-[var(--color-text-muted)] px-2 mt-1">Spread of the data · separate deviation axis</p>
-        <IntervalPlot rows={deviationRows} result={state.ciResult!} color="#fbbf24" variable={'Deviation of ' + variable + ' (data units)'} precision={state.precision}
+        <IntervalPlot rows={deviationRows} result={state.ciResult!} colorOf={colorOfRow} variable={'Deviation of ' + variable + ' (data units)'} precision={state.precision}
           onReady={registry.register('deviation', 'Deviation confidence intervals')} onPurge={registry.unregister('deviation')} />
       </section>}
     </div>
@@ -177,7 +184,7 @@ export default function InferenceObservation({ state }: { state: InferenceState 
     <ResultToolbar title={`Inference — ${variable || 'results'}`}
       exports={exportReady ? { png: exportPNG, csv: exportCSV, pdf: exportPDF } : undefined}
       ready={exportReady} disabledReason={state.isComputing ? 'Waiting for the applied result.' : 'Charts are still loading.'} />
-    {!hasResult && !state.isComputing && !state.error && <p className="text-sm text-[var(--color-text-muted)] p-6">{state.hasData ? 'Choose settings, then select Update to see interval plots.' : 'Upload a CSV in Data to begin.'}</p>}
+    {!hasResult && !state.isComputing && !state.error && <p className="text-sm text-[var(--color-text-muted)] p-6">{state.hasData ? 'Choose a variable to see interval plots.' : 'Upload a CSV in Data to begin.'}</p>}
     {content}
   </div>
 }

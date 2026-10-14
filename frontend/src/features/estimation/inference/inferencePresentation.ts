@@ -14,6 +14,11 @@ export function quantityLabel(statistic: string): string {
   if (text.includes('bootstrap')) return 'Bootstrap'
   return statistic
 }
+/** "Mean" for the normal-theory row, "Mean – bootstrap" for the row added by the bootstrap option. */
+export function rowLabel(row: Pick<IntervalRow, 'Statistic' | 'Method'>): string {
+  const label = quantityLabel(row.Statistic)
+  return label !== 'Bootstrap' && row.Method.startsWith('Bootstrap') ? label + ' – bootstrap' : label
+}
 export function pointEstimate(statistic: string, estimates: IntervalsResponse['point_estimates']): number | null {
   const label = quantityLabel(statistic)
   return label === 'Mean' ? estimates.mean : label === 'Median' ? estimates.median : label === 'Deviation' ? estimates.deviation : null

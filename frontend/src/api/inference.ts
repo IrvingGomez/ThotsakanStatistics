@@ -25,6 +25,13 @@ export interface InferenceParams {
   bootstrap_deviation: boolean;
   bootstrap_pi: boolean;
   bootstrap_samples: number;
+  // Normal-theory rows. A bootstrap flag adds its own row next to these rather than replacing them.
+  ci_mean_normal: boolean;
+  ci_median_normal: boolean;
+  ci_deviation_normal: boolean;
+  pi_mean_normal: boolean;
+  pi_median_normal: boolean;
+  pi_iqr_normal: boolean;
   filters?: Record<string, string[]> | null;
 }
 
@@ -33,7 +40,6 @@ export interface ConfidenceRegionsParams extends InferenceParams {
   eps_mu: number[];
   eps_sigma: number[];
   add_ci_box: boolean;
-  mu_ci_source: string;
 }
 
 export interface IntervalsResponse {
