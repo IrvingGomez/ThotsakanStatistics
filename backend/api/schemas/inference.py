@@ -24,14 +24,23 @@ class InferenceParams(BaseModel):
     bootstrap_deviation: bool = False
     bootstrap_pi: bool = False
     bootstrap_samples: int = 1000
+    # Normal-theory rows. A bootstrap flag ADDS its own row next to these instead of replacing them,
+    # so the methods can be compared. Defaults reproduce the previous behaviour.
+    ci_mean_normal: bool = True
+    ci_median_normal: bool = True
+    ci_deviation_normal: bool = True
+    pi_mean_normal: bool = True
+    pi_median_normal: bool = True
+    pi_iqr_normal: bool = True
     filters: Optional[Dict[str, List[str]]] = None
 
 class ConfidenceRegionsParams(InferenceParams):
+    # The estimators are fixed server-side (sample mean, std with ddof=1, normal theory), so the
+    # estimator and bootstrap fields inherited above are ignored for regions.
     probs: List[float]
     eps_mu: List[float]
     eps_sigma: List[float]
     add_ci_box: bool = True
-    mu_ci_source: str = "Mean-based CI"
 
 class PointEstimates(BaseModel):
     mean: float
