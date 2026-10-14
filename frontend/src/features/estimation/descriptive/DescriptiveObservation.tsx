@@ -5,6 +5,7 @@ import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import Plot from 'react-plotly.js'
 import { type DescriptiveResult, type StatRow } from '../../../api/descriptive'
 import type { DescriptiveConfig } from './DescriptiveControls'
+import { isRowVisible } from './descriptiveOptions'
 import ResultToolbar from '../../../components/ResultToolbar'
 import { downloadCSV } from '../../../utils/exportCSV'
 import { downloadChartsPNG } from '../../../utils/exportPNG'
@@ -454,7 +455,7 @@ export default function DescriptiveObservation({
 }: DescriptiveObservationProps) {
   const registry = useChartRegistry(CHART_ORDER)
   const visibleRows = useMemo(() => !result || !config ? []
-    : result.rows.filter((row) => !row.advancedId || config.advancedStats.includes(row.advancedId)), [result, config])
+    : result.rows.filter((row) => isRowVisible(row, config.selectedStats)), [result, config])
   const warnings: SnackItem[] = useMemo(() => {
     return visibleRows
       .filter(r => r.warning)

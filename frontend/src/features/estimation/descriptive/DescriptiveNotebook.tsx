@@ -121,7 +121,7 @@ function generateInterpretation(s: DescriptiveSummary, result: DescriptiveResult
     const excessKurt = kurt - 3
     if (excessKurt > 1) shape.push(`Leptokurtic (excess kurtosis = ${excessKurt.toFixed(3)}): heavier tails than Normal.`)
     else if (excessKurt < -1) shape.push(`Platykurtic (excess kurtosis = ${excessKurt.toFixed(3)}): lighter tails than Normal.`)
-    else shape.push(`Mesokurtic (excess kurtosis � ${excessKurt.toFixed(3)}): tails similar to Normal.`)
+    else shape.push(`Mesokurtic (excess kurtosis ≈ ${excessKurt.toFixed(3)}): tails similar to Normal.`)
   }
 
   const spread: string[] = []
@@ -155,8 +155,8 @@ function generateNarrative(
   const { n, mean, median, std, iqr } = s
 
   // Extract optional stats
-  const hasSkewness = config.advancedStats.includes('skewness')
-  const hasKurtosis = config.advancedStats.includes('kurtosis')
+  const hasSkewness = config.selectedStats.includes('skewness')
+  const hasKurtosis = config.selectedStats.includes('kurtosis')
 
   const skewRow = result.rows.find(r => r.measure.includes('Skewness (k-statistic)'))
   const kurtRow = result.rows.find(r => r.measure.includes('Kurtosis (k-statistic)'))
@@ -168,10 +168,10 @@ function generateNarrative(
 
   // Find robust means if enabled
   const trimRow = config.trimAlpha != null
-    ? result.rows.find(r => r.advancedId === 'trimmed_mean')
+    ? result.rows.find(r => r.statId === 'trimmed_mean')
     : null
   const winsorRow = config.winsorLimits != null
-    ? result.rows.find(r => r.advancedId === 'winsorized_mean')
+    ? result.rows.find(r => r.statId === 'winsorized_mean')
     : null
 
   // ── Tiny-sample guard ──
@@ -408,7 +408,7 @@ export default function DescriptiveNotebook({
   const p = precision
 
   // Find consistency correction context
-  const stdRow = result.rows.find((r) => r.measure === 'Std Dev (ddof=1)')
+  const stdRow = result.rows.find((r) => r.measure === 'Std (ddof=1)')
   const c4n = stdRow?.consistencyCorr != null && stdRow.value != null && stdRow.value !== 0
     ? (stdRow.value / stdRow.consistencyCorr).toFixed(6)
     : null
@@ -495,12 +495,12 @@ export default function DescriptiveNotebook({
             MAD = median(|x - median(x)|)
           </div>
           <div>
-            <p className="text-[var(--color-text-muted)] font-sans not-italic text-[10px] mb-0.5">Skewness (Fisher)</p>
-            g1 = m3 / m2^(3/2)
+            <p className="text-[var(--color-text-muted)] font-sans not-italic text-[10px] mb-0.5">Skewness (sample-adjusted, as in SciPy bias=False)</p>
+            G₁ = √(n(n−1)) / (n−2) · m₃ / m₂^(3/2)
           </div>
           <div>
-            <p className="text-[var(--color-text-muted)] font-sans not-italic text-[10px] mb-0.5">Kurtosis</p>
-            g2 = m4 / m2^2
+            <p className="text-[var(--color-text-muted)] font-sans not-italic text-[10px] mb-0.5">Kurtosis (not excess; sample-adjusted)</p>
+            G₂ + 3, with G₂ = (n−1) / ((n−2)(n−3)) · [(n+1) g₂ + 6], g₂ = m₄ / m₂² − 3
           </div>
         </div>
       </details>

@@ -27,7 +27,7 @@ function deferred<T>() {
 function result(mean: number): DescriptiveResult {
   return { rows: [], summary: { n: 1, mean, median: mean, std: 0, iqr: 0 }, histogram: { binEdges: [0, 1], counts: [1] }, boxData: { whiskerLo: mean, q1: mean, median: mean, q3: mean, whiskerHi: mean, outliers: [] } }
 }
-const config = (column: string): DescriptiveConfig => ({ column, weightsCol: null, quantileProbs: [0.25, 0.5, 0.75], trimAlpha: null, winsorLimits: null, showConsistencyCorr: true, advancedStats: [] })
+const config = (column: string): DescriptiveConfig => ({ column, weightsCol: null, quantileProbs: [0.25, 0.5, 0.75], trimAlpha: null, winsorLimits: null, showConsistencyCorr: true, selectedStats: ['mean'] })
 
 let root: Root
 let container: HTMLDivElement
@@ -65,6 +65,62 @@ describe('descriptive result ownership', () => {
     expect(hook.result?.summary.mean).toBe(2)
     expect(hook.config?.column).toBe('b')
     expect(hook.isComputing).toBe(false)
+  })
+
+  it('does not ask the backend again, or show a loading state, for display-only changes', async () => {
+    vi.mocked(computeDescriptiveStats).mockResolvedValue(result(5))
+    act(() => hook.handleRun(config('a')))
+    await act(async () => vi.advanceTimersByTimeAsync(250))
+    await act(async () => {})
+    expect(computeDescriptiveStats).toHaveBeenCalledTimes(1)
+
+    act(() => hook.handleRun({ ...config('a'), showConsistencyCorr: false, selectedStats: ['mean', 'median'] }))
+    expect(hook.isComputing).toBe(false)
+    await act(async () => vi.advanceTimersByTimeAsync(500))
+    expect(computeDescriptiveStats).toHaveBeenCalledTimes(1)
+    expect(hook.config?.showConsistencyCorr).toBe(false)
+    expect(hook.config?.selectedStats).toEqual(['mean', 'median'])
+    expect(hook.result?.summary.mean).toBe(5)
+  })
+
+  it('shows a result that arrives after a display change with the newest display settings', async () => {
+    const pending = deferred<DescriptiveResult>()
+    vi.mocked(computeDescriptiveStats).mockReturnValueOnce(pending.promise)
+    act(() => hook.handleRun(config('a')))
+    await act(async () => vi.advanceTimersByTimeAsync(250))
+    act(() => hook.handleRun({ ...config('a'), selectedStats: ['median'] }))
+    expect(computeDescriptiveStats).toHaveBeenCalledTimes(1) // same request: not restarted
+    await act(async () => pending.resolve(result(7)))
+    expect(hook.result?.summary.mean).toBe(7)
+    expect(hook.config?.selectedStats).toEqual(['median'])
+  })
+
+  it.each([
+    ['quantiles', { quantileProbs: [] as number[] }],
+    ['weights', { weightsCol: 'b' }],
+    ['trim', { trimAlpha: 0.1 }],
+    ['winsor', { winsorLimits: [0.1, 0.1] as [number, number] }],
+  ])('asks the backend again when %s change', async (_name, change) => {
+    vi.mocked(computeDescriptiveStats).mockResolvedValue(result(1))
+    act(() => hook.handleRun(config('a')))
+    await act(async () => vi.advanceTimersByTimeAsync(250))
+    act(() => hook.handleRun({ ...config('a'), ...change }))
+    await act(async () => vi.advanceTimersByTimeAsync(250))
+    expect(computeDescriptiveStats).toHaveBeenCalledTimes(2)
+  })
+
+  it('reports a backend failure and retries when the same settings are submitted again', async () => {
+    vi.mocked(computeDescriptiveStats).mockRejectedValueOnce(new Error('Weights column not found')).mockResolvedValue(result(4))
+    act(() => hook.handleRun(config('a')))
+    await act(async () => vi.advanceTimersByTimeAsync(250))
+    await act(async () => {})
+    expect(hook.error).toBe('Weights column not found')
+    act(() => hook.handleRun(config('a')))
+    await act(async () => vi.advanceTimersByTimeAsync(250))
+    await act(async () => {})
+    expect(computeDescriptiveStats).toHaveBeenCalledTimes(2)
+    expect(hook.error).toBeNull()
+    expect(hook.result?.summary.mean).toBe(4)
   })
 
   it('keeps the applied result visible while reset defaults recompute', async () => {

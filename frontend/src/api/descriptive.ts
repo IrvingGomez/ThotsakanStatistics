@@ -4,7 +4,7 @@ export interface StatRow {
   value: number | null
   consistencyCorr: number | null
   robust?: boolean
-  advancedId?: string
+  statId?: string
   warning?: string
 }
 

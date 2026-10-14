@@ -5,6 +5,7 @@ import { type DescriptiveResult } from '../../../api/descriptive'
 import DescriptiveControls, { type DescriptiveConfig } from './DescriptiveControls'
 import DescriptiveObservation from './DescriptiveObservation'
 import DescriptiveNotebook from './DescriptiveNotebook'
+import StatusBanner from '../../../components/StatusBanner'
 
 // ─── Slot wrappers ────────────────────────────────────────────────────────────
 
@@ -12,6 +13,7 @@ interface SlotProps {
   result: DescriptiveResult | null
   config: DescriptiveConfig | null
   isComputing: boolean
+  error?: string | null
   hasData: boolean
   precision: number
   filename: string
@@ -25,17 +27,11 @@ export function ControlsSlot({ onRun, onReset, isComputing }: Pick<SlotProps, 'o
   return <DescriptiveControls onRun={onRun} onReset={onReset} isComputing={isComputing} />
 }
 
-export function ObservationSlot({ result, config, hasData, precision, isComputing }: Pick<SlotProps, 'result' | 'config' | 'hasData' | 'precision' | 'isComputing'>) {
+export function ObservationSlot({ result, config, hasData, precision, isComputing, error = null }: Pick<SlotProps, 'result' | 'config' | 'hasData' | 'precision' | 'isComputing' | 'error'>) {
   return (
-    <div className="h-full relative">
+    <div className="h-full">
+      <StatusBanner isComputing={isComputing} error={error} hasResult={!!result} />
       <DescriptiveObservation result={result} config={config} hasData={hasData} precision={precision} isComputing={isComputing} />
-      {isComputing && (
-        <div className="absolute inset-0 bg-[var(--color-bg-base)]/50 backdrop-blur-sm flex items-center justify-center z-50 rounded-lg">
-          <div className="bg-[var(--color-bg-elevated)] border border-[var(--color-border)] px-4 py-2 rounded-lg shadow-lg text-sm font-semibold flex items-center gap-2">
-            <span className="animate-spin text-lg">⚙️</span> Computing Statistics...
-          </div>
-        </div>
-      )}
     </div>
   )
 }

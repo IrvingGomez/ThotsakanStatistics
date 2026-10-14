@@ -1,0 +1,124 @@
+import { act } from 'react'
+import { createRoot, type Root } from 'react-dom/client'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import DescriptiveControls, { type DescriptiveConfig } from './DescriptiveControls'
+
+const data = {
+  state: {
+    status: 'ready' as const, sessionId: 's', filename: 'f.csv', numericCols: ['score', 'w'], categoricalCols: [] as string[],
+    filters: {}, displayPrecision: 3,
+  },
+}
+vi.mock('../../../context/DataContext', () => ({ useData: () => data }))
+
+let root: Root
+let container: HTMLDivElement
+const onRun = vi.fn<(cfg: DescriptiveConfig) => void>()
+const onReset = vi.fn()
+const lastConfig = () => onRun.mock.lastCall![0]
+
+beforeEach(async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
+  onRun.mockClear()
+  container = document.createElement('div')
+  document.body.appendChild(container)
+  root = createRoot(container)
+  await act(async () => root.render(<DescriptiveControls onRun={onRun} onReset={onReset} />))
+})
+afterEach(async () => {
+  await act(async () => root.unmount())
+  container.remove()
+})
+
+const labelFor = (text: string) => [...container.querySelectorAll('label')].find(item => item.textContent === text)
+const checkbox = (text: string) => labelFor(text)!.querySelector('input') as HTMLInputElement
+const field = (text: string) => document.getElementById(labelFor(text)!.htmlFor) as HTMLInputElement | HTMLSelectElement
+const has = (text: string) => !!labelFor(text)
+const click = (element: HTMLElement) => act(async () => element.click())
+async function type(input: HTMLInputElement, value: string) {
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value)
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+}
+const openAdvanced = () => click([...container.querySelectorAll('button')].find(button => button.textContent?.includes('Advanced statistics'))!)
+
+describe('Descriptive controls', () => {
+  it('starts with every basic statistic ticked and no advanced ones, and already asks for a result', () => {
+    for (const label of ['Minimum', 'Maximum', 'Quantiles', 'Mean', 'Median', 'Std dev (ddof=1)', 'Variance (ddof=1)']) {
+      expect(checkbox(label).checked).toBe(true)
+    }
+    expect(lastConfig()).toMatchObject({
+      column: 'score', weightsCol: null, quantileProbs: [0.25, 0.5, 0.75], trimAlpha: null, winsorLimits: null,
+    })
+    expect(lastConfig().selectedStats).toEqual(expect.arrayContaining(['mean', 'median', 'quantiles', 'std_dev_1']))
+    expect(lastConfig().selectedStats).not.toContain('iqr')
+  })
+
+  it('lets the user deselect a single basic statistic, and a whole group', async () => {
+    await click(checkbox('Median'))
+    expect(lastConfig().selectedStats).toContain('mean')
+    expect(lastConfig().selectedStats).not.toContain('median')
+    await click(checkbox('Central tendency'))
+    expect(lastConfig().selectedStats).not.toContain('mean')
+    expect(has('Mean')).toBe(false) // its sub-options are hidden with it
+  })
+
+  it('shows the weights column only while Weighted mean is ticked, and sends it only then', async () => {
+    await openAdvanced()
+    expect(has('Weights column')).toBe(false)
+    await click(checkbox('Weighted mean'))
+    expect(has('Weights column')).toBe(true)
+    expect(lastConfig().weightsCol).toBeNull() // ticked, but no column chosen yet
+    await act(async () => {
+      const select = field('Weights column') as HTMLSelectElement
+      select.value = 'w'
+      select.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    expect(lastConfig().weightsCol).toBe('w')
+    await click(checkbox('Weighted mean'))
+    expect(has('Weights column')).toBe(false)
+    expect(lastConfig().weightsCol).toBeNull()
+  })
+
+  it('accepts blank quantile probabilities as "no quantiles" without an error', async () => {
+    await type(field('Quantile probabilities') as HTMLInputElement, '')
+    expect(container.querySelector('[role="alert"]')).toBeNull()
+    expect(lastConfig().quantileProbs).toEqual([])
+    await type(field('Quantile probabilities') as HTMLInputElement, '0, 0.9, 1')
+    expect(lastConfig().quantileProbs).toEqual([0, 0.9, 1])
+  })
+
+  it('does not run on invalid quantiles and says why', async () => {
+    onRun.mockClear()
+    await type(field('Quantile probabilities') as HTMLInputElement, '0.5, 2')
+    expect(onRun).not.toHaveBeenCalled()
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('Invalid quantiles')
+  })
+
+  it('sends no quantiles when the Quantiles box is unticked, and hides the probabilities field', async () => {
+    await click(checkbox('Quantiles'))
+    expect(lastConfig().quantileProbs).toEqual([])
+    expect(has('Quantile probabilities')).toBe(false)
+  })
+
+  it('fills sensible defaults for trimmed and winsorized means and only then shows their fields', async () => {
+    await openAdvanced()
+    expect(has('Trimming fraction')).toBe(false)
+    await click(checkbox('Trimmed mean'))
+    expect((field('Trimming fraction') as HTMLInputElement).value).toBe('0.10')
+    expect(lastConfig().trimAlpha).toBe(0.1)
+    await click(checkbox('Trimmed mean'))
+    expect(lastConfig().trimAlpha).toBeNull()
+  })
+
+  it('changes only display fields when the consistency switch is toggled', async () => {
+    const before = lastConfig()
+    await click(container.querySelector('[role="switch"]') as HTMLElement)
+    const after = lastConfig()
+    expect(after.showConsistencyCorr).toBe(false)
+    for (const key of ['column', 'weightsCol', 'quantileProbs', 'trimAlpha', 'winsorLimits'] as const) {
+      expect(after[key]).toEqual(before[key])
+    }
+  })
+})

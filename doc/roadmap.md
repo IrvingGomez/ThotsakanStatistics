@@ -51,12 +51,11 @@ When you fix one, delete it here and add a dated note under `changelogs/`.
 
 | # | Issue | Evidence | Fix direction |
 |---|---|---|---|
-| 1 | **Weighted analyses can misalign weights** when values are missing | `services/descriptive.py:60-61` and `api/routes/inference.py` drop NaNs from the data and the weights separately | Build one filtered frame and drop rows missing either value. Test the cases: data missing, weights missing, both. Moving the data prep out of the inference route (it breaks the thin-route rule) fixes both |
+| 1 | **Weighted analyses can misalign weights** when values are missing (Inference route only; Descriptive is fixed) | `api/routes/inference.py` takes the weights column without dropping rows that are missing a value or a weight | Build one filtered frame and drop rows missing either value, as `services/descriptive.py` now does. Move the data prep out of the route (it breaks the thin-route rule). Test: data missing, weights missing, both |
 | 2 | Dataset session expiry isn't shown in the UI | 30-min TTL in `sessions/store.py`; the Data tab keeps showing the local table, then every analysis fails with 404 | Detect 404 and prompt for re-upload |
 | 3 | Upload formats disagree | `DataTab.tsx` accepts `.csv,.tsv,.txt`; `routes/data.py` accepts only `.csv` with a comma delimiter | Align both sides |
 | 4 | Dataset sessions aren't tied to the user | `get_session_data` checks only the header | Store the owner with the session |
 | 5 | `LabBench` calls `setState` during render | Width sync in the render body of `layout/LabBench.tsx` | Move it into an effect |
-| 6 | Descriptive tab never shows backend errors | `App.tsx` passes no `error` to the Descriptive slots | Use `AnalysisStatus` like the other tabs |
 | 7 | Leftover KaTeX/MathLive declarations | `react-plotly.d.ts`, `custom-elements.d.ts`; packages not installed | Delete them |
 | 8 | Unused `useContainerBreakpoint` hook | LabBench uses `matchMedia('(max-width: 1199px)')` | Delete it |
 | 9 | `core/data_stats.py` imports `gradio` | Not installed; module unused | Leave it (legacy copy) or remove it |

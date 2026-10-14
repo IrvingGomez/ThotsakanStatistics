@@ -308,6 +308,7 @@ export default function App() {
             hasData={descriptive.hasData}
             precision={descriptive.precision}
             isComputing={descriptive.isComputing}
+            error={descriptive.error}
           />
         </Suspense>
       )
