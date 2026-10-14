@@ -16,7 +16,7 @@ class StatRow(BaseModel):
     value: float | None
     consistencyCorr: float | None
     robust: bool = False
-    advancedId: Optional[str] = None
+    statId: Optional[str] = None  # which UI checkbox owns this row; None = always shown
     warning: Optional[str] = None
 
 class DescriptiveSummary(BaseModel):

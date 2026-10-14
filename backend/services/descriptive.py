@@ -19,13 +19,24 @@ def build_histogram(series: pd.Series) -> HistogramData:
     data = compute_histogram(series)
     return HistogramData(binEdges=data["binEdges"], counts=data["counts"])
 
-def _advanced_id(measure: str) -> str | None:
-    """Map a core measure name to the frontend advancedId, or None for basic stats."""
+def _stat_id(measure: str, category: str) -> str | None:
+    """Map a row to the id of the checkbox that owns it (None = always shown).
+
+    Every selectable statistic has an id, basic or advanced, so the frontend can show or hide
+    rows without asking the backend again.
+    """
+    if category == "Quantiles":
+        return "quantiles"
     if measure.startswith("Trimmed Mean"):
         return "trimmed_mean"
     if measure.startswith("Winsorized Mean"):
         return "winsorized_mean"
     return {
+        "Minimum":            "minimum",
+        "Maximum":            "maximum",
+        "Mean":               "mean",
+        "Median":             "median",
+        "Std (ddof=1)":       "std_dev_1",
         "Interquartile Mean": "iqm",
         "Weighted Mean":      "weighted_mean",
         "Geometric Mean":     "geometric_mean",
@@ -57,8 +68,16 @@ def calculate_descriptive(df: pd.DataFrame, req: DescriptiveRequest) -> Descript
                 df_col_cleaned = df_col_str.str.replace(r'\.0$', '', regex=True)
                 df = df[df_col_str.isin(allowed_values) | df_col_cleaned.isin(allowed_values)]
 
-    series = df[req.column].dropna()
-    weights = df[req.weightsCol].dropna() if req.weightsCol else None
+    if req.weightsCol:
+        if req.weightsCol not in df.columns:
+            raise ValueError(f"Weights column '{req.weightsCol}' not found in dataset")
+        # One frame, so values and weights stay aligned: rows missing either are dropped together.
+        complete = df[[req.column, req.weightsCol]].dropna()
+        series = complete[req.column]
+        weights = complete[req.weightsCol]
+    else:
+        series = df[req.column].dropna()
+        weights = None
     
     if len(series) < 2:
         raise ValueError(f"Not enough data points ({len(series)}) for column '{req.column}' after filtering.")
@@ -85,8 +104,8 @@ def calculate_descriptive(df: pd.DataFrame, req: DescriptiveRequest) -> Descript
 
     # Add extremes explicitly since core/ may not add min/max
     _min, _max = series.min(), series.max()
-    rows.append(StatRow(category="Extremes", measure="Minimum", value=_min, consistencyCorr=None, robust=False))
-    rows.append(StatRow(category="Extremes", measure="Maximum", value=_max, consistencyCorr=None, robust=False))
+    rows.append(StatRow(category="Extremes", measure="Minimum", value=_min, consistencyCorr=None, robust=False, statId="minimum"))
+    rows.append(StatRow(category="Extremes", measure="Maximum", value=_max, consistencyCorr=None, robust=False, statId="maximum"))
     
     for _, row in stats_df.iterrows():
         cat = cat_map.get(row["Statistic Type"], "Central Tendency")
@@ -99,7 +118,7 @@ def calculate_descriptive(df: pd.DataFrame, req: DescriptiveRequest) -> Descript
             value=val,
             consistencyCorr=corr,
             robust=bool(row["Robust"]),
-            advancedId=_advanced_id(str(row["Measure"]))
+            statId=_stat_id(str(row["Measure"]), cat)
         ))
         
     # 2. Build Summary

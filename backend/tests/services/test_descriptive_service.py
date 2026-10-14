@@ -36,3 +36,54 @@ def test_build_histogram():
     assert len(hist.binEdges) > 1
     assert len(hist.counts) == len(hist.binEdges) - 1
     assert sum(hist.counts) == 9
+
+
+def _request(**overrides):
+    base = dict(session_id="dummy", column="Score")
+    base.update(overrides)
+    return DescriptiveRequest(**base)
+
+
+def test_every_selectable_statistic_carries_a_stat_id():
+    df = pd.DataFrame({"Score": [10, 20, 20, 30, 40, 50], "W": [1, 2, 1, 2, 1, 2]})
+    res = calculate_descriptive(df, _request(trimAlpha=0.1, winsorLimits=(0.1, 0.1), weightsCol="W"))
+    ids = {r.measure: r.statId for r in res.rows}
+    assert ids["Minimum"] == "minimum" and ids["Maximum"] == "maximum"
+    assert ids["Mean"] == "mean" and ids["Median"] == "median"
+    assert ids["Std (ddof=1)"] == "std_dev_1" and ids["Variance (ddof=1)"] == "variance_1"
+    assert ids["Std (ddof=0)"] == "std_dev_0"
+    assert ids["Weighted Mean"] == "weighted_mean"
+    assert {r.statId for r in res.rows if r.category == "Quantiles"} == {"quantiles"}
+    assert not [r.measure for r in res.rows if r.statId is None]
+
+
+def test_empty_quantile_probabilities_give_no_quantile_rows():
+    df = pd.DataFrame({"Score": [10, 20, 20, 30, 40, 50]})
+    res = calculate_descriptive(df, _request(quantileProbs=[]))
+    assert not [r for r in res.rows if r.category == "Quantiles"]
+    assert any(r.measure == "Mean" for r in res.rows)  # everything else is still there
+
+
+def test_quantile_probabilities_at_the_ends_are_allowed():
+    df = pd.DataFrame({"Score": [10, 20, 20, 30, 40, 50]})
+    res = calculate_descriptive(df, _request(quantileProbs=[0, 1]))
+    values = {r.measure: r.value for r in res.rows if r.category == "Quantiles"}
+    assert values == {"Q0.0": 10.0, "Q1.0": 50.0}
+
+
+def test_weights_stay_aligned_when_values_or_weights_are_missing():
+    df = pd.DataFrame({
+        "Score": [10, 20, None, 40, 50, 60],
+        "W": [1, None, 3, 1, 2, 2],
+    })
+    # rows 1 (weight missing) and 2 (value missing) are dropped together -> 10, 40, 50, 60
+    res = calculate_descriptive(df, _request(weightsCol="W"))
+    assert res.summary.n == 4
+    weighted = next(r for r in res.rows if r.measure == "Weighted Mean")
+    assert weighted.value == pytest.approx((10 * 1 + 40 * 1 + 50 * 2 + 60 * 2) / 6)
+
+
+def test_unknown_weights_column_is_a_clear_error():
+    df = pd.DataFrame({"Score": [1, 2, 3, 4]})
+    with pytest.raises(ValueError, match="Weights column 'nope' not found"):
+        calculate_descriptive(df, _request(weightsCol="nope"))
