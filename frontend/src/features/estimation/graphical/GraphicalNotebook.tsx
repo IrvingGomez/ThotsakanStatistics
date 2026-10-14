@@ -1,133 +1,56 @@
 // features/estimation/graphical/GraphicalNotebook.tsx
-// Right panel: the numbers behind the picture — sample size, the estimates the
-// overlays were drawn from, interval endpoints, and a contextual lesson note.
+// Right panel: the numbers behind the picture — sample size, the estimates the normal
+// overlay was drawn from, and the definition of what is plotted.
 
 import type { GraphicalResponse } from '../../../api/graphical'
+import { Row, Section } from '../../../components/notebook/NotebookParts'
+import { EmptyState } from '../../../components/StatusBanner'
 
 interface GraphicalNotebookProps {
   result: GraphicalResponse | null
   column: string
   graphType: string
   precision: number
-  staleOverlays: string[]
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="mb-6">
-      <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--color-text-muted)] mb-3 pb-1 border-b border-[var(--color-border-md)]">
-        {title}
-      </h3>
-      {children}
-    </div>
-  )
+/** What each plot is, in the notation of the formulas it uses. */
+const DEFINITIONS: Record<string, string[]> = {
+  Histogram: ['density = count / (n × bin width)', 'Bar areas sum to 1, so shapes stay comparable across bin counts.'],
+  PMF: ['p(x) = count(x) / n', 'One bar per distinct value; meaningful for discrete variables.'],
+  ECDF: ['F̂(x) = (number of observations ≤ x) / n', 'DKW band: F̂(x) ± ε, with ε = √(ln(2/α) / (2n)).'],
 }
 
-function StatRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex flex-wrap justify-between items-baseline gap-x-3 py-1 text-xs">
-      <span className="text-[var(--color-text-muted)]">{label}</span>
-      <span className="font-mono break-all text-[var(--color-text)]">{value}</span>
-    </div>
-  )
-}
-
-const LESSONS: Record<string, string> = {
-  Histogram:
-    'The bars show density, not counts — their total area is 1, so the shape stays comparable when you change the bin count. Drag the bin control and watch the story change without the data changing.',
-  PMF:
-    'The empirical PMF puts one spike on every distinct value it observes. That only tells you something when the variable is genuinely discrete — on a continuous measurement every spike is just 1/n.',
-  ECDF:
-    'The ECDF makes no binning choice at all, so nothing about it is a judgement call. The band around it is the DKW bound: with probability 1 − α, the true CDF lies entirely inside it — everywhere at once, not point by point.',
-}
-
-export default function GraphicalNotebook({
-  result, column, graphType, precision, staleOverlays,
-}: GraphicalNotebookProps) {
-  if (!result) {
-    return (
-      <div className="text-center py-10 text-[var(--color-text-muted)] text-sm italic">
-        No results yet. Pick a column, then press Run for the estimator-backed overlays.
-      </div>
-    )
-  }
+export default function GraphicalNotebook({ result, column, graphType, precision }: GraphicalNotebookProps) {
+  if (!result) return <EmptyState message="Pick a column to see results." />
 
   const fmt = (v: number | null | undefined) =>
     v === null || v === undefined ? '—' : Number(v).toFixed(precision)
 
-  const { summary, point_estimates: pe, interval_bands: bands, ecdf_data, alpha } = result
+  const { summary, point_estimates: pe, ecdf_data, alpha } = result
 
   return (
     <div className="flex flex-col">
 
       <Section title="Sample">
-        <StatRow label="Variable" value={column} />
-        <StatRow label="n" value={String(summary.n)} />
-        <StatRow label="Unique values" value={String(summary.n_unique)} />
-        {result.histogram_data && (
-          <StatRow label="Bins" value={String(result.histogram_data.counts.length)} />
-        )}
-        {ecdf_data && <StatRow label="DKW ε" value={fmt(ecdf_data.epsilon)} />}
-        {alpha != null && <StatRow label="α" value={fmt(alpha)} />}
+        <Row label="Variable" value={column} />
+        <Row label="n" value={String(summary.n)} />
+        <Row label="Unique values" value={String(summary.n_unique)} />
+        {result.histogram_data && <Row label="Bins" value={String(result.histogram_data.counts.length)} />}
+        {ecdf_data && alpha != null && <Row label="DKW ε" value={fmt(ecdf_data.epsilon)} />}
+        {alpha != null && <Row label="α" value={fmt(alpha)} />}
       </Section>
 
       {(pe?.mu != null || pe?.sigma != null) && (
-        <Section title="Overlay estimates">
-          <StatRow label="μ̂" value={fmt(pe?.mu)} />
-          <StatRow label="σ̂" value={fmt(pe?.sigma)} />
-          {result.dist_used && (
-            <StatRow
-              label="Pivot"
-              value={result.dist_used === 't' ? "Student's t" : 'Normal (z)'}
-            />
-          )}
+        <Section title="Normal overlay">
+          <Row label="μ̂" value={fmt(pe?.mu)} />
+          <Row label="σ̂" value={fmt(pe?.sigma)} />
         </Section>
       )}
 
-      {bands && bands.length > 0 && (
-        <Section title="Intervals">
-          <div className="space-y-2">
-            {bands.map((band) => (
-              <article key={band.label} className="rounded-md border border-[var(--color-border-md)] bg-[var(--color-bg-input)] p-3">
-                <h4 className="text-sm font-medium break-words mb-2">{band.label}</h4>
-                <dl className="grid grid-cols-2 gap-3 text-xs">
-                  <div className="min-w-0"><dt className="text-[var(--color-text-muted)]">Lower</dt><dd className="font-mono break-all mt-1">{fmt(band.low)}</dd></div>
-                  <div className="min-w-0"><dt className="text-[var(--color-text-muted)]">Upper</dt><dd className="font-mono break-all mt-1">{fmt(band.high)}</dd></div>
-                </dl>
-              </article>
-            ))}
-          </div>
-          <p className="text-sm text-[var(--color-text-muted)] mt-2 leading-relaxed">
-            A confidence interval brackets a parameter; a prediction interval
-            brackets the next observation. The prediction interval is wider —
-            it carries the spread of the data itself, not just the uncertainty
-            in the estimate.
-          </p>
-        </Section>
-      )}
-
-      {staleOverlays.length > 0 && (
-        <Section title="Awaiting Run">
-          {staleOverlays.map((o) => (
-            <p key={o} className="text-xs text-amber-500/90 leading-snug mb-2">
-              ● {o} is not in these numbers — press Run to resample it.
-            </p>
-          ))}
-        </Section>
-      )}
-
-      {result.warnings.length > 0 && (
-        <Section title="Notes">
-          {result.warnings.map((w) => (
-            <p key={w} className="text-xs text-amber-500/90 leading-snug mb-2">⚠️ {w}</p>
-          ))}
-        </Section>
-      )}
-
-      <Section title="Lesson">
-        <p className="text-sm text-[var(--color-text-muted)] leading-relaxed">
-          {LESSONS[graphType] ?? ''}
-        </p>
+      <Section title="Definition">
+        {(DEFINITIONS[graphType] ?? []).map((line) => (
+          <p key={line} className="mb-1 text-xs font-mono text-[var(--color-text-muted)] leading-relaxed">{line}</p>
+        ))}
       </Section>
     </div>
   )

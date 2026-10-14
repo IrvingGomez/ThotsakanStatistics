@@ -68,7 +68,7 @@ api/routes/  (+ api/deps, api/schemas)
 | `probability/custom_distributions/`, `approximation/` | Empty stubs |
 | `estimation/descriptive.py` | Descriptive measures + `compute_histogram`, `compute_boxplot_data` |
 | `estimation/graphical_analysis.py` | Professor's matplotlib plots (byte-identical, not used by the API) |
-| `estimation/graphical_json.py` | JSON version for the API: histogram, PMF, ECDF + DKW band, KDE, rug, normal, interval bands *(project addition)* |
+| `estimation/graphical_json.py` | JSON version for the API: histogram, PMF, ECDF + DKW band, KDE, rug, normal *(project addition)* |
 | `estimation/inference/` | `ci*.py`, `pi*.py`, `estimators.py`, `estimator_options.py`, `likelihood.py`, `confidence_regions.py` |
 | `hypothesis_testing/__init__.py` | Professor's four tests (byte-identical, never edit) |
 | `hypothesis_testing/rejection_region.py`, `tables.py` | α, critical values, rejection region; plot-free ANOVA table *(project additions)* |
@@ -82,7 +82,7 @@ api/routes/  (+ api/deps, api/schemas)
 | `services/auth.py` | Verify Google ID tokens; issue and read session JWTs |
 | `services/descriptive.py` | Filters, NaN handling, weights → `core/estimation/descriptive.py` |
 | `services/inference.py` | Picks the distribution and estimators; builds CIs, PIs and confidence regions |
-| `services/graphical.py` | Graph data via `graphical_json.py`; reuses `services/inference.py` for CI/PI bands |
+| `services/graphical.py` | Graph data via `graphical_json.py`; the normal overlay takes one μ and one σ estimator |
 | `services/hypothesis.py` | Runs the selected test, builds the groups, adds the rejection region |
 | `services/probability.py` | Thin wrapper over `core/probability/` |
 | `api/routes/*.py` | One router per area (endpoints in §6) |
@@ -151,9 +151,9 @@ Tab state hooks are created in `App.tsx`, so each tab keeps its state when you s
 | Tab | Trigger | Debounce | Aborts stale requests |
 |---|---|---|---|
 | Common Distributions | Every parameter change (provisional preview first) | 250 ms | ✓ |
-| Descriptive | Run / Reset | 250 ms | ✓ |
-| Statistical Inference | Run | — | — |
-| Graphical Analysis | Display toggles update live; estimator/bootstrap overlays use Run | 250 ms (live) | ✓ |
+| Descriptive | Every request-field change (display-only changes re-filter, no request) | 250 ms | ✓ |
+| Statistical Inference | Every change | 250 ms (700 ms while bootstrap is on) | — |
+| Graphical Analysis | Every change | 250 ms | ✓ |
 | Hypothesis Testing | Run, then re-runs live on changes | 250 ms (re-runs) | — |
 
 ## 9. Testing and CI

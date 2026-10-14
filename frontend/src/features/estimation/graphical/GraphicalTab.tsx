@@ -1,4 +1,4 @@
-import AnalysisStatus from '../../../components/AnalysisStatus'
+import StatusBanner from '../../../components/StatusBanner'
 import GraphicalControls from './GraphicalControls'
 import GraphicalObservation from './GraphicalObservation'
 import GraphicalNotebook from './GraphicalNotebook'
@@ -10,23 +10,23 @@ export function ControlsSlot({ state }: SlotProps) {
   return <GraphicalControls state={state} />
 }
 
-function Status({ state }: SlotProps) {
+/** Warnings describe the plot on screen, so they appear with the plot only. */
+function Status({ state, warnings = false }: SlotProps & { warnings?: boolean }) {
   return (
-    <AnalysisStatus isComputing={state.isComputing} error={state.error} hasResult={!!state.result}
-      isDirty={state.isDirty || state.isPrevious || state.staleOverlays.length > 0} onRetry={state.retry}
-      dirtyMessage={state.isDirty ? 'Overlay settings changed — press Run.' : state.staleOverlays.length ? 'Bootstrap overlays need updating — press Run.' : 'Settings changed — update results'}>
+    <StatusBanner isComputing={state.isComputing} error={state.error} hasResult={!!state.result} onRetry={state.retry}
+      warnings={warnings ? state.warnings : undefined}>
       {state.appliedContext && <p>Applied: {state.appliedContext}</p>}
       {state.appliedSettings && <details className="mt-1"><summary className="cursor-pointer">Applied graph settings</summary><p className="mt-1">{state.appliedSettings}</p></details>}
-    </AnalysisStatus>
+    </StatusBanner>
   )
 }
 
 export function ObservationSlot({ state }: SlotProps) {
   return (
     <div className="analysis-panel flex flex-col min-h-0">
-      <Status state={state} />
+      <Status state={state} warnings />
       {(!state.error || state.result) && <GraphicalObservation result={state.result} column={state.column} graphType={state.graphType}
-        hasData={state.hasData} isComputing={state.isComputing} staleOverlays={state.staleOverlays} />}
+        hasData={state.hasData} isComputing={state.isComputing} />}
     </div>
   )
 }
@@ -36,7 +36,7 @@ export function NotebookSlot({ state }: SlotProps) {
     <div className="analysis-panel">
       <Status state={state} />
       {(state.result || (!state.error && !state.isComputing)) && <GraphicalNotebook result={state.result} column={state.column} graphType={state.graphType}
-        precision={state.precision} staleOverlays={state.staleOverlays} />}
+        precision={state.precision} />}
     </div>
   )
 }

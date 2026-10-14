@@ -7,6 +7,8 @@ export const PLOT_COLORS = {
   /** Observed data: histogram bars, ECDF, empirical PMF, box plot. */
   data: '#818cf8',
   dataSoft: 'rgba(129,140,248,0.45)',
+  /** Translucent fill behind data, e.g. the ECDF confidence band. */
+  dataBand: 'rgba(129,140,248,0.25)',
   /** Smoothed/fitted overlays: KDE. */
   fit: '#c4b5fd',
   /** Reference curves: normal density / CDF, null distribution. */

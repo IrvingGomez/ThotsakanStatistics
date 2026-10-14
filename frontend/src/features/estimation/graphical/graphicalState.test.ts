@@ -3,10 +3,7 @@ import {
   DEFAULT_CONFIG,
   clearWeightsIfUnused,
   configForDataset,
-  heavyOf,
-  isDirty,
-  mergeForLive,
-  overlaysNeedingRun,
+  normalApplies,
   supportedOverlays,
   toParams,
   updateGraphicalConfig,
@@ -20,237 +17,129 @@ const base = (over: Partial<GraphicalConfig> = {}): GraphicalConfig => ({
   ...over,
 })
 
-describe('mergeForLive', () => {
-  it('drops every overlay until something has been run', () => {
-    const cfg = base({ addNormal: true, addCi: true, addPi: true })
-    const live = mergeForLive(cfg, null)
-    expect(live.addNormal).toBe(false)
-    expect(live.addCi).toBe(false)
-    expect(live.addPi).toBe(false)
-  })
-
-  it('does not apply draft estimators, weights or bootstrap flags before the first Run', () => {
-    const cfg = base({ meanEstimator: 'Weighted Mean', weightsColumn: 'W', bootstrapMean: true, bootstrapPi: true })
-    const live = mergeForLive(cfg, null)
-    expect(live.meanEstimator).toBe('Sample Mean')
-    expect(live.weightsColumn).toBeNull()
-    expect(live.bootstrapMean).toBe(false)
-    expect(live.bootstrapPi).toBe(false)
-  })
-
-  it('keeps the cheap settings the user is currently editing', () => {
-    const committed = heavyOf(base({ addNormal: true }))
-    const cfg = base({ addKde: false, bins: 12, graphType: 'ECDF', addNormal: true })
-    const live = mergeForLive(cfg, committed)
-    expect(live.addKde).toBe(false)
-    expect(live.bins).toBe(12)
-    expect(live.graphType).toBe('ECDF')
-  })
-
-  it('replays committed overlays rather than the uncommitted ones', () => {
-    const committed = heavyOf(base({ addNormal: true, addCi: false }))
-    // The user has since ticked CI but not pressed Run.
-    const cfg = base({ addNormal: true, addCi: true })
-    const live = mergeForLive(cfg, committed)
-    expect(live.addNormal).toBe(true)
-    expect(live.addCi).toBe(false)
-  })
-
-  it('never starts a bootstrap from a display toggle', () => {
-    const committed = heavyOf(base({ addCi: true, bootstrapMean: true, bootstrapSamples: 5000 }))
-    const live = mergeForLive(base({ addKde: false }), committed)
-    expect(live.bootstrapMean).toBe(false)
-    expect(live.bootstrapMedian).toBe(false)
-    expect(live.bootstrapPi).toBe(false)
-  })
-
-  it('drops a bootstrap CI instead of substituting the analytic one', () => {
-    // Silently swapping estimators would change the number under the same label.
-    const committed = heavyOf(base({ addCi: true, bootstrapMean: true }))
-    expect(mergeForLive(base(), committed).addCi).toBe(false)
-  })
-
-  it('keeps an analytic CI live, since it is cheap and unchanged', () => {
-    const committed = heavyOf(base({ addCi: true, bootstrapMean: false }))
-    expect(mergeForLive(base(), committed).addCi).toBe(true)
-  })
-
-  it('drops a bootstrap PI but keeps an analytic one', () => {
-    const boot = heavyOf(base({ addPi: true, piChoice: 'Bootstrap', bootstrapPi: true }))
-    expect(mergeForLive(base(), boot).addPi).toBe(false)
-
-    const analytic = heavyOf(base({ addPi: true, piChoice: 'IQR' }))
-    expect(mergeForLive(base(), analytic).addPi).toBe(true)
-  })
-})
-
-describe('overlaysNeedingRun', () => {
-  it('reports nothing before the first run', () => {
-    expect(overlaysNeedingRun(null)).toEqual([])
-  })
-
-  it('reports nothing when no bootstrap is involved', () => {
-    expect(overlaysNeedingRun(heavyOf(base({ addCi: true, addNormal: true })))).toEqual([])
-  })
-
-  it('names the bootstrap-backed overlays a live refresh cannot redraw', () => {
-    const committed = heavyOf(base({
-      addCi: true, bootstrapMedian: true,
-      addPi: true, piChoice: 'Bootstrap', bootstrapPi: true,
-    }))
-    expect(overlaysNeedingRun(committed)).toEqual([
-      'Confidence interval (bootstrap)',
-      'Prediction interval (bootstrap)',
-    ])
-  })
-})
-
-describe('isDirty', () => {
-  it('is clean on a fresh config with no overlays requested', () => {
-    expect(isDirty(base(), null)).toBe(false)
-  })
-
-  it('is dirty when an overlay is requested but never run', () => {
-    expect(isDirty(base({ addCi: true }), null)).toBe(true)
-  })
-
-  it('marks edited overlay settings pending even before the first explicit Run', () => {
-    expect(isDirty(base({ confLevel: 0.99 }), null)).toBe(true)
-  })
-
-  it('is clean immediately after a run', () => {
-    const cfg = base({ addNormal: true, addCi: true, bootstrapMean: true })
-    expect(isDirty(cfg, heavyOf(cfg))).toBe(false)
-  })
-
-  it('ignores cheap edits — those refresh on their own', () => {
-    const cfg = base({ addNormal: true })
-    const committed = heavyOf(cfg)
-    const edited = { ...cfg, addKde: false, bins: 30, graphType: 'ECDF' as const }
-    expect(isDirty(edited, committed)).toBe(false)
-  })
-
-  it.each([
-    ['estimator', { meanEstimator: 'Interquartile Mean' }],
-    ['confidence level', { confLevel: 0.99 }],
-    ['bootstrap sample count', { bootstrapSamples: 2000 }],
-    ['CI choice', { ciChoice: 'Mean' as const }],
-  ])('is dirty after changing the %s', (_label, over) => {
-    const cfg = base({ addCi: true })
-    const committed = heavyOf(cfg)
-    expect(isDirty({ ...cfg, ...over }, committed)).toBe(true)
-  })
-})
-
-describe('overlay input defaults and validation', () => {
-  it('commits the visible trim default when the method is selected', () => {
-    const next = updateGraphicalConfig(base(), 'meanEstimator', 'Trimmed Mean')
-    expect(next.trimParam).toBe(0.1)
-    expect(toParams(next, {}).trim_param).toBe(0.1)
-  })
-
-  it('enables bootstrap prediction when selected and clears it for analytic methods', () => {
-    const bootstrap = updateGraphicalConfig(base({ addPi: true }), 'piChoice', 'Bootstrap')
-    expect(bootstrap.bootstrapPi).toBe(true)
-    expect(updateGraphicalConfig(bootstrap, 'piChoice', 'Mean').bootstrapPi).toBe(false)
-  })
-
-  it('requires valid winsor fractions only when an overlay needs them', () => {
-    const cfg = base({ addNormal: true, meanEstimator: 'Winsorized Mean' })
-    expect(validateGraphicalConfig(cfg, '0.1, 0.1')).toEqual({})
-    for (const invalid of ['0.1', '0.1,', '-0.1, 0.1', '0.5, 0.1', 'NaN, 0.1']) {
-      expect(validateGraphicalConfig(cfg, invalid)).toHaveProperty('winsorLimits')
+describe('config shape', () => {
+  it('no longer carries interval, bootstrap or confidence-level settings', () => {
+    const keys = Object.keys(base())
+    for (const removed of ['addCi', 'ciChoice', 'addPi', 'piChoice', 'confLevel', 'ecdfConfLevel', 'bootstrapMean', 'bootstrapSamples', 'normalMuSource', 'meanEstimator', 'medianEstimator']) {
+      expect(keys).not.toContain(removed)
     }
-    expect(validateGraphicalConfig({ ...cfg, addNormal: false }, '')).toEqual({})
-  })
-
-  it('requires a weights column for weighted overlays', () => {
-    const cfg = base({ addCi: true, meanEstimator: 'Weighted Mean' })
-    expect(validateGraphicalConfig(cfg, '')).toHaveProperty('weightsColumn')
-    expect(validateGraphicalConfig({ ...cfg, weightsColumn: 'W' }, '')).toEqual({})
-  })
-})
-
-describe('configForDataset', () => {
-  it('leaves a still-valid selection alone', () => {
-    const cfg = base({ column: 'Age' })
-    expect(configForDataset(cfg, ['Age', 'Height'])).toBe(cfg)
-  })
-
-  it('falls back to the first column when the old one is gone', () => {
-    const next = configForDataset(base({ column: 'Age' }), ['Weight', 'Height'])
-    expect(next.column).toBe('Weight')
-  })
-
-  it('picks a column when none was selected', () => {
-    expect(configForDataset(base({ column: '' }), ['Weight']).column).toBe('Weight')
-  })
-
-  it('empties the column when the new dataset has no numeric columns', () => {
-    expect(configForDataset(base({ column: 'Age' }), []).column).toBe('')
-  })
-
-  it('clears a weights column that the new dataset does not have', () => {
-    const cfg = base({ column: 'Age', weightsColumn: 'OldWeight' })
-    const next = configForDataset(cfg, ['Age', 'Height'])
-    expect(next.column).toBe('Age')
-    expect(next.weightsColumn).toBeNull()
-  })
-})
-
-describe('clearWeightsIfUnused', () => {
-  it('keeps the weights column for the weighted mean', () => {
-    const cfg = base({ meanEstimator: 'Weighted Mean', weightsColumn: 'W' })
-    expect(clearWeightsIfUnused(cfg).weightsColumn).toBe('W')
-  })
-
-  it('drops a stale weights column for every other estimator', () => {
-    // Left in place it would reach the backend and shrink the sample.
-    const cfg = base({ meanEstimator: 'Sample Mean', weightsColumn: 'W' })
-    expect(clearWeightsIfUnused(cfg).weightsColumn).toBeNull()
-  })
-
-  it('is a no-op when there is nothing to clear', () => {
-    const cfg = base()
-    expect(clearWeightsIfUnused(cfg)).toBe(cfg)
+    expect(base().alpha).toBe(0.05)
   })
 })
 
 describe('supportedOverlays', () => {
-  it('offers KDE and bins only on the histogram', () => {
-    expect(supportedOverlays('Histogram')).toMatchObject({ kde: true, bins: true })
-    expect(supportedOverlays('PMF')).toMatchObject({ kde: false, bins: false })
-    expect(supportedOverlays('ECDF')).toMatchObject({ kde: false, bins: false })
+  it('shows each option only where it applies', () => {
+    expect(supportedOverlays('Histogram')).toEqual({ kde: true, rug: true, normal: true, confBand: false, bins: true })
+    expect(supportedOverlays('PMF')).toEqual({ kde: false, rug: true, normal: false, confBand: false, bins: false })
+    expect(supportedOverlays('ECDF')).toEqual({ kde: false, rug: false, normal: true, confBand: true, bins: false })
   })
 
-  it('refuses a density overlay on the probability axis of a PMF', () => {
-    expect(supportedOverlays('PMF').normal).toBe(false)
-    expect(supportedOverlays('Histogram').normal).toBe(true)
-  })
-
-  it('puts the confidence band on the ECDF and the interval strip elsewhere', () => {
-    expect(supportedOverlays('ECDF')).toMatchObject({ confBand: true, intervals: false })
-    expect(supportedOverlays('Histogram')).toMatchObject({ confBand: false, intervals: true })
+  it('draws a normal curve only where a density/CDF is comparable', () => {
+    expect(normalApplies(base({ addNormal: true }))).toBe(true)
+    expect(normalApplies(base({ addNormal: true, graphType: 'PMF' }))).toBe(false)
+    expect(normalApplies(base({ addNormal: false }))).toBe(false)
   })
 })
 
-describe('toParams', () => {
-  it('maps the config onto the wire shape', () => {
-    const p = toParams(base({ column: 'Age', bins: 20, graphType: 'ECDF' }), {})
-    expect(p).toMatchObject({
-      column: 'Age',
-      graph_type: 'ECDF',
-      bins: 20,
-      add_kde: true,
-      bootstrap_samples: 1000,
-    })
+describe('toParams: a hidden option is never sent', () => {
+  it('does not send a KDE flag from the ECDF view (the old "KDE is not drawn" warning)', () => {
+    // addKde defaults to true and cannot be switched off from the ECDF view.
+    expect(toParams(base({ graphType: 'ECDF' }), {}).add_kde).toBe(false)
+    expect(toParams(base({ graphType: 'PMF' }), {}).add_kde).toBe(false)
+    expect(toParams(base({ graphType: 'Histogram' }), {}).add_kde).toBe(true)
   })
 
-  it('sends no filters key when nothing is filtered', () => {
+  it('sends the rug only where it is shown', () => {
+    expect(toParams(base({ graphType: 'ECDF', addData: true }), {}).add_data).toBe(false)
+    expect(toParams(base({ graphType: 'PMF', addData: true }), {}).add_data).toBe(true)
+  })
+
+  it('sends bins only for the histogram', () => {
+    expect(toParams(base({ bins: 12 }), {}).bins).toBe(12)
+    expect(toParams(base({ bins: 12, graphType: 'ECDF' }), {}).bins).toBeNull()
+  })
+
+  it('sends the ECDF band and alpha only on the ECDF', () => {
+    expect(toParams(base({ graphType: 'ECDF', alpha: 0.1 }), {})).toMatchObject({ add_conf_band: true, alpha: 0.1 })
+    expect(toParams(base({ graphType: 'Histogram', alpha: 0.1 }), {})).toMatchObject({ add_conf_band: false, alpha: 0.05 })
+    expect(toParams(base({ graphType: 'ECDF', alpha: 0.1, addConfBand: false }), {})).toMatchObject({ add_conf_band: false, alpha: 0.05 })
+  })
+
+  it('sends no normal overlay and no estimators on the PMF, even if it is ticked', () => {
+    const params = toParams(base({ graphType: 'PMF', addNormal: true, muEstimator: 'Sample Median', sigmaEstimator: 'IQR (bias corrected)' }), {})
+    expect(params).toMatchObject({ add_normal: false, mu_estimator: 'Sample Mean', sigma_estimator: 'Deviation (1 ddof)' })
+  })
+
+  it('sends the estimators only while the normal overlay is on', () => {
+    const off = toParams(base({ muEstimator: 'Sample Median' }), {})
+    expect(off).toMatchObject({ add_normal: false, mu_estimator: 'Sample Mean' })
+    const on = toParams(base({ addNormal: true, muEstimator: 'Sample Median', sigmaEstimator: 'MAD (bias corrected)' }), {})
+    expect(on).toMatchObject({ add_normal: true, mu_estimator: 'Sample Median', sigma_estimator: 'MAD (bias corrected)' })
+  })
+
+  it('sends trim, winsor and weights only for their own estimator', () => {
+    const common = { addNormal: true, trimParam: 0.2, winsorLimits: '0.1, 0.1', weightsColumn: 'W' }
+    expect(toParams(base({ ...common, muEstimator: 'Sample Mean' }), {})).toMatchObject({ trim_param: null, winsor_limits: null, weights_column: null })
+    expect(toParams(base({ ...common, muEstimator: 'Trimmed Mean' }), {})).toMatchObject({ trim_param: 0.2, winsor_limits: null, weights_column: null })
+    expect(toParams(base({ ...common, muEstimator: 'Winsorized Mean' }), {})).toMatchObject({ trim_param: null, winsor_limits: '0.1, 0.1', weights_column: null })
+    expect(toParams(base({ ...common, muEstimator: 'Weighted Mean' }), {})).toMatchObject({ trim_param: null, winsor_limits: null, weights_column: 'W' })
+  })
+
+  it('produces an identical request when only an irrelevant option changes (so nothing is refetched)', () => {
+    const before = JSON.stringify(toParams(base({ graphType: 'ECDF' }), {}))
+    const after = JSON.stringify(toParams(base({ graphType: 'ECDF', addKde: false, bins: 40, muEstimator: 'Sample Median', addData: true }), {}))
+    expect(after).toBe(before)
+  })
+
+  it('sends filters only when there are some', () => {
     expect(toParams(base(), {}).filters).toBeNull()
+    expect(toParams(base(), { City: ['A'] }).filters).toEqual({ City: ['A'] })
+  })
+})
+
+describe('validateGraphicalConfig', () => {
+  it('requires a column', () => {
+    expect(validateGraphicalConfig(base({ column: '' }), '').column).toBeTruthy()
   })
 
-  it('forwards active filters so the plot matches the Data tab', () => {
-    expect(toParams(base(), { City: ['Bangkok'] }).filters).toEqual({ City: ['Bangkok'] })
+  it('checks winsor limits only while a winsorized normal overlay is drawn', () => {
+    const cfg = base({ addNormal: true, muEstimator: 'Winsorized Mean' })
+    expect(validateGraphicalConfig(cfg, '0.1,').winsorLimits).toBeTruthy()
+    expect(validateGraphicalConfig(cfg, '0.1, 0.1').winsorLimits).toBeUndefined()
+    expect(validateGraphicalConfig(base({ muEstimator: 'Winsorized Mean' }), '0.1,')).toEqual({})
+    expect(validateGraphicalConfig({ ...cfg, graphType: 'PMF' }, '0.1,')).toEqual({})
+  })
+
+  it('asks for a weights column only for a drawn weighted mean', () => {
+    expect(validateGraphicalConfig(base({ addNormal: true, muEstimator: 'Weighted Mean' }), '').weightsColumn).toBeTruthy()
+    expect(validateGraphicalConfig(base({ addNormal: true, muEstimator: 'Weighted Mean', weightsColumn: 'W' }), '')).toEqual({})
+    expect(validateGraphicalConfig(base({ muEstimator: 'Weighted Mean' }), '')).toEqual({})
+  })
+})
+
+describe('updateGraphicalConfig', () => {
+  it('fills a visible default trim fraction for the trimmed mean', () => {
+    expect(updateGraphicalConfig(base(), 'muEstimator', 'Trimmed Mean').trimParam).toBe(0.1)
+  })
+
+  it('drops a stale weights column when the estimator no longer uses it', () => {
+    const weighted = updateGraphicalConfig(base(), 'muEstimator', 'Weighted Mean')
+    const withColumn = updateGraphicalConfig(weighted, 'weightsColumn', 'W')
+    expect(withColumn.weightsColumn).toBe('W')
+    expect(updateGraphicalConfig(withColumn, 'muEstimator', 'Sample Mean').weightsColumn).toBeNull()
+    expect(clearWeightsIfUnused(withColumn)).toBe(withColumn)
+  })
+})
+
+describe('configForDataset', () => {
+  it('keeps a valid selection and replaces a column from a previous file', () => {
+    const cfg = base({ column: 'Age' })
+    expect(configForDataset(cfg, ['Age', 'Weight'])).toBe(cfg)
+    expect(configForDataset(cfg, ['Score']).column).toBe('Score')
+  })
+
+  it('clears a weights column the new dataset does not have', () => {
+    const cfg = base({ column: 'Age', weightsColumn: 'W' })
+    expect(configForDataset(cfg, ['Age']).weightsColumn).toBeNull()
   })
 })

@@ -22,7 +22,7 @@ The React frontend only renders. Every number comes from a Python backend whose 
 | **Probability → Common Distributions** | PMF / PDF / CDF and probability queries for 12 distributions | ✅ |
 | **Estimation → Descriptive Statistics** | Quantiles, centre, spread, shape (weighted / trimmed / Winsorized); histogram, box plot | ✅ |
 | **Estimation → Statistical Inference** | Confidence and prediction intervals, confidence regions | ✅ |
-| **Estimation → Graphical Analysis** | Histogram / empirical PMF / ECDF with KDE, rug, normal, DKW band, CI/PI strip | ✅ |
+| **Estimation → Graphical Analysis** | Histogram / empirical PMF / ECDF with KDE, rug, normal, DKW band | ✅ |
 | **Hypothesis Testing** | One- and two-sample t (Welch), Bartlett / Levene, one-way ANOVA; α, critical values, rejection region, verdict | ✅ |
 | **Linear Regression** | OLS, CI/PI bands, residuals | 📋 Not started |
 | **Custom Distribution / Approximations** | User-defined distributions; binomial → normal, CLT | 📋 Planned |

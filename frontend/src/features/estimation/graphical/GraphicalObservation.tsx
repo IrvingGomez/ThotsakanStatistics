@@ -1,6 +1,6 @@
 // features/estimation/graphical/GraphicalObservation.tsx
 // Centre panel: the plot itself. Histogram / empirical PMF / ECDF with the
-// requested overlays, plus an interval strip below when CI/PI bands are on.
+// requested overlays.
 
 import { useCallback, useMemo } from 'react'
 import createPlotlyComponent from 'react-plotly.js/factory'
@@ -12,31 +12,21 @@ import { downloadCSV } from '../../../utils/exportCSV'
 import { downloadPDF } from '../../../utils/exportPDF'
 import { exportFilename } from '../../../utils/exportFilename'
 import { useChartRegistry } from '../../../hooks/useChartRegistry'
+import { PLOT_AXIS, PLOT_COLORS, PLOT_CONFIG, barWidth, baseLayout } from '../../../plot/theme'
 
 const Plot = createPlotlyComponent(Plotly)
 
 const CHART_ORDER = ['graphical'] as const
 
-// Plotly parses colors itself — CSS vars don't resolve, so use literals.
-const C_MAIN = '#a78bfa'      // rebeccapurple, lifted for dark backgrounds
-const C_KDE = '#c4b5fd'
-const C_BAND = 'rgba(167, 139, 250, 0.25)'
-const C_RUG = '#94a3b8'
-const C_NORMAL = '#e5e7eb'
-const C_CI_MEAN = '#3b82f6'
-const C_CI_MEDIAN = '#10b981'
-const C_PI = '#f43f5e'
+// Colors come from the shared plot theme so every tab draws data the same way.
+const C_MAIN = PLOT_COLORS.data
+const C_KDE = PLOT_COLORS.fit
+const C_BAND = PLOT_COLORS.dataBand
+const C_RUG = PLOT_COLORS.rug
+const C_NORMAL = PLOT_COLORS.reference
 
-const AXIS = { color: '#9ca3af', gridcolor: 'rgba(128,128,128,0.15)', zeroline: false }
-const CONFIG = { responsive: true, displayModeBar: false }
-
-// Interval strip rows, matching the matplotlib overlay's geometry.
-const BAND_Y: Record<string, number> = { ci_mean: 0.4, ci_median: 0.3, pi: 0.1 }
-const BAND_COLOR: Record<string, string> = {
-  ci_mean: C_CI_MEAN,
-  ci_median: C_CI_MEDIAN,
-  pi: C_PI,
-}
+const AXIS = PLOT_AXIS
+const CONFIG = PLOT_CONFIG
 
 interface GraphicalObservationProps {
   result: GraphicalResponse | null
@@ -44,8 +34,6 @@ interface GraphicalObservationProps {
   graphType: string
   hasData: boolean
   isComputing: boolean
-  /** Overlays the last Run produced that this result no longer carries. */
-  staleOverlays: string[]
 }
 
 /** Bar centres and widths from histogram edges. */
@@ -60,11 +48,9 @@ function barsFromEdges(bins: number[], densities: number[]) {
 }
 
 export default function GraphicalObservation({
-  result, column, graphType, hasData, isComputing, staleOverlays,
+  result, column, graphType, hasData, isComputing,
 }: GraphicalObservationProps) {
   const registry = useChartRegistry(CHART_ORDER)
-  const bands = result?.interval_bands ?? []
-  const hasStrip = bands.length > 0
 
   const traces = useMemo(() => {
     if (!result) return []
@@ -84,17 +70,12 @@ export default function GraphicalObservation({
 
     if (result.pmf_data) {
       const { values, probs } = result.pmf_data
-      // Stem plot: one line segment per value, then the marker heads.
-      const stemX: (number | null)[] = []
-      const stemY: (number | null)[] = []
-      values.forEach((v, i) => { stemX.push(v, v, null); stemY.push(0, probs[i], null) })
+      // One bar per observed value, as in the Common Distributions tab. Observed values can be uneven
+      // or non-integer, so the width follows the smallest gap between them.
+      const width = barWidth(values)
       out.push({
-        type: 'scatter', mode: 'lines', x: stemX, y: stemY,
-        line: { color: C_MAIN, width: 1.5 }, hoverinfo: 'skip', showlegend: false,
-      })
-      out.push({
-        type: 'scatter', mode: 'markers', x: values, y: probs,
-        marker: { color: C_MAIN, size: 7 }, name: 'Probability',
+        type: 'bar', x: values, y: probs, ...(width ? { width } : {}),
+        marker: { color: C_MAIN }, name: 'Probability',
         hovertemplate: '%{x:.4g}<br>P = %{y:.4g}<extra></extra>',
       })
     }
@@ -147,25 +128,8 @@ export default function GraphicalObservation({
       })
     }
 
-    // Interval strip (second row).
-    bands.forEach((b) => {
-      const y = BAND_Y[b.kind] ?? 0.25
-      const color = BAND_COLOR[b.kind] ?? C_PI
-      out.push({
-        type: 'scatter', mode: 'lines', yaxis: 'y2',
-        x: [b.low, b.high], y: [y, y],
-        line: { color, width: 3 }, name: b.label,
-        hovertemplate: `${b.label}<br>[%{x:.4g}]<extra></extra>`,
-      })
-      out.push({
-        type: 'scatter', mode: 'markers', yaxis: 'y2',
-        x: [b.center], y: [y],
-        marker: { color, size: 8 }, showlegend: false, hoverinfo: 'skip',
-      })
-    })
-
     return out
-  }, [result, bands, graphType])
+  }, [result, graphType])
 
   const layout = useMemo(() => {
     const yTitle =
@@ -175,36 +139,22 @@ export default function GraphicalObservation({
         : graphType === 'PMF' ? `Empirical PMF of ${column}`
           : `Distribution of ${column}`
 
-    return {
+    return baseLayout({
       autosize: true,
-      title: { text: title, font: { color: '#9ca3af', size: 13 } },
+      title: { text: title, font: { color: PLOT_COLORS.axisText, size: 13 } },
       margin: { l: 56, r: 20, t: 44, b: 44 },
-      paper_bgcolor: 'transparent',
-      plot_bgcolor: 'transparent',
-      font: { color: '#9ca3af', size: 12 },
-      bargap: 0.02,
-      xaxis: { ...AXIS, title: column, anchor: hasStrip ? 'y2' : 'y' },
+      // Touching histogram bars; separated bars for discrete values.
+      bargap: graphType === 'PMF' ? 0.15 : 0.02,
+      xaxis: { ...AXIS, title: column },
       yaxis: {
         ...AXIS,
         title: yTitle,
-        domain: hasStrip ? [0.34, 1] : [0, 1],
         ...(graphType === 'ECDF' ? { range: [0, 1.05] } : {}),
       },
-      ...(hasStrip
-        ? {
-          yaxis2: {
-            ...AXIS,
-            domain: [0, 0.24],
-            range: [0, 0.5],
-            showticklabels: false,
-            showgrid: false,
-          },
-        }
-        : {}),
       showlegend: true,
-      legend: { font: { color: '#9ca3af', size: 12 }, bgcolor: 'transparent', orientation: 'h', y: -0.18 },
-    }
-  }, [column, graphType, hasStrip])
+      legend: { font: { color: PLOT_COLORS.axisText, size: 12 }, bgcolor: 'transparent', orientation: 'h', y: -0.18 },
+    })
+  }, [column, graphType])
 
   // ── Exports ───────────────────────────────────────────────────────────────
   const handleExportPNG = useCallback(() => {
@@ -219,10 +169,10 @@ export default function GraphicalObservation({
       const { bins, counts, densities } = result.histogram_data
       counts.forEach((c, i) => rows.push([bins[i], bins[i + 1], c, densities[i]]))
     } else if (result.pmf_data) {
-      rows.push(['bin_low', 'bin_high', 'count', 'density'])
+      rows.push(['value', 'count', 'probability'])
       result.pmf_data.values.forEach((v, i) => {
         const probability = result.pmf_data!.probs[i]
-        rows.push([v, v, Number.isFinite(probability) ? probability * result.summary.n : '', probability])
+        rows.push([v, Number.isFinite(probability) ? Math.round(probability * result.summary.n) : '', probability])
       })
     } else if (result.ecdf_data) {
       const { x, y, lower, upper } = result.ecdf_data
@@ -277,13 +227,6 @@ export default function GraphicalObservation({
       <ResultToolbar title={`Graphical analysis — ${column}`}
         exports={exportReady ? { png: handleExportPNG, csv: handleExportCSV, pdf: handleExportPDF } : undefined}
         ready={exportReady} disabledReason={isComputing ? 'Waiting for the updated result.' : 'Chart is still loading.'} />
-      {staleOverlays.length > 0 && (
-          <div className="mx-2 mt-2 px-3 py-2 rounded-md border border-amber-700/50 bg-amber-950/20
-          text-xs text-amber-300 leading-snug" role="status">
-          Not shown on this plot: {staleOverlays.join(', ')}. A resample cannot be
-          repeated from a display change — press Run to draw it again.
-        </div>
-      )}
       <div>
         <Plot
           data={traces}

@@ -1,9 +1,6 @@
 const BASE_URL = "/api/graphical";
 
 export type GraphType = "Histogram" | "PMF" | "ECDF";
-export type CIChoice = "Mean" | "Median" | "Both";
-export type PIChoice = "Mean" | "Median" | "IQR" | "Bootstrap";
-export type MuSource = "Mean-based CI" | "Median-based CI";
 
 export interface GraphicalParams {
   column: string;
@@ -14,42 +11,19 @@ export interface GraphicalParams {
   add_kde: boolean;
   add_data: boolean;
 
-  // Overlays
-  add_normal: boolean;
-  normal_mu_source?: MuSource;
-  add_ci?: boolean;
-  ci_choice?: CIChoice;
-  add_pi?: boolean;
-  pi_choice?: PIChoice;
-  conf_level?: number;
-
-  // ECDF
+  // ECDF band: significance level alpha, as in every other tab
   add_conf_band?: boolean;
-  ecdf_conf_level?: number;
+  alpha?: number;
 
-  // Estimators
-  mean_estimator?: string;
-  median_estimator?: string;
+  // Normal overlay and the estimators it is drawn from
+  add_normal: boolean;
+  mu_estimator?: string; // any mean estimator, or "Sample Median"
   sigma_estimator?: string;
   trim_param?: number | null;
   winsor_limits?: string | null;
   weights_column?: string | null;
 
-  // Bootstrap
-  bootstrap_mean?: boolean;
-  bootstrap_median?: boolean;
-  bootstrap_pi?: boolean;
-  bootstrap_samples?: number;
-
   filters?: Record<string, string[]> | null;
-}
-
-export interface IntervalBand {
-  label: string;
-  kind: "ci_mean" | "ci_median" | "pi";
-  low: number;
-  high: number;
-  center: number;
 }
 
 export interface GraphicalResponse {
@@ -66,10 +40,8 @@ export interface GraphicalResponse {
   kde_curve?: { x: number[]; y: number[] } | null;
   normal_curve?: { x: number[]; y: number[]; mu: number; sigma: number } | null;
   rug_data?: { x: number[]; n_shown: number; n_total: number } | null;
-  interval_bands?: IntervalBand[] | null;
   point_estimates?: { mu: number | null; sigma: number | null } | null;
-  dist_used?: string | null;
-  alpha?: number | null;
+  alpha?: number | null; // set only when an ECDF band was drawn
   warnings: string[];
 }
 

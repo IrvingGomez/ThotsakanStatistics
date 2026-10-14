@@ -1,18 +1,19 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useData } from '../../../context/DataContext'
 import { graphicalApi, type GraphicalResponse } from '../../../api/graphical'
 import { inferenceApi } from '../../../api/inference'
+import { estimatorLabel } from '../../../labels'
 import {
-  DEBOUNCE_MS, DEFAULT_CONFIG, configForDataset, heavyOf, isDirty as computeDirty,
-  mergeForLive, overlaysNeedingRun, toParams, updateGraphicalConfig, validateGraphicalConfig,
-  type GraphicalConfig, type GraphicalFieldErrors, type HeavyConfig,
+  DEBOUNCE_MS, DEFAULT_CONFIG, DEFAULT_MU_ESTIMATOR, DEFAULT_SIGMA_ESTIMATOR, SAMPLE_MEDIAN,
+  configForDataset, normalApplies, supportedOverlays, toParams, updateGraphicalConfig, validateGraphicalConfig,
+  type GraphicalConfig, type GraphicalFieldErrors,
 } from './graphicalState'
 
 export type { GraphicalConfig } from './graphicalState'
 export { DEFAULT_CONFIG } from './graphicalState'
 
-const MEANS = ['Sample Mean']
-const DEVIATIONS = ['Deviation (1 ddof)']
+const MEANS = [DEFAULT_MU_ESTIMATOR]
+const DEVIATIONS = [DEFAULT_SIGMA_ESTIMATOR]
 interface Draft {
   sessionId: string | null
   cfg: GraphicalConfig
@@ -24,30 +25,23 @@ interface Request {
   filters: Record<string, string[]>
   filename: string
   cfg: GraphicalConfig
-  viaRun: boolean
   owner: string
 }
 interface Applied extends Request { data: GraphicalResponse }
 
 function describeApplied({ cfg, data }: Applied): string {
+  const shows = supportedOverlays(cfg.graphType)
   const settings: string[] = []
-  if (cfg.graphType === 'Histogram') settings.push(`${cfg.bins ?? 'Auto'} bins`, `KDE ${cfg.addKde ? 'on' : 'off'}`)
-  if (cfg.graphType !== 'ECDF') settings.push(`Rug ${cfg.addData ? 'on' : 'off'}`)
-  else settings.push(cfg.addConfBand ? `${(cfg.ecdfConfLevel * 100).toFixed(1)}% ECDF band` : 'ECDF band off')
-  if (data.normal_curve) settings.push(`Normal curve: ${cfg.normalMuSource}`)
-  if (data.interval_bands?.length) {
-    settings.push(`${(cfg.confLevel * 100).toFixed(1)}% intervals`)
-    if (cfg.addCi) settings.push(`CI: ${cfg.ciChoice}`)
-    if (cfg.addPi) settings.push(`PI: ${cfg.piChoice}`)
+  if (shows.bins) settings.push(`${cfg.bins ?? 'Auto'} bins`)
+  if (shows.kde) settings.push(`KDE ${cfg.addKde ? 'on' : 'off'}`)
+  if (shows.rug) settings.push(`Rug ${cfg.addData ? 'on' : 'off'}`)
+  if (shows.confBand) settings.push(cfg.addConfBand ? `α = ${cfg.alpha} ECDF band` : 'ECDF band off')
+  if (data.normal_curve) {
+    settings.push(`μ: ${estimatorLabel(cfg.muEstimator)}`, `σ: ${estimatorLabel(cfg.sigmaEstimator)}`)
+    if (cfg.muEstimator === 'Trimmed Mean') settings.push(`Trim: ${cfg.trimParam}`)
+    if (cfg.muEstimator === 'Winsorized Mean') settings.push(`Tail limits: ${cfg.winsorLimits}`)
+    if (cfg.muEstimator === 'Weighted Mean') settings.push(`Weights: ${cfg.weightsColumn}`)
   }
-  if (data.point_estimates?.mu != null || data.point_estimates?.sigma != null) {
-    settings.push(cfg.meanEstimator, cfg.sigmaEstimator)
-    if (cfg.meanEstimator === 'Trimmed Mean') settings.push(`Trim: ${cfg.trimParam}`)
-    if (cfg.meanEstimator === 'Winsorized Mean') settings.push(`Tail limits: ${cfg.winsorLimits}`)
-    if (cfg.meanEstimator === 'Weighted Mean') settings.push(`Weights: ${cfg.weightsColumn}`)
-  }
-  const bootstraps = [cfg.bootstrapMean && 'mean', cfg.bootstrapMedian && 'median', cfg.bootstrapPi && 'prediction'].filter(Boolean)
-  if (bootstraps.length) settings.push(`Bootstrap ${bootstraps.join(', ')}: ${cfg.bootstrapSamples} resamples`)
   return settings.join(' · ')
 }
 
@@ -55,7 +49,7 @@ function freshDraft(sessionId: string | null, columns: string[]): Draft {
   return { sessionId, cfg: { ...DEFAULT_CONFIG, column: columns[0] ?? '' }, winsorRaw: '0.1, 0.1', autoBins: true }
 }
 
-/** Draft survives panel unmounts; only explicit Run applies expensive overlays. */
+/** The draft survives panel unmounts; every setting updates the plot after a short pause. */
 export function useGraphicalTabState() {
   const { state: dataState } = useData()
   const { sessionId, filters, filename, numericCols } = dataState
@@ -68,16 +62,9 @@ export function useGraphicalTabState() {
   const [storedDraft, setDraft] = useState(() => freshDraft(sessionId, numericCols))
   const draft = storedDraft.sessionId === sessionId ? storedDraft : freshDraft(sessionId, numericCols)
   const cfg = configForDataset(draft.cfg, numericCols)
-  const draftRef = useRef(draft)
-  draftRef.current = { ...draft, cfg }
   const [applied, setApplied] = useState<Applied | null>(null)
-  const [committedState, setCommitted] = useState<{ sessionId: string; config: HeavyConfig } | null>(null)
-  const committed = committedState?.sessionId === sessionId ? committedState.config : null
-  const committedRef = useRef(committed)
-  committedRef.current = committed
   const [isComputing, setIsComputing] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [fieldErrors, setFieldErrors] = useState<GraphicalFieldErrors>({})
   const [resetVersion, setResetVersion] = useState(0)
   const [meanEstimators, setMeanEstimators] = useState(MEANS)
   const [deviationEstimators, setDeviationEstimators] = useState(DEVIATIONS)
@@ -86,6 +73,18 @@ export function useGraphicalTabState() {
   const abortRef = useRef<AbortController | null>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastRequest = useRef<Request | null>(null)
+
+  // What the request is built from, and whether the draft is complete enough to send.
+  const effective = useMemo<GraphicalConfig>(
+    () => ({ ...cfg, winsorLimits: cfg.muEstimator === 'Winsorized Mean' ? draft.winsorRaw : null }),
+    [cfg, draft.winsorRaw],
+  )
+  const fieldErrors: GraphicalFieldErrors = useMemo(
+    () => validateGraphicalConfig(effective, draft.winsorRaw), [effective, draft.winsorRaw])
+  const valid = Object.keys(fieldErrors).length === 0
+  const requestKey = hasData && sessionId && valid ? JSON.stringify(toParams(effective, filters)) : null
+  const effectiveRef = useRef(effective)
+  effectiveRef.current = effective
 
   const cancel = useCallback(() => {
     sequence.current += 1
@@ -106,7 +105,6 @@ export function useGraphicalTabState() {
       .then((data) => {
         if (id !== sequence.current || controller.signal.aborted || request.owner !== ownerRef.current) return
         setApplied({ ...request, data })
-        if (request.viaRun) setCommitted({ sessionId: request.sessionId, config: heavyOf(request.cfg) })
         setIsComputing(false)
       })
       .catch((cause: unknown) => {
@@ -120,9 +118,9 @@ export function useGraphicalTabState() {
     setDraft((previous) => previous.sessionId === sessionId
       ? { ...previous, cfg: configForDataset(previous.cfg, numericCols) }
       : freshDraft(sessionId, numericCols))
-    setFieldErrors({})
   }, [sessionId, numericCols])
 
+  // Estimator choices depend on the column (e.g. no geometric mean for negative data).
   useEffect(() => {
     if (!hasData || !sessionId || !cfg.column) return
     let active = true
@@ -136,9 +134,10 @@ export function useGraphicalTabState() {
         setDeviationEstimators(deviations)
         setDraft((previous) => {
           const current = previous.sessionId === sessionId ? previous : freshDraft(sessionId, numericCols)
+          const muChoices = [...means, SAMPLE_MEDIAN]
           return { ...current, cfg: {
             ...current.cfg,
-            meanEstimator: means.includes(current.cfg.meanEstimator) ? current.cfg.meanEstimator : means[0],
+            muEstimator: muChoices.includes(current.cfg.muEstimator) ? current.cfg.muEstimator : muChoices[0],
             sigmaEstimator: deviations.includes(current.cfg.sigmaEstimator) ? current.cfg.sigmaEstimator : deviations[0],
           } }
         })
@@ -148,29 +147,26 @@ export function useGraphicalTabState() {
         setMeanEstimators(MEANS)
         setDeviationEstimators(DEVIATIONS)
         setEstimatorNotice('Estimator choices could not load. Sample mean and sample deviation remain available.')
-        setDraft((previous) => ({ ...previous, cfg: { ...previous.cfg, meanEstimator: MEANS[0], sigmaEstimator: DEVIATIONS[0] } }))
+        setDraft((previous) => ({ ...previous, cfg: { ...previous.cfg, muEstimator: MEANS[0], sigmaEstimator: DEVIATIONS[0] } }))
       })
     return () => { active = false }
   }, [hasData, sessionId, cfg.column, numericCols])
 
-  // Only live inputs schedule a request. Draft overlay edits update pending state.
+  // One effect: whenever the request would change, ask again after a short pause. An incomplete draft
+  // (e.g. half-typed winsor limits) sends nothing and keeps the previous result on screen.
   useEffect(() => {
     cancel()
     setError(null)
-    if (!hasData || !sessionId || !cfg.column) {
+    if (requestKey === null || !sessionId) {
       setIsComputing(false)
       return
     }
     setIsComputing(true)
-    const request: Request = {
-      sessionId, filters, filename, owner,
-      cfg: mergeForLive(draftRef.current.cfg, committedRef.current), viaRun: false,
-    }
+    const request: Request = { sessionId, filters, filename, owner, cfg: effectiveRef.current }
     timerRef.current = setTimeout(() => fire(request), DEBOUNCE_MS)
     return cancel
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasData, sessionId, filtersKey, cfg.column, cfg.graphType, cfg.bins, cfg.addKde,
-    cfg.addData, cfg.addConfBand, cfg.ecdfConfLevel, resetVersion, cancel, fire])
+  }, [requestKey, sessionId, owner, resetVersion, cancel, fire])
 
   useEffect(() => cancel, [cancel])
 
@@ -179,29 +175,15 @@ export function useGraphicalTabState() {
       const current = previous.sessionId === sessionId ? previous : freshDraft(sessionId, numericCols)
       return { ...current, cfg: updateGraphicalConfig(current.cfg, key, value) }
     })
-    setFieldErrors({})
   }, [sessionId, numericCols])
 
   const setWinsorRaw = useCallback((winsorRaw: string) => {
     setDraft((previous) => ({ ...previous, winsorRaw }))
-    setFieldErrors({})
   }, [])
 
   const setAutoBins = useCallback((autoBins: boolean) => {
     setDraft((previous) => ({ ...previous, autoBins, cfg: { ...previous.cfg, bins: autoBins ? null : 20 } }))
   }, [])
-
-  const run = useCallback(() => {
-    const current = draftRef.current
-    const errors = validateGraphicalConfig(current.cfg, current.winsorRaw)
-    setFieldErrors(errors)
-    if (Object.keys(errors).length || !sessionId || !hasData) return
-    const next = {
-      ...current.cfg,
-      winsorLimits: current.cfg.meanEstimator === 'Winsorized Mean' ? current.winsorRaw : null,
-    }
-    fire({ sessionId, filters, filename, owner, cfg: next, viaRun: true })
-  }, [sessionId, hasData, filters, filename, owner, fire])
 
   const retry = useCallback(() => {
     const request = lastRequest.current
@@ -211,10 +193,7 @@ export function useGraphicalTabState() {
   const reset = useCallback(() => {
     cancel()
     setDraft(freshDraft(sessionId, numericCols))
-    setCommitted(null)
-    committedRef.current = null
     setApplied(null)
-    setFieldErrors({})
     setError(null)
     setIsComputing(false)
     lastRequest.current = null
@@ -223,10 +202,6 @@ export function useGraphicalTabState() {
 
   const currentApplied = hasData && applied?.sessionId === sessionId ? applied : null
   const result = currentApplied?.data ?? null
-  const effectiveDraft = { ...cfg, winsorLimits: cfg.meanEstimator === 'Winsorized Mean' ? draft.winsorRaw : null }
-  const isDirty = computeDirty(effectiveDraft, committed)
-  const staleOverlays = result && !currentApplied?.viaRun ? overlaysNeedingRun(committed) : []
-  const isPrevious = !!currentApplied && currentApplied.owner !== owner
   const appliedContext = currentApplied
     ? `${currentApplied.filename} · ${currentApplied.cfg.column} · ${currentApplied.cfg.graphType} · n = ${currentApplied.data.summary.n} · ${Object.entries(currentApplied.filters).map(([key, values]) => `${key}: ${values.join(', ')}`).join('; ') || 'All rows'}`
     : null
@@ -234,11 +209,12 @@ export function useGraphicalTabState() {
 
   return {
     cfg, winsorRaw: draft.winsorRaw, autoBins: draft.autoBins, fieldErrors,
-    meanEstimators, deviationEstimators, estimatorNotice, updateConfig, setWinsorRaw, setAutoBins,
-    result, column: currentApplied?.cfg.column ?? cfg.column,
+    muEstimators: [...meanEstimators, SAMPLE_MEDIAN], deviationEstimators, estimatorNotice,
+    updateConfig, setWinsorRaw, setAutoBins, normalOn: normalApplies(cfg),
+    result, warnings: result?.warnings ?? [], column: currentApplied?.cfg.column ?? cfg.column,
     graphType: currentApplied?.cfg.graphType ?? cfg.graphType,
-    isComputing, error, isDirty, isPrevious, staleOverlays, appliedContext, appliedSettings,
-    run, reset, retry, hasData, numericCols, precision: dataState.displayPrecision, sessionId,
+    isComputing, error, appliedContext, appliedSettings, resetVersion,
+    reset, retry, hasData, numericCols, precision: dataState.displayPrecision, sessionId,
   }
 }
 
