@@ -35,7 +35,7 @@ This project teaches statistics, so correctness is a conduct issue and not only 
 
 ## Scope
 
-This Code of Conduct applies in all project spaces: the repository, issues, pull requests, code review, commit messages, and any channel where someone represents the project. It also applies to AI coding agents working on the repository (see [`AGENT.md`](AGENT.md)). People are responsible for the output of agents they run.
+This Code of Conduct applies in all project spaces: the repository, issues, pull requests, code review, commit messages, and any channel where someone represents the project. It also applies to AI coding agents working on the repository. People are responsible for the output of agents they run.
 
 ## Enforcement
 

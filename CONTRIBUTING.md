@@ -2,213 +2,152 @@
 
 Thanks for helping. Please read the [Code of Conduct](CODE_OF_CONDUCT.md) first. It applies to everything below.
 
-Thotsakan Statistics is an interactive statistics lab: *"Stop Calculating. Start Simulating."* Before proposing a feature, read [`doc/identity.md`](doc/identity.md). If a feature doesn't fit the lab identity, we don't build it. For the full architecture see [`CLAUDE.md`](CLAUDE.md), [`doc/context.md`](doc/context.md) and [`doc/DESIGN_PROPOSAL.md`](doc/DESIGN_PROPOSAL.md).
+- **Before proposing a feature:** read [`doc/design.md`](doc/design.md). If a feature doesn't fit the lab identity, we don't build it.
+- **Setup:** see the [README](README.md#getting-started).
+- **Architecture:** see [`doc/architecture.md`](doc/architecture.md).
 
-## Table of Contents
+## Ground rules
 
-1. [Repository Layout and Ground Rules](#repository-layout-and-ground-rules)
-2. [Getting Started](#getting-started)
-3. [Workflow](#workflow)
-4. [Python Standards (backend)](#python-standards-backend)
-5. [TypeScript Standards (frontend)](#typescript-standards-frontend)
-6. [Adding a Feature](#adding-a-feature)
-7. [Testing](#testing)
-8. [Commits and Pull Requests](#commits-and-pull-requests)
-
-## Repository Layout and Ground Rules
-
-```
-frontend/   React + Vite + TypeScript (UI only)
-backend/    FastAPI + Python
-  core/       pure math, verified by the professor
-  services/   validate → call core → map to schema
-  api/        routes (thin) + Pydantic schemas + deps
-  sessions/   in-memory dataset store with TTL
-doc/        design and migration docs
-```
-
-`ThotsakanStatistics/` and `Try_reflex/` (if present in your checkout) are **read-only references. Do not modify them.**
-
-These rules are non-negotiable:
-
-1. **Zero frontend math.** All authoritative statistics are computed in `backend/core/`. The frontend calls the API and renders the result. The only exception is the provisional preview in `frontend/src/math/`, which must set `provisional: true` and always be overwritten by the debounced backend response.
+1. **Zero frontend math.** All authoritative statistics are computed in `backend/core/`. The only exception is the provisional preview in `frontend/src/math/`. It must set `provisional: true` and is always overwritten by the backend response.
 2. **Layering.**
-   - `core/` must **not** import from `services`, `api` or `sessions`, and must stay framework-free.
-   - `services/` must **not** import numpy, scipy or statsmodels. It validates, calls `core/`, and maps to schemas.
-   - Routes are thin (~10 lines): parse, delegate, translate errors.
-3. **`core/` is sacred.** Keep it numerically correct and full-precision. Rounding is presentation-level only. `core/hypothesis_testing/__init__.py` is byte-identical to the professor's file, so do not edit it. Add new behavior in sibling modules (as `rejection_region.py` and `tables.py` do).
-4. **Session data stays in memory.** Never persist, log or commit uploaded datasets.
-5. **No new dependency without discussion.** Explain why in the PR.
-
-## Getting Started
-
-Requirements: Node.js (current LTS), Python 3.11+.
-
-```bash
-# Backend (from backend/)
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt -r requirements-dev.txt
-uvicorn main:app --reload          # http://localhost:8000
-
-# Frontend (from frontend/)
-npm install
-npm run dev                        # Vite dev server
-
-# Both together (from the project root)
-npm install && npm run dev
-```
-
-### With Docker
-
-```bash
-docker compose -f docker-compose.dev.yml up      # hot-reload dev stack (:5173 + :8000)
-docker compose up --build                        # production-style stack (:8080)
-```
-
-CI (`.github/workflows/docker.yml`) builds both images on pushes to `dev` and on PRs targeting `dev` that touch `backend/` or `frontend/` and smoke-tests the compose stack. Make sure `docker compose up --build` still works if you change dependencies or a Dockerfile.
-
-Never commit virtual environments, `node_modules/` or `__pycache__/`.
+   - `core/` doesn't import `services`, `api` or `sessions`, and stays framework-free.
+   - `services/` doesn't import numpy, scipy or statsmodels (pandas and `api.schemas` are fine).
+   - Routes are thin: parse, delegate, translate errors.
+3. **`core/` is sacred.** It stays numerically correct and full-precision, and rounding happens only in the UI. Files copied from the professor's app stay byte-identical (`core/hypothesis_testing/__init__.py`, `core/estimation/graphical_analysis.py`). New behaviour goes in sibling modules.
+4. **Uploaded data stays in memory.** Never persist, log or commit datasets. The dev stack's `UPLOAD_DUMP_DIR` copy into the git-ignored `dev-playground/` is a local debugging aid only.
+5. **No secrets in tracked files.** Credentials live in the git-ignored root `.env`.
+6. **No new dependency without discussion.** Explain why in the PR.
+7. `ThotsakanStatistics/` and `Try_reflex/`, if present locally, are **read-only** references.
 
 ## Workflow
 
-1. Branch from `main` (or the current integration branch). Use `feat/…`, `fix/…`, `docs/…`, `refactor/…`, `test/…` or `chore/…`.
+1. Branch from `dev` (`main` holds the original Gradio app). Name the branch `feat/…`, `fix/…`, `docs/…`, `refactor/…`, `test/…` or `chore/…`.
 2. Make small, focused changes. Don't mix a refactor with a feature.
 3. Add or update tests and docs in the same change.
-4. Run the checks below, then open a pull request.
-
-Before every PR:
+4. Run the checks and open a PR against `dev`:
 
 ```bash
 cd backend  && pytest
-cd frontend && npm run test && npm run build   # build runs tsc, so it's the type check
+cd frontend && npm run test && npm run build   # build includes the tsc type check
 ```
 
-No linter or formatter is configured yet. Until one is, follow the standards below by hand and match the surrounding code.
+CI only builds the Docker images and smoke-tests them. It doesn't run these checks, so run them yourself. If you change dependencies or a Dockerfile, make sure `docker compose up --build` still works.
 
-## Python Standards (backend)
+No linter or formatter is configured, so match the surrounding code. Never commit virtual environments, `node_modules/`, `__pycache__/`, `.env` or `dev-playground/`.
+
+## Python standards (backend)
 
 **Style**
 
-- Follow PEP 8 with 4-space indentation and a soft limit of ~100 columns. Match the file you are editing.
-- `snake_case` for functions, variables and modules. `PascalCase` for classes and Pydantic models. `UPPER_SNAKE_CASE` for constants. A leading underscore marks module-private helpers (e.g. `_advanced_id`).
-- Imports in three groups (standard library, third-party, local), separated by blank lines. No wildcard imports.
-- Use modern type hints (`str | None`, `list[float]`) on all public function signatures.
-- Write a docstring for every public `core/` function. State what it computes, the parameters (including `ddof`, α, tails and other statistical conventions), the return shape, and the reference or formula source when non-obvious.
-- Comments explain *why*, not *what*.
+- **Formatting:** PEP 8, 4 spaces, ~100 columns.
+- **Naming:** `snake_case` functions and modules, `PascalCase` classes and Pydantic models, `UPPER_SNAKE_CASE` constants, `_private` helpers.
+- **Imports:** grouped as stdlib / third-party / local, with no wildcards.
+- **Type hints:** modern hints (`str | None`, `list[float]`) on public signatures.
+- **Docstrings:** every public `core/` function has one, stating what it computes, its conventions (`ddof`, α, tails), its return shape, and its reference when that isn't obvious.
+- **Comments** explain *why*, not *what*.
 
-**Layer rules**
+**Layers**
 
 | Layer | Do | Don't |
 |---|---|---|
-| `core/` | Pure functions, full precision, explicit statistical conventions | Import services/api/sessions, touch HTTP, round results, hold state |
-| `services/` | Validate inputs, pick the core function, compose results, map to schemas | Import numpy/scipy/statsmodels, do math |
-| `api/routes/` | Declare the route, inject dependencies, delegate | Contain logic beyond error translation |
-| `api/schemas/` | Pydantic request/response models (field names match the TS interfaces) | Contain behavior |
+| `core/` | Pure functions, full precision, explicit conventions | Import upward, touch HTTP, round, hold state |
+| `services/` | Validate, pick the core function, compose, map to schemas | Import numpy/scipy/statsmodels, do math |
+| `api/routes/` | Declare the route, inject dependencies, delegate | Hold logic beyond error translation |
+| `api/schemas/` | Pydantic models whose field names match the TS interfaces | Contain behaviour |
 | `sessions/` | In-memory store with TTL | Persist to disk |
 
 **Errors**
 
-- `services/` raises `ValueError` with a clear, student-readable message for invalid input. Routes map it to HTTP 400.
-- Never swallow exceptions silently. Don't return `NaN` or `Infinity` where JSON can't carry it. Use `None` and, when useful, a `warning` field (see `StatRow.warning`).
-- Don't leak stack traces or internals in error details.
+- Services raise `ValueError` with a message a student can read, and routes map it to HTTP 400.
+- Never swallow exceptions, and never leak stack traces.
+- JSON can't carry `NaN` or `Infinity`, so return `None` instead, plus a `warning` field where it helps (see `StatRow.warning`).
 
 **Statistical correctness**
 
-- State conventions explicitly: population vs. sample (`ddof`), one- vs. two-tailed, confidence level, estimator choice.
-- Prefer scipy, statsmodels and pingouin over hand-rolled formulas. Hand-rolled math needs a test against a reference value.
-- Handle edge cases deliberately: empty data, n = 1, zero variance, constant columns, NaNs, extreme parameters.
-- Plot-free computation only: `core/` returns data (see `compute_histogram`, `compute_boxplot_data`), never figures.
+- **Conventions:** state them explicitly (population vs sample, tails, confidence level, estimator).
+- **Libraries over hand-rolled math:** prefer scipy, statsmodels and pingouin. Hand-rolled math needs a test against a reference value.
+- **Edge cases:** handle them deliberately: empty data, n = 1, zero variance, constant columns, NaNs, extreme parameters.
+- **No figures on the API path:** functions used by the API return data, never figures.
+- **Reproducibility:** bootstrap and other random procedures must be seedable.
 
-## TypeScript Standards (frontend)
+## TypeScript standards (frontend)
 
-**Compiler**
+**Compiler settings.** `tsconfig.json` is strict (`strict`, `noUnusedLocals`, `noUnusedParameters`, `verbatimModuleSyntax`, `erasableSyntaxOnly`), so:
 
-`tsconfig.json` is strict: `strict`, `noUnusedLocals`, `noUnusedParameters`, `verbatimModuleSyntax`, `erasableSyntaxOnly`. The code must pass `npm run build` with no errors.
-
-- No `any`. Use `unknown` and narrow it. Don't silence errors with `@ts-ignore` or `@ts-expect-error` without a comment explaining why.
-- Use `import type { … }` for type-only imports (required by `verbatimModuleSyntax`).
-- No `enum` or namespaces (`erasableSyntaxOnly`). Use string-literal unions and `as const` objects.
-- Prefer `interface` for object shapes and `type` for unions and aliases.
+- No `any`. Use `unknown` and narrow it.
+- No `@ts-ignore` or `@ts-expect-error` without a comment explaining why.
+- `import type { … }` for type-only imports.
+- No `enum` or namespaces. Use string-literal unions or `as const`.
+- `interface` for object shapes, `type` for unions.
 
 **Naming and files**
 
-- Components: `PascalCase.tsx`, one main component per file, function components only. Hooks: `useCamelCase.ts`. Utilities and API modules: `camelCase.ts`. Tests sit next to the code: `Foo.test.tsx`.
-- Feature tabs follow **`*Controls.tsx` → `*Observation.tsx` → `*Notebook.tsx`**, wired into `LabBench` from `App.tsx`.
-- Variables and functions in `camelCase`, types and components in `PascalCase`, constants in `UPPER_SNAKE_CASE`.
+- **Components:** `PascalCase.tsx`, function components only.
+- **Hooks:** `useCamelCase.ts`.
+- **Utilities and API modules:** `camelCase.ts`.
+- **Tests:** next to the code, named `Foo.test.tsx`.
 
 **Architecture**
 
-- **No statistics in the frontend** (see the ground rules). Don't add formulas, distributions or estimators to components or hooks.
-- API access lives in `src/api/`, one file per feature area, with typed wrappers and TS interfaces that mirror the Pydantic schemas. Components never call `fetch` directly.
-- Computation and API orchestration live in hooks (`use*`) that expose `{ result, isLoading | isComputing, error }`.
-- Slider-driven features use a ~250 ms debounce, abort the stale request with `AbortController`, and show a loading state. Always clean up timers and controllers in the effect cleanup.
-- Send the dataset reference via the `x-session-id` header. Global state goes through `DataContext` (`useData()`). Everything else stays feature-local.
-- Reuse the shared primitives before writing new ones: `DualInput` for every numeric parameter, `AnalysisStatus`, `ControlPrimitives`, `ResultToolbar`, `ExportMenu`.
-- Persist UI preferences with `useLocalStorageState` (validated on load). Never store datasets in `localStorage`.
-- Plotly charts are lazy-loaded with `React.lazy` + `Suspense`. Do not import Plotly eagerly. Watch the bundle size (chunk warning at 1600 KB).
-- Static math uses KaTeX, and interactive math input uses MathLive.
+- **Tabs:** analysis tabs follow `*Controls` → `*Observation` → `*Notebook`, exposed through a `*Tab.tsx` (`ControlsSlot` / `ObservationSlot` / `NotebookSlot`) and wired into `LabBench` from `App.tsx`.
+- **API access:** lives in `src/api/`, one file per area, with interfaces that mirror the Pydantic schemas. There is no shared client, and components never call `fetch`.
+- **Hooks** orchestrate the API calls and expose `{ result, isLoading | isComputing, error }`.
+  - Live controls use a ~250 ms debounce and abort stale requests with `AbortController`.
+  - Clean up timers and controllers in the effect cleanup.
+- **Global state:** only `DataContext` (`useData()`) and `AuthContext`. Send the dataset as the `x-session-id` header.
+- **Reuse before writing new components:** `DualInput` (every numeric parameter), `AnalysisStatus`, `ControlPrimitives`, `ResultToolbar`, `ExportMenu`.
+- **Persistence:** keep UI preferences with `useLocalStorageState`. Never store datasets in `localStorage`.
+- **Plotly** stays lazy-loaded (`React.lazy` + `Suspense`). The chunk warning is at 1600 KB.
 
 **React practice**
 
-- Keep components small and derive state instead of duplicating it. Give hook dependency arrays every value they use.
-- Handle loading, empty and error states in every Observation component. Never render `undefined`, `NaN` or `null` as a value.
-- UI text must be understandable to students. Display rounding uses the precision from `DataContext` and is presentation-only.
-- Accessibility: labeled inputs, keyboard support (arrow keys in `DualInput`, sidebar shortcuts), sufficient contrast.
+- **State:** keep components small and derive state instead of duplicating it. Give hook dependency arrays every value they use. Never call `setState` during render.
+- **Observation components:** handle loading, empty and error states in every one. Never render `undefined`, `NaN` or `null` as a value.
+- **Text and numbers:** UI text must be understandable to students. Display rounding uses the precision from `DataContext`.
+- **Accessibility:** labeled inputs, keyboard support, sufficient contrast.
 
-## Adding a Feature
+## Adding a feature
 
-A typical statistics feature touches every layer, in this order:
+A statistics feature touches every layer, in this order:
 
-1. **`backend/core/…`**: the pure math, with docstrings. Run it by hand and compare against a reference.
-2. **`backend/services/…`**: validation and mapping. No numpy/scipy imports.
-3. **`backend/api/schemas/…` and `backend/api/routes/…`**: models and a thin route. Register the router in `main.py`.
-4. **`backend/tests/…`**: core/service tests, plus an API test in `tests/api/`.
-5. **`frontend/src/api/<feature>.ts`**: typed client and interfaces.
-6. **`frontend/src/hooks/…` or the feature folder**: a hook with the debounce/abort pattern.
-7. **`frontend/src/features/<area>/<Feature>{Controls,Observation,Notebook}.tsx`** plus a tab component, wired into `App.tsx`.
-8. **Docs**: update the migration table in `CLAUDE.md` and `README.md`, and `doc/migration_plan.md` if the roadmap changed.
+1. `backend/core/…`: the math, with docstrings, checked against a reference.
+2. `backend/services/…`: validation and mapping.
+3. `backend/api/schemas/…` and `api/routes/…`: register the router in `main.py` with `dependencies=_protected`.
+4. `backend/tests/…`: core/service tests plus an API test in `tests/api/`.
+5. `frontend/src/api/<feature>.ts`: typed client.
+6. `frontend/src/features/<area>/`: a `use<Feature>TabState` hook plus `*Controls`, `*Observation`, `*Notebook` and `*Tab`, wired into `App.tsx`.
+7. Docs: the status table in `doc/roadmap.md`, the Features table in `README.md`, and a dated note under `changelogs/`.
 
-The only unmigrated feature is **Linear regression** (`core/linear_regression/` is empty). It is a good place to start, but discuss the design first.
+Linear regression is the only feature left to migrate. Discuss the design first; the plan is in [`doc/roadmap.md`](doc/roadmap.md).
 
 ## Testing
 
-**Backend (pytest, from `backend/`)**
+- **Backend (pytest):**
+  - Tests live in `tests/test_*.py` and `tests/services/`; API tests live in `tests/api/` (`conftest.py` signs them in).
+  - Assert against **independent reference values** (scipy directly, a textbook example, a closed form), never against the function's own output.
+  - Cover edge cases.
+  - Seed any randomness, and don't depend on the network or the clock.
+- **Frontend (Vitest + jsdom):**
+  - Mock the `src/api/` layer, not `fetch`.
+  - Test loading / error / success states and the debounce/abort behaviour.
+  - Never assert statistical values; that belongs in the backend.
+- **Bug fixes** come with a test that fails without the fix.
 
-- Test files are `tests/test_*.py`, and API tests go in `tests/api/` using `httpx`/FastAPI's test client.
-- Every new `core/` or `services/` function needs tests. Assert against **independent reference values** (scipy directly, a textbook example, or a known closed form), not against the function's own output.
-- Cover edge cases: small n, zero variance, invalid parameters, missing session.
-- Tests must be deterministic. Seed any randomness and don't depend on the network or on the clock.
+## Commits and pull requests
 
-**Frontend (Vitest, from `frontend/`)**
-
-- Put tests next to the code (`*.test.ts(x)`), using jsdom and Testing Library-style queries where available.
-- Mock the `src/api/` layer, not `fetch` internals. Test states (loading, error, success) and the debounce/abort behavior of hooks.
-- Don't write frontend tests that assert statistical values. That belongs in the backend.
-
-A bug fix should come with a test that fails without the fix.
-
-## Commits and Pull Requests
-
-**Commit messages** follow Conventional Commits, matching the history:
+Use Conventional Commits (`feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `perf`) with a short, lowercase, imperative subject. Explain *why* in the body when it isn't obvious:
 
 ```
 feat: hypothesis testing tab with rejection region and verdict
 fix: keep the null curve readable when the statistic is far out
-refactor: shared result status, export and control primitives across tabs
-docs: record graphical, inference and hypothesis tabs as migrated
 ```
 
-Types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `perf`. Use a lowercase imperative subject with no trailing period, and explain *why* in the body when it isn't obvious.
+Each PR should:
 
-**Pull requests**
+- Be small, and describe what changed and why.
+- List the checks you ran.
+- For `core/` changes, name the reference you verified against. The professor reviews them.
+- Include a screenshot or short recording for UI changes.
+- Update the docs listed under [Adding a feature](#adding-a-feature).
 
-- Keep them small and focused, with a description of what changed and why.
-- List the checks you ran (`pytest`, `npm run test`, `npm run build`).
-- For changes to `core/`, describe the reference you verified against. The professor will review them.
-- For UI changes, include a screenshot or short recording.
-- Update the docs listed under [Adding a Feature](#adding-a-feature) when behavior or status changes.
-- Resolve review comments in the spirit of the [Code of Conduct](CODE_OF_CONDUCT.md).
-
-## Questions
-
-Open an issue or ask the maintainers. If a rule here blocks a good idea, raise it. Rules can change, but they change through discussion, not silently.
+If a rule here blocks a good idea, raise it in an issue. Rules change through discussion, not silently.

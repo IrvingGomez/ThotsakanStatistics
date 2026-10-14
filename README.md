@@ -10,321 +10,72 @@
 
 > **"Stop Calculating. Start Simulating."**
 
-An interactive **Virtual Statistics Laboratory** for Thai engineering students. Instead of memorizing formulas, students manipulate variables and observe behavior — like scientists, not test-takers.
+An interactive **virtual statistics laboratory** for Thai engineering students. Instead of memorizing formulas, students move sliders, break assumptions and watch the data respond, the way scientists work.
 
-Just as the mythical giant **Thotsakan (ทศกัณฐ์)** has 10 faces and 20 arms to command every angle of reality, this software gives students multi-dimensional tools to explore, break, and rebuild their intuition about data.
+The React frontend only renders. Every number comes from a Python backend whose `core/` math the professor verifies directly. Sign-in is limited to verified `@cmkl.ac.th` Google accounts.
 
----
+## Features
 
-## ✨ Features
+| Module | What it does | Status |
+|---|---|---|
+| **Data** | CSV upload, preview, column-type fixes, category filters, display precision | ✅ |
+| **Probability → Common Distributions** | PMF / PDF / CDF and probability queries for 12 distributions | ✅ |
+| **Estimation → Descriptive Statistics** | Quantiles, centre, spread, shape (weighted / trimmed / Winsorized); histogram, box plot | ✅ |
+| **Estimation → Statistical Inference** | Confidence and prediction intervals, confidence regions | ✅ |
+| **Estimation → Graphical Analysis** | Histogram / empirical PMF / ECDF with KDE, rug, normal, DKW band, CI/PI strip | ✅ |
+| **Hypothesis Testing** | One- and two-sample t (Welch), Bartlett / Levene, one-way ANOVA; α, critical values, rejection region, verdict | ✅ |
+| **Linear Regression** | OLS, CI/PI bands, residuals | 📋 Not started |
+| **Custom Distribution / Approximations** | User-defined distributions; binomial → normal, CLT | 📋 Planned |
 
-| Module | Description | Status |
-|--------|-------------|--------|
-| **Home** | Landing page with philosophy and navigation | ✅ Complete |
-| **Data Lab** | CSV upload, column inspection, and filtering | 🚧 Frontend done; backend session upload not yet wired |
-| **12 Distributions** | Interactive PMF / PDF / CDF for Normal, Binomial, Poisson, Exponential, and 8 more | ✅ Complete |
-| **Descriptive Statistics** | Mean, median, mode, variance, skewness, kurtosis, box plots, histograms | ✅ Complete |
-| **Normal PDF / CI** | Interactive normal curve with confidence-interval visualization | ✅ Complete |
-| **Statistical Inference** | Confidence intervals, prediction intervals, and confidence regions | ✅ Complete |
-| **Graphical Analysis** | Histogram, ECDF, KDE, PMF, and Normal overlay visualizations | 🚧 Backend done; frontend not yet wired |
-| **Hypothesis Testing** | Z-test, t-test, chi-square, ANOVA — with visual rejection regions | 📋 Planned |
-| **Linear Regression** | OLS, diagnostics, residual plots | 📋 Planned |
+## Getting started
 
-### Key Interactions
-
-- **Slider → Authoritative Feedback**: Drag a parameter slider; after a ~250ms debounce the backend computes the result and the chart re-renders. In-flight requests are cancelled (`AbortController`) so only the latest answer lands.
-- **Budget Constraints**: Real science costs money — simulations can impose sample budgets so students learn trade-offs.
-- **Visual-First**: P-values and test statistics appear *after* the student sees the rejection region light up on the graph.
-
----
-
-## 🏗 Architecture
-
-**Zero Frontend Math** — the React frontend renders; the Python backend computes. There is no JS approximation layer: `core/` is the only place where statistics are calculated.
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│  React / TypeScript Frontend (Vite)                         │
-│  ┌────────────┐  ┌──────────────┐  ┌──────────────────┐    │
-│  │  Controls   │  │ Observation  │  │    Notebook       │    │
-│  │  (sliders,  │  │ (Plotly      │  │    (stats,        │    │
-│  │  toggles)   │  │  charts)     │  │    explanations)  │    │
-│  └────────────┘  └──────────────┘  └──────────────────┘    │
-│         │               ▲                    ▲              │
-│         ▼               │                    │              │
-│  ┌──────────────────────┴────────────────────┘              │
-│  │  Feature Hooks (useDistribution, useNormalPDF, ...)      │
-│  │  → debounced API calls + AbortController cancellation    │
-│  └──────────────────────────────────────────────────────────│
-│                          │  HTTP / JSON                      │
-└──────────────────────────┼──────────────────────────────────┘
-                           ▼
-┌──────────────────────────────────────────────────────────────┐
-│  FastAPI / Python Backend                                    │
-│  ┌────────────┐  ┌─────────────┐  ┌────────────────────┐   │
-│  │ api/routes  │→│  services/   │→│  core/ (pure math)  │   │
-│  │ (endpoints) │  │(orchestrate)│  │ scipy, statsmodels, │   │
-│  │             │  │             │  │ pingouin            │   │
-│  └────────────┘  └─────────────┘  └────────────────────┘   │
-│  ┌────────────────────────────────────────────────────────┐ │
-│  │ sessions/store.py — in-memory dataset store with TTL   │ │
-│  └────────────────────────────────────────────────────────┘ │
-└──────────────────────────────────────────────────────────────┘
-```
-
-**Why this split?**
-- The **frontend** gives students the "alive" feel — debounced requests with loading skeletons keep sliders responsive without ever computing locally.
-- The **backend** is the mathematical authority — the professor reads `core/` and verifies correctness directly.
-- `core/` has **zero dependencies** on web frameworks — pure scipy/numpy/statsmodels.
-
----
-
-## 📁 Project Structure
-
-```
-.
-├── frontend/                          # React + Vite + TypeScript
-│   └── src/
-│       ├── api/                       # Typed fetch client for backend
-│       ├── features/
-│       │   ├── home/                  # Landing page
-│       │   ├── data/                  # CSV upload & inspection
-│       │   ├── probability/common/    # 12 distributions (PMF/PDF/CDF)
-│       │   └── estimation/
-│       │       ├── descriptive/       # Statistics tables & charts
-│       │       ├── inference/         # CI / PI / confidence regions
-│       │       └── graphical/         # Graphical analysis (in progress)
-│       ├── components/                # Reusable UI atoms (DualInput, etc.)
-│       ├── context/                   # Global state (DataContext)
-│       ├── hooks/                     # API orchestration hooks
-│       ├── layout/                    # LabBench 3-panel system
-│       └── utils/                     # Export helpers, file parsing
-│
-├── backend/                           # FastAPI + Python
-│   ├── core/                          # Pure math (professor-verified)
-│   │   ├── data_stats.py
-│   │   ├── probability/               # Common distributions, normal PDF
-│   │   ├── estimation/
-│   │   │   ├── descriptive.py
-│   │   │   ├── graphical_analysis.py
-│   │   │   └── inference/             # CI, PI, estimators, likelihood
-│   │   ├── hypothesis_testing/        # (stub — planned)
-│   │   └── linear_regression/         # (stub — planned)
-│   ├── services/                      # Orchestration layer
-│   ├── api/
-│   │   ├── routes/                    # FastAPI endpoints
-│   │   ├── schemas/                   # Pydantic request/response models
-│   │   └── deps.py                    # Shared dependencies
-│   ├── sessions/store.py              # In-memory session store + TTL
-│   ├── tests/                         # pytest suite
-│   └── main.py                        # App entry point
-│
-└── doc/                               # Design docs & specifications
-    ├── DESIGN_PROPOSAL.md
-    ├── identity.md                    # Brand philosophy & UX pillars
-    ├── migration_plan.md              # Gradio → React+FastAPI roadmap
-    └── ...
-```
-
-> The original Gradio app (`ThotsakanStatistics/`) and the legacy Reflex prototype (`Try_reflex/`) are kept locally as read-only references during migration, but are not tracked in this branch.
-
----
-
-## 🚀 Getting Started
-
-### Prerequisites
-
-- **Node.js** ≥ 18
-- **Python** ≥ 3.11
-- **npm** (ships with Node.js)
-- *(Optional)* **Docker** with Compose v2 — see [Run with Docker](#-run-with-docker)
-
-### 1. Clone the repository
+Requirements: Node.js 20.19+ or 22.12+, Python 3.11+ (or just Docker with Compose v2).
 
 ```bash
-git clone -b react-migration https://github.com/IrvingGomez/ThotsakanStatistics.git
+git clone -b dev https://github.com/IrvingGomez/ThotsakanStatistics.git
 cd ThotsakanStatistics
+cp .env.example .env     # fill in GOOGLE_CLIENT_ID + AUTH_SECRET_KEY, or set AUTH_DISABLED=true locally
 ```
 
-> **Note:** the React + FastAPI app lives on the `react-migration` branch. The `main` branch still holds the original Gradio application.
+Sign-in setup is described in [`doc/AUTH.md`](doc/AUTH.md). Without that configuration the backend refuses to start.
 
-### 2. Install dependencies
-
-**Frontend:**
-```bash
-cd frontend
-npm install
-```
-
-**Backend:**
-```bash
-cd backend
-python -m venv .venv
-
-# Windows
-.venv\Scripts\activate
-# macOS / Linux
-source .venv/bin/activate
-
-pip install -r requirements.txt
-```
-
-### 3. Run the development servers
-
-**Option A — Run both at once** (from project root):
-```bash
-npm install        # install concurrently (one-time)
-npm run dev        # starts frontend (5173) + backend (8000) concurrently
-```
-
-**Option B — Run separately:**
+**Local:**
 
 ```bash
-# Terminal 1: Frontend
-cd frontend
-npm run dev        # → http://localhost:5173
-
-# Terminal 2: Backend
-cd backend
-uvicorn main:app --reload  # → http://localhost:8000
+(cd frontend && npm install)
+(cd backend && python -m venv .venv && source .venv/bin/activate \
+   && pip install -r requirements.txt -r requirements-dev.txt)
+npm install && npm run dev     # frontend http://localhost:5173, backend :8000
 ```
 
-### 4. Verify
-
-- Open [http://localhost:5173](http://localhost:5173) — the Thotsakan Statistics lab should load.
-- Health check: [http://localhost:8000/api/health](http://localhost:8000/api/health) should return `{"status": "ok"}`.
-
-### 🔐 Configure Google sign-in
-
-Access is limited to `@cmkl.ac.th` Google accounts. Configuration lives in a root `.env` file (git-ignored):
+**Docker:**
 
 ```bash
-cp .env.example .env   # then fill in GOOGLE_CLIENT_ID and AUTH_SECRET_KEY
+docker compose up --build                     # http://localhost:8080 (WEB_PORT to change)
+docker compose -f docker-compose.dev.yml up   # hot reload: :5173, backend on host :8097
 ```
 
-The file documents every variable, including how to create the OAuth client ID in Google Cloud Console. Full walkthrough: [`doc/AUTH.md`](doc/AUTH.md). For quick local work without Google, set `AUTH_DISABLED=true` (never in production).
+Prebuilt images are published from `dev`: `ghcr.io/irvinggomez/thotsakanstatistics-{backend,frontend}:dev`.
 
-### 🐳 Run with Docker
-
-No Node.js or Python install needed — only Docker with Compose. Both stacks read the root `.env` (see above).
-
-**Production-style stack** (nginx serves the built frontend and proxies `/api` to the backend):
-```bash
-docker compose up --build       # → http://localhost:8080
-WEB_PORT=3000 docker compose up # use a different host port
-```
-
-**Development stack** (hot reload; source is bind-mounted):
-```bash
-docker compose -f docker-compose.dev.yml up   # frontend → :5173, backend → :8000
-```
-
-**Prebuilt images** are published to GitHub Container Registry by the `Docker images` workflow on every push to `dev` (tags: `dev`, `sha-<commit>`):
-```bash
-docker pull ghcr.io/irvinggomez/thotsakanstatistics-backend:dev
-docker pull ghcr.io/irvinggomez/thotsakanstatistics-frontend:dev
-```
-
-Notes:
-- The backend runs a **single** uvicorn worker on purpose — datasets live in an in-memory session store, so extra workers would not share sessions.
-- The frontend image reads `BACKEND_URL` (default `http://backend:8000`) to know where to proxy `/api`.
-- Run tests inside the dev stack: `docker compose -f docker-compose.dev.yml exec backend pytest`.
-
----
-
-## 🧪 Running Tests
+**Tests:**
 
 ```bash
-# Frontend (Vitest)
-cd frontend
-npm run test          # single run
-npm run test:ui       # interactive Vitest UI
-
-# Backend (pytest)
-cd backend
-pytest                # all tests
-pytest -v             # verbose output
+cd backend && pytest
+cd frontend && npm run test && npm run build
 ```
 
----
-
-## 🎨 The "LabBench" UI Pattern
-
-Every feature tab plugs into a shared 3-panel layout:
-
-```
-┌─────────────────────────────────────────────────────┐
-│  Header (logo + tab navigation + subheader)         │
-├──────────────┬─────────────────┬────────────────────┤
-│   Controls   │   Observation   │     Notebook       │
-│   (~280px)   │   (flex-grow)   │     (~320px)       │
-│              │                 │                    │
-│  Sliders,    │  Plotly charts, │  Stats summaries,  │
-│  toggles,    │  interactive    │  explanations,     │
-│  selects     │  visualizations │  KaTeX formulas    │
-├──────────────┴─────────────────┴────────────────────┤
-│  Footer (status bar)                                │
-└─────────────────────────────────────────────────────┘
-```
-
-- Panels are **resizable** via drag handles
-- Panels **auto-collapse** on narrow viewports (< 768px)
-- Widths persist to `localStorage`
-
----
-
-## 🔑 Key Technical Decisions
-
-| Decision | Rationale |
-|----------|-----------|
-| **Zero frontend math** | All statistics computed in Python `core/` — one verifiable source of truth, no drift between JS and scipy |
-| **Debounce + AbortController** | Sliders stay responsive: stale in-flight requests are cancelled, only the latest result renders |
-| **In-memory session store** | No database needed for a teaching tool; TTL auto-cleanup keeps it simple |
-| **`core/` is framework-free** | Professor reads raw Python + scipy to verify formulas |
-| **Plotly (not Matplotlib)** | Hover, zoom, pan are mandatory for a lab — static images are forbidden |
-| **KaTeX + MathLive** | Beautiful formula display AND interactive math input |
-| **Lazy-loaded Plotly chunks** | Bundle splitting keeps initial load < 2s despite heavy charting library |
-
----
-
-## ⚡ Performance Targets
-
-| Interaction | Target |
-|-------------|--------|
-| Slider → debounce fires | ~250ms after last move |
-| Backend authoritative result | < 500ms (typical), < 2s (bootstrap) |
-| Tab switch | < 200ms (lazy loaded) |
-| Initial page load | < 2s |
-
----
-
-## 📚 Documentation
+## Documentation
 
 | Document | Contents |
-|----------|----------|
-| [`doc/identity.md`](doc/identity.md) | Brand philosophy, UX pillars, anti-features |
-| [`doc/DESIGN_PROPOSAL.md`](doc/DESIGN_PROPOSAL.md) | Component architecture, panel slot pattern, DualInput spec |
-| [`doc/migration_plan.md`](doc/migration_plan.md) | Phased roadmap from Gradio → React + FastAPI |
-| [`doc/context.md`](doc/context.md) | High-level architecture layers and data flow |
-| [`doc/frontend_backend_interaction.md`](doc/frontend_backend_interaction.md) | API contract and request/response patterns |
+|---|---|
+| [`doc/design.md`](doc/design.md) | Product identity, UX pillars, anti-features, LabBench layout, theme |
+| [`doc/architecture.md`](doc/architecture.md) | Layers, folders, request flow, sessions, API endpoints, testing |
+| [`doc/roadmap.md`](doc/roadmap.md) | Authoritative feature status, remaining work, known issues |
+| [`doc/AUTH.md`](doc/AUTH.md) | Google sign-in setup and troubleshooting |
+| [`doc/ux_proposals.md`](doc/ux_proposals.md) | UX ideas not yet built |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Workflow, coding standards, testing, commits |
+| [`changelogs/`](changelogs/) | Dated change notes |
 
----
+## License
 
-## 🤝 Contributing
-
-1. **Read [`doc/identity.md`](doc/identity.md) first** — if a feature doesn't fit the "10-Armed Lab" identity, we don't build it.
-2. **`core/`  is sacred** — changes to `core/` must maintain numerical correctness and remain framework-free.
-3. Follow the **Controls → Observation → Notebook** naming convention for new feature tabs.
-4. Write backend tests for any new `core/` or `services/` functions.
-
----
-
-## 📄 License
-
-This project is developed for educational use. Contact the maintainers for licensing details.
-
----
-
-<p align="center">
-  <sub>Built with 🔬 for Thai engineering students who learn by doing, not memorizing.</sub>
-</p>
+No license file is included yet. This project is developed for educational use; contact the maintainers for licensing details.

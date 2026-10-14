@@ -1,6 +1,6 @@
 # Authentication Setup (Google Sign-In)
 
-Thotsakan Statistics is gated: nobody can reach the Data, Probability, Estimation, Hypothesis or Regression features (or any `/api` data route) without signing in with a Google account whose **verified email ends in `@cmkl.ac.th`**.
+Thotsakan Statistics is gated: nobody can use the Data, Probability, Estimation or Hypothesis tabs (or any `/api` data route) without signing in with a Google account whose **verified email ends in `@cmkl.ac.th`**.
 
 ## How it works
 
@@ -11,15 +11,16 @@ Browser                         Backend (FastAPI)                 Google
   │ ◀──────────────────────────── ID token (JWT) ─────────────────
   │  POST /api/auth/google {credential} ▶ verify signature, audience,
   │                                       expiry, email_verified, @cmkl.ac.th
-  │ ◀── Set-Cookie: thotsakan_session (HttpOnly, signed JWT, 12 h)
+  │ ◀── Set-Cookie: thotsakan_session (HttpOnly, SameSite=Lax, signed HS256 JWT, 12 h)
   │  every /api request sends the cookie ▶ api/deps.require_user
 ```
 
-- Only the **client ID** is needed (public by design). There is **no client secret** and no redirect URI.
-- Open routes: `/api/health`, `/api/auth/*`. Everything else returns `401` without a valid session, and the UI drops back to the login screen.
+- Only the **client ID** is needed (public by design). There is **no client secret** and no redirect URI. The client ID is served at runtime by `/api/auth/config`, so the same Docker image works for any deployment.
+- Open routes: `/api/health`, `/api/auth/config`, `/api/auth/google`, `/api/auth/logout`. `/api/auth/me` and every data route return `401` without a valid session, and the UI drops back to the login screen.
 - The domain is re-checked on every request, so narrowing `AUTH_ALLOWED_DOMAIN` takes effect immediately.
+- The login session is separate from the dataset session (`x-session-id`); dataset sessions are not yet tied to the signed-in user.
 
-Code: `backend/config.py`, `backend/services/auth.py`, `backend/api/routes/auth.py`, `backend/api/deps.py`; frontend `src/context/AuthContext.tsx`, `src/components/LoginGate.tsx`.
+Code: `backend/config.py`, `backend/services/auth.py`, `backend/api/routes/auth.py`, `backend/api/deps.py`; frontend `src/context/AuthContext.tsx`, `src/components/LoginGate.tsx`, `src/layout/LogoBar.tsx` (user + Sign out).
 
 ## 1. Create the Google OAuth client
 
@@ -37,11 +38,11 @@ You need a Google account that can create projects (ideally your `@cmkl.ac.th` W
      | Where you run it | Origin to add |
      |---|---|
      | `docker compose up` (production-style) | `http://localhost:8080` (or your `WEB_PORT`) |
-     | Dev stack / `npm run dev` | `http://localhost:5173` |
+     | Dev compose stack / `npm run dev` | `http://localhost:5173` |
      | Deployed | `https://your-domain.example` |
 
    - **Authorized redirect URIs:** leave empty (not used).
-4. Click **Create** and copy the **Client ID** (`123…apps.googleusercontent.com`). You can ignore any client secret shown.
+4. Click **Create** and copy the **Client ID** (`123…apps.googleusercontent.com`). Ignore any client secret shown.
 
 Origin changes can take a few minutes (occasionally longer) to apply.
 
@@ -51,7 +52,7 @@ Origin changes can take a few minutes (occasionally longer) to apply.
 cp .env.example .env      # .env is git-ignored; never commit it
 ```
 
-Edit `.env`:
+Edit the auth part of `.env`:
 
 ```dotenv
 GOOGLE_CLIENT_ID=123456789-abc.apps.googleusercontent.com
@@ -77,26 +78,28 @@ python3 -c "import secrets; print(secrets.token_urlsafe(48))"
 | `AUTH_COOKIE_SECURE` | no (`false`) | Set `true` behind HTTPS so the cookie is HTTPS-only |
 | `AUTH_DISABLED` | no (`false`) | **Dev only.** Skips login and treats everyone as a dev user. The UI shows an amber "Auth disabled (dev)" badge. Never use in production |
 
-If auth is enabled and `GOOGLE_CLIENT_ID` or `AUTH_SECRET_KEY` is missing/short, the backend **refuses to start** with a message saying what to fix.
+`.env` also holds two non-auth Docker settings, `BASE_REGISTRY` and `WEB_PORT`; `.env.example` documents them.
+
+If auth is enabled and `GOOGLE_CLIENT_ID` is missing or `AUTH_SECRET_KEY` is missing/shorter than 32 characters, the backend **refuses to start** with a message saying what to fix.
 
 ## 3. Run
 
-Docker (both compose files read the root `.env`):
+Docker (both compose files forward the auth variables from the root `.env`):
 
 ```bash
 docker compose up --build                       # http://localhost:8080
-docker compose -f docker-compose.dev.yml up     # http://localhost:5173
+docker compose -f docker-compose.dev.yml up     # http://localhost:5173 (backend on host :8097)
 docker compose logs -f backend                  # watch for startup errors
 ```
 
-Without Docker (the backend also loads `<repo>/.env`):
+Without Docker (the backend loads `<repo>/.env` itself; real environment variables win):
 
 ```bash
 cd backend && uvicorn main:app --reload         # :8000
 cd frontend && npm run dev                      # :5173
 ```
 
-Open the app: you should see the "Sign in with your @cmkl.ac.th Google account" screen. After signing in, the top bar shows your name and a **Sign out** button.
+Open the app: you should see the "Sign in with your @cmkl.ac.th Google account" screen. After signing in, the logo bar shows your name and a **Sign out** button.
 
 ## Quick verification
 
@@ -106,7 +109,7 @@ curl -s -o /dev/null -w "%{http_code}\n" -X POST localhost:8080/api/descriptive/
      -H 'content-type: application/json' -d '{}'             # 401 when not signed in
 ```
 
-`"enabled": false` means `AUTH_DISABLED=true` is set somewhere (check `.env` and your shell environment, which overrides `.env`).
+Use `localhost:8000` instead of `localhost:8080` when running without Docker. `"enabled": false` means `AUTH_DISABLED=true` is set somewhere (check `.env` and your shell environment, which overrides `.env`).
 
 ## Production checklist
 
@@ -129,5 +132,5 @@ curl -s -o /dev/null -w "%{http_code}\n" -X POST localhost:8080/api/descriptive/
 | Backend exits with "Authentication is misconfigured" | Fill `GOOGLE_CLIENT_ID` / `AUTH_SECRET_KEY` (≥ 32 chars) in `.env` |
 | Login succeeds but next request is 401 | `AUTH_COOKIE_SECURE=true` over plain `http://`, so the browser drops the cookie; use HTTPS or set it to `false` locally |
 | Everyone suddenly signed out | `AUTH_SECRET_KEY` changed, or `AUTH_SESSION_HOURS` elapsed |
-| App opens with no login screen | `AUTH_DISABLED=true`; see the badge in the top bar |
+| App opens with no login screen | `AUTH_DISABLED=true`; see the badge in the logo bar |
 | Env change not picked up | Recreate the container: `docker compose up -d --force-recreate backend` |
