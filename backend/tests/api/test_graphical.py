@@ -79,3 +79,30 @@ def test_filters_shrink_the_sample(mock_session):
     ).json()
     assert filtered["summary"]["n"] == 20
     assert filtered["summary"]["n"] < full["summary"]["n"]
+
+
+def test_ecdf_alpha_sets_the_band_width(mock_session):
+    wide = post(mock_session, graph_type="ECDF", alpha=0.01).json()
+    narrow = post(mock_session, graph_type="ECDF", alpha=0.20).json()
+    assert wide["ecdf_data"]["epsilon"] > narrow["ecdf_data"]["epsilon"]
+    assert wide["alpha"] == 0.01
+
+
+def test_normal_overlay_uses_the_chosen_estimators(mock_session):
+    res = post(mock_session, add_normal=True, mu_estimator="Sample Median", sigma_estimator="IQR (bias corrected)")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["normal_curve"] is not None
+    assert body["point_estimates"]["mu"] is not None and body["point_estimates"]["sigma"] > 0
+
+
+def test_old_interval_and_bootstrap_fields_are_ignored_not_rejected(mock_session):
+    res = post(mock_session, add_ci=True, add_pi=True, bootstrap_mean=True, conf_level=0.9)
+    assert res.status_code == 200
+    body = res.json()
+    assert "interval_bands" not in body and "dist_used" not in body
+
+
+def test_an_irrelevant_kde_flag_on_the_ecdf_is_silent(mock_session):
+    body = post(mock_session, graph_type="ECDF", add_kde=True).json()
+    assert body["warnings"] == []

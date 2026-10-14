@@ -12,10 +12,8 @@ import pytest
 from pydantic import ValidationError
 
 from api.schemas.graphical import GraphicalParams
-from api.schemas.inference import InferenceParams
 from core.estimation.inference.estimators import estimate_mean, estimate_sigma
 from services.graphical import compute_graphical_data
-from services.inference import calculate_intervals
 
 RNG = np.random.default_rng(20260909)
 VALUES = np.round(RNG.normal(loc=30.0, scale=8.0, size=60), 4)
@@ -44,17 +42,16 @@ def test_ecdf_drops_the_non_serializable_leading_point(df):
     assert xs[0] == pytest.approx(float(VALUES.min()))
 
 
-def test_dkw_epsilon_follows_the_confidence_level(df):
+def test_dkw_epsilon_follows_the_significance_level(df):
     n = len(VALUES)
-    for level in (0.95, 0.90):
-        res = compute_graphical_data(
-            df, params(graph_type="ECDF", ecdf_conf_level=level)
-        )
-        expected = math.sqrt(math.log(2.0 / (1.0 - level)) / (2.0 * n))
+    for alpha in (0.05, 0.10):
+        res = compute_graphical_data(df, params(graph_type="ECDF", alpha=alpha))
+        expected = math.sqrt(math.log(2.0 / alpha) / (2.0 * n))
         assert res["ecdf_data"]["epsilon"] == pytest.approx(expected)
+        assert res["alpha"] == alpha
 
-    tight = compute_graphical_data(df, params(graph_type="ECDF", ecdf_conf_level=0.90))
-    wide = compute_graphical_data(df, params(graph_type="ECDF", ecdf_conf_level=0.95))
+    tight = compute_graphical_data(df, params(graph_type="ECDF", alpha=0.10))
+    wide = compute_graphical_data(df, params(graph_type="ECDF", alpha=0.05))
     assert tight["ecdf_data"]["epsilon"] < wide["ecdf_data"]["epsilon"]
 
 
@@ -62,6 +59,12 @@ def test_ecdf_band_omitted_when_switched_off(df):
     res = compute_graphical_data(df, params(graph_type="ECDF", add_conf_band=False))
     assert res["ecdf_data"].get("lower") is None
     assert res["ecdf_data"].get("upper") is None
+    assert res["alpha"] is None  # no band, so no alpha to report
+
+
+def test_alpha_is_only_reported_for_the_ecdf_band(df):
+    assert compute_graphical_data(df, params())["alpha"] is None
+    assert compute_graphical_data(df, params(graph_type="PMF"))["alpha"] is None
 
 
 # -- Normal overlay ----------------------------------------------------------
@@ -69,7 +72,7 @@ def test_ecdf_band_omitted_when_switched_off(df):
 def test_normal_overlay_honours_the_selected_estimators(df):
     res = compute_graphical_data(df, params(
         add_normal=True,
-        mean_estimator="Interquartile Mean",
+        mu_estimator="Interquartile Mean",
         sigma_estimator="MAD (bias corrected)",
     ))
 
@@ -88,61 +91,20 @@ def test_normal_overlay_honours_the_selected_estimators(df):
 
 
 def test_normal_overlay_can_centre_on_the_median(df):
-    res = compute_graphical_data(df, params(
-        add_normal=True, normal_mu_source="Median-based CI"
-    ))
+    res = compute_graphical_data(df, params(add_normal=True, mu_estimator="Sample Median"))
     assert res["point_estimates"]["mu"] == pytest.approx(float(np.median(VALUES)))
 
 
-# -- CI / PI bands -----------------------------------------------------------
-
-def _reference_intervals(alpha=0.05, **overrides):
-    inf = InferenceParams(session_id="x", column="Age", alpha=alpha, **overrides)
-    return calculate_intervals(pd.Series(VALUES), inf)
-
-
-def test_ci_endpoints_match_the_shared_interval_service(df):
-    res = compute_graphical_data(df, params(add_ci=True, ci_choice="Both"))
-    _, _, mean_ci, _, median_ci, _ = _reference_intervals()
-
-    bands = {b["kind"]: b for b in res["interval_bands"]}
-    assert bands["ci_mean"]["low"] == pytest.approx(float(mean_ci[0]))
-    assert bands["ci_mean"]["high"] == pytest.approx(float(mean_ci[1]))
-    assert bands["ci_median"]["low"] == pytest.approx(float(median_ci[0]))
-    assert bands["ci_median"]["high"] == pytest.approx(float(median_ci[1]))
+def test_normal_overlay_defaults_to_the_sample_mean_and_s(df):
+    res = compute_graphical_data(df, params(add_normal=True))
+    assert res["point_estimates"]["mu"] == pytest.approx(float(VALUES.mean()))
+    assert res["point_estimates"]["sigma"] == pytest.approx(float(VALUES.std(ddof=1)))
 
 
-def test_ci_choice_suppresses_the_other_band(df):
-    res = compute_graphical_data(df, params(add_ci=True, ci_choice="Mean"))
-    kinds = {b["kind"] for b in res["interval_bands"]}
-    assert kinds == {"ci_mean"}
-
-
-def test_pi_endpoints_match_the_shared_interval_service(df):
-    res = compute_graphical_data(df, params(add_pi=True, pi_choice="IQR"))
-    _, pi_table, _, _, _, _ = _reference_intervals()
-    row = pi_table[pi_table["Statistic"] == "IQR"].iloc[0]
-
-    band = [b for b in res["interval_bands"] if b["kind"] == "pi"][0]
-    assert band["low"] == pytest.approx(float(row["Lower"]))
-    assert band["high"] == pytest.approx(float(row["Upper"]))
-
-
-def test_bootstrap_pi_requires_the_bootstrap_toggle(df):
-    with pytest.raises(ValueError, match="Bootstrap Prediction"):
-        compute_graphical_data(df, params(add_pi=True, pi_choice="Bootstrap"))
-
-    res = compute_graphical_data(df, params(
-        add_pi=True, pi_choice="Bootstrap", bootstrap_pi=True, bootstrap_samples=200
-    ))
-    assert any(b["kind"] == "pi" for b in res["interval_bands"])
-
-
-def test_confidence_level_is_validated(df):
-    # Bounds now live on the schema, so an out-of-range level never reaches the
-    # service. See test_graphical_edge_cases.TestParameterBounds for the sweep.
-    with pytest.raises(ValidationError):
-        params(add_ci=True, conf_level=1.5)
+def test_no_estimates_without_a_normal_overlay(df):
+    res = compute_graphical_data(df, params(mu_estimator="Sample Median"))
+    assert res["point_estimates"] == {"mu": None, "sigma": None}
+    assert "normal_curve" not in res
 
 
 def test_range_estimator_rejected_above_25_observations(df):
@@ -150,6 +112,19 @@ def test_range_estimator_rejected_above_25_observations(df):
         compute_graphical_data(df, params(
             add_normal=True, sigma_estimator="Range (bias corrected)"
         ))
+
+
+def test_alpha_is_validated():
+    # Bounds live on the schema, so an out-of-range level never reaches the
+    # service. See test_graphical_edge_cases.TestParameterBounds for the sweep.
+    with pytest.raises(ValidationError):
+        params(graph_type="ECDF", alpha=1.5)
+
+
+def test_interval_and_bootstrap_fields_are_gone():
+    """CI / PI / bootstrap moved to the Inference tab; an old client's extra fields are ignored."""
+    p = params(add_ci=True, bootstrap_mean=True, conf_level=0.9)
+    assert not hasattr(p, "add_ci") and not hasattr(p, "bootstrap_mean")
 
 
 # -- Histogram / PMF / rug ---------------------------------------------------
@@ -181,7 +156,7 @@ def test_unknown_graph_type_is_rejected():
 
 def test_weights_column_aligns_with_the_data(df):
     res = compute_graphical_data(df, params(
-        add_normal=True, mean_estimator="Weighted Mean", weights_column="Weight"
+        add_normal=True, mu_estimator="Weighted Mean", weights_column="Weight"
     ))
     expected = float(estimate_mean(df["Age"], "Weighted Mean", weights=df["Weight"]))
     assert res["point_estimates"]["mu"] == pytest.approx(expected)

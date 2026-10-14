@@ -13,32 +13,17 @@ class GraphicalParams(BaseModel):
     add_kde: bool = True
     add_data: bool = False
 
-    # Overlays
-    add_normal: bool = False
-    normal_mu_source: Literal["Mean-based CI", "Median-based CI"] = "Mean-based CI"
-    add_ci: bool = False
-    ci_choice: Literal["Mean", "Median", "Both"] = "Both"
-    add_pi: bool = False
-    pi_choice: Literal["Mean", "Median", "IQR", "Bootstrap"] = "Mean"
-    conf_level: float = Field(0.95, gt=0.0, lt=1.0)
-
-    # ECDF options
+    # ECDF band: significance level alpha, same convention as every other tab
     add_conf_band: bool = True
-    ecdf_conf_level: float = Field(0.95, gt=0.0, lt=1.0)
+    alpha: float = Field(0.05, gt=0.0, lt=1.0)
 
-    # Estimators
-    mean_estimator: str = "Sample Mean"
-    median_estimator: str = "Sample Median"
+    # Normal overlay (histogram density / ECDF curve) and the estimators it is drawn from
+    add_normal: bool = False
+    mu_estimator: str = Field("Sample Mean", description="Any mean estimator, or 'Sample Median'")
     sigma_estimator: str = "Deviation (1 ddof)"
     trim_param: Optional[float] = Field(None, gt=0.0, lt=0.5)
     winsor_limits: Optional[str] = None
     weights_column: Optional[str] = None
-
-    # Bootstrap
-    bootstrap_mean: bool = False
-    bootstrap_median: bool = False
-    bootstrap_pi: bool = False
-    bootstrap_samples: int = Field(1000, ge=100, le=5000)
 
     filters: Optional[Dict[str, List[str]]] = None
 
@@ -78,14 +63,6 @@ class RugData(BaseModel):
     n_total: int
 
 
-class IntervalBand(BaseModel):
-    label: str
-    kind: str  # "ci_mean" | "ci_median" | "pi"
-    low: float
-    high: float
-    center: float
-
-
 class Summary(BaseModel):
     n: int
     n_unique: int
@@ -104,8 +81,6 @@ class GraphicalResponse(BaseModel):
     kde_curve: Optional[Curve] = None
     normal_curve: Optional[NormalCurve] = None
     rug_data: Optional[RugData] = None
-    interval_bands: Optional[List[IntervalBand]] = None
     point_estimates: Optional[PointEstimates] = None
-    dist_used: Optional[str] = None
-    alpha: Optional[float] = None
+    alpha: Optional[float] = None  # set only when an ECDF band was drawn
     warnings: List[str] = []

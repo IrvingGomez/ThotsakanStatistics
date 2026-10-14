@@ -11,7 +11,7 @@ Pure math only — no service, api or session imports.
 from __future__ import annotations
 
 import math
-from typing import Iterable, Optional
+from typing import Optional
 
 import numpy as np
 from scipy.stats import norm
@@ -27,10 +27,6 @@ MIN_SPREAD = 1e-12
 
 class DegenerateDataError(ValueError):
     """The sample cannot support the requested computation (too few / no spread)."""
-
-
-def _finite(values: Iterable[float]) -> bool:
-    return all(math.isfinite(float(v)) for v in values)
 
 
 def has_spread(data: np.ndarray) -> bool:
@@ -151,34 +147,6 @@ def compute_rug_data(data: np.ndarray, *, max_points: int = MAX_RUG_POINTS) -> d
         idx = np.linspace(0, n - 1, max_points).astype(int)
         values = values[idx]
     return {"x": values.tolist(), "n_shown": int(values.size), "n_total": int(n)}
-
-
-def compute_interval_bands(specs) -> list:
-    """
-    Normalize interval endpoints for the Plotly interval strip.
-
-    Analytic helpers return tuples and bootstrap helpers return length-2 arrays,
-    so both are coerced to plain floats. A degenerate sample can make an endpoint
-    NaN (a zero-variance CI, say); those bands are dropped rather than emitted,
-    because a non-finite float cannot be JSON-encoded and would fail the whole
-    response.
-    """
-    bands, dropped = [], []
-    for label, kind, interval in specs:
-        if interval is None:
-            continue
-        low, high = float(interval[0]), float(interval[1])
-        if not _finite((low, high)):
-            dropped.append(label)
-            continue
-        bands.append({
-            "label": label,
-            "kind": kind,
-            "low": low,
-            "high": high,
-            "center": (low + high) / 2.0,
-        })
-    return bands, dropped
 
 
 def compute_summary(data: np.ndarray) -> dict:
