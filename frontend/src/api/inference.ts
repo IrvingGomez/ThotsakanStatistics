@@ -37,8 +37,6 @@ export interface InferenceParams {
 
 export interface ConfidenceRegionsParams extends InferenceParams {
   probs: number[];
-  eps_mu: number[];
-  eps_sigma: number[];
   add_ci_box: boolean;
 }
 

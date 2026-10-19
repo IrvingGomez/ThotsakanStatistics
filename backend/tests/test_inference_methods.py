@@ -101,7 +101,7 @@ def test_pi_iqr_row_names_its_normal_calibration():
 def _region_params(**overrides):
     from api.schemas.inference import ConfidenceRegionsParams
 
-    base = dict(session_id="t", column="x", probs=[0.5, 0.95], eps_mu=[0.1, 0.1], eps_sigma=[0.05, 0.05])
+    base = dict(session_id="t", column="x", probs=[0.5, 0.95])
     base.update(overrides)
     return ConfidenceRegionsParams(**base)
 
@@ -138,6 +138,40 @@ def test_regions_table_is_omitted_when_the_box_is_off():
     from services.inference import calculate_regions
 
     assert calculate_regions(DATA, _region_params(add_ci_box=False))["table"] is None
+
+
+@pytest.mark.parametrize("data", [DATA, pd.Series([4.1, 5.3, 3.8, 6.0, 4.7]), pd.Series([0.001 * v for v in range(1, 201)])])
+@pytest.mark.parametrize("probs", [[0.5, 0.95], [0.1, 0.99]])
+def test_regions_window_holds_every_contour_and_the_box(data, probs):
+    """No contour touches the plot edge, whatever the scale or n, and the drawn CI box fits inside."""
+    import numpy as np
+    from services.inference import calculate_regions
+
+    res = calculate_regions(data, _region_params(probs=probs, alpha=0.001))
+    z = np.array(res["z_matrix"])
+    edge = np.concatenate([z[0], z[-1], z[:, 0], z[:, -1]])
+    assert edge.max() < min(res["levels"])
+    assert min(res["sigma_grid"]) > 0
+    assert min(res["mu_grid"]) <= res["mu_ci"][0] and res["mu_ci"][1] <= max(res["mu_grid"])
+    assert min(res["sigma_grid"]) <= res["sigma_ci"][0] and res["sigma_ci"][1] <= max(res["sigma_grid"])
+
+
+def test_regions_window_is_tight_around_the_largest_contour():
+    """The bounds are the exact projection: the contour reaches each bound, so R there equals the level."""
+    import numpy as np
+    from scipy.stats import chi2
+    from core.estimation.inference.likelihood import relative_likelihood
+    from core.estimation.inference.region_bounds import region_bounds
+
+    data = DATA.to_numpy()
+    (mu_lo, mu_hi), (s_lo, s_hi) = region_bounds(data=data, probs=[0.5, 0.95])
+    level = np.exp(-0.5 * chi2.ppf(0.95, 2))
+    mu_hat, s_hat = data.mean(), data.std(ddof=0)
+    profile_sigma = lambda mu: np.sqrt(s_hat**2 + (mu - mu_hat) ** 2)
+    for mu in (mu_lo, mu_hi):
+        assert relative_likelihood(data=data, mu=mu, sigma=profile_sigma(mu), sigma_hat=s_hat) == pytest.approx(level)
+    for s in (s_lo, s_hi):
+        assert relative_likelihood(data=data, mu=mu_hat, sigma=s, sigma_hat=s_hat) == pytest.approx(level)
 
 
 def test_ci_and_pi_halves_match_the_full_calculation():

@@ -37,9 +37,8 @@ class InferenceParams(BaseModel):
 class ConfidenceRegionsParams(InferenceParams):
     # The estimators are fixed server-side (sample mean, std with ddof=1, normal theory), so the
     # estimator and bootstrap fields inherited above are ignored for regions.
+    # The plot window is chosen server-side (core/estimation/inference/region_bounds.py).
     probs: List[float]
-    eps_mu: List[float]
-    eps_sigma: List[float]
     add_ci_box: bool = True
 
 class PointEstimates(BaseModel):

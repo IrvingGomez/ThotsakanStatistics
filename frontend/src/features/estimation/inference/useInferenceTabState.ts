@@ -28,8 +28,6 @@ export type InferenceConfig = {
   wantsCI: boolean
   wantsPI: boolean
   probs: string
-  eps_mu: string
-  eps_sigma: string
   add_ci_box: boolean
 }
 export type InferenceDraft = {
@@ -41,25 +39,26 @@ export type InferenceDraft = {
   selected: string[]
   samplesStr: string
   crProbs: string
-  crEpsMu: string
-  crEpsSigma: string
   addCiBox: boolean
-  advancedOpen: boolean
+  ciOpen: boolean
+  piOpen: boolean
   zoomCI: boolean
 }
 export const initialInferenceDraft = (column = ''): InferenceDraft => ({
   column, estimationType: 'Confidence and Prediction Intervals', alphaStr: '0.05',
   sigmaEst: DEFAULT_SIGMA_ESTIMATOR, selected: [...DEFAULT_SELECTED], samplesStr: '1000',
-  crProbs: '0.1, 0.5, 0.75, 0.89, 0.95', crEpsMu: '0.1, 0.1', crEpsSigma: '0.05, 0.05',
-  addCiBox: true, advancedOpen: false, zoomCI: false,
+  crProbs: '0.1, 0.5, 0.75, 0.89, 0.95',
+  addCiBox: true, ciOpen: false, piOpen: false, zoomCI: false,
 })
 const usesBootstrap = (draft: InferenceDraft) =>
   draft.estimationType !== 'Confidence Regions' && selectionInfo(draft.selected).anyBootstrap
+/** In Confidence Regions α only sets the marginal CI box, so it is hidden (and not checked) while the box is off. */
+export const alphaShown = (draft: InferenceDraft) => draft.estimationType !== 'Confidence Regions' || draft.addCiBox
 export function validateInferenceDraft(draft: InferenceDraft): Partial<Record<keyof InferenceDraft, string>> {
   const errors: Partial<Record<keyof InferenceDraft, string>> = {}
   if (!draft.column) errors.column = 'Choose a numeric variable.'
   const alpha = Number(draft.alphaStr)
-  if (!draft.alphaStr.trim() || !Number.isFinite(alpha) || alpha <= 0 || alpha >= 1) errors.alphaStr = 'Enter a number greater than 0 and less than 1.'
+  if (alphaShown(draft) && (!draft.alphaStr.trim() || !Number.isFinite(alpha) || alpha <= 0 || alpha >= 1)) errors.alphaStr = 'Enter a number greater than 0 and less than 1.'
   if (draft.estimationType !== 'Confidence Regions') {
     const info = selectionInfo(draft.selected)
     if (!info.wantsCI && !info.wantsPI) errors.selected = 'Tick at least one interval method to calculate.'
@@ -68,10 +67,6 @@ export function validateInferenceDraft(draft: InferenceDraft): Partial<Record<ke
   if (draft.estimationType === 'Confidence Regions') {
     const parts = (value: string) => value.split(',').map(part => part.trim() ? Number(part) : NaN)
     if (parts(draft.crProbs).some(value => !Number.isFinite(value) || value <= 0 || value >= 1)) errors.crProbs = 'Use comma-separated values between 0 and 1, such as 0.5, 0.95.'
-    for (const key of ['crEpsMu', 'crEpsSigma'] as const) {
-      const padding = parts(draft[key])
-      if (padding.length !== 2 || padding.some(value => !Number.isFinite(value) || value < 0)) errors[key] = 'Enter two non-negative values: left, right.'
-    }
   }
   return errors
 }
@@ -82,19 +77,19 @@ function configFromDraft(draft: InferenceDraft): InferenceConfig {
   // option that uses it is ticked, and regions always use the fixed defaults.
   const flags = regions ? REGION_FLAGS : methodFlags(draft.selected)
   return {
-    column: draft.column, estimationType: draft.estimationType, alpha: Number(draft.alphaStr),
+    column: draft.column, estimationType: draft.estimationType, alpha: alphaShown(draft) ? Number(draft.alphaStr) : 0.05,
     mean_estimator: 'Sample Mean', median_estimator: 'Sample Median',
     sigma_estimator: !regions && info.needsDeviationEstimator ? draft.sigmaEst : DEFAULT_SIGMA_ESTIMATOR,
     ...flags,
     bootstrap_samples: !regions && info.anyBootstrap ? Number(draft.samplesStr) || 1000 : 1000,
     wantsCI: regions ? false : info.wantsCI, wantsPI: regions ? false : info.wantsPI,
-    probs: draft.crProbs, eps_mu: draft.crEpsMu, eps_sigma: draft.crEpsSigma,
+    probs: draft.crProbs,
     add_ci_box: draft.addCiBox,
   }
 }
 /** The settings that change a result. Display-only settings (zoom, panel state) never re-run anything. */
 function computationDraft(draft: InferenceDraft) {
-  const { advancedOpen: _advanced, zoomCI: _zoom, ...settings } = draft
+  const { ciOpen: _ci, piOpen: _pi, zoomCI: _zoom, ...settings } = draft
   return settings
 }
 export function useInferenceTabState() {
@@ -161,7 +156,7 @@ export function useInferenceTabState() {
     try {
       if (cfg.estimationType === 'Confidence Regions') {
         const result = await inferenceApi.computeRegions({
-          ...params, probs: cfg.probs.split(',').map(Number), eps_mu: cfg.eps_mu.split(',').map(Number), eps_sigma: cfg.eps_sigma.split(',').map(Number),
+          ...params, probs: cfg.probs.split(',').map(Number),
           add_ci_box: cfg.add_ci_box,
         })
         if (ownsRequest()) setRegionResult(result)

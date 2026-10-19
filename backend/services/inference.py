@@ -21,6 +21,7 @@ from core.estimation.inference.pi import (
 
 from core.estimation.inference.estimator_options import available_estimators
 from core.estimation.inference.confidence_regions import compute_confidence_regions_data
+from core.estimation.inference.region_bounds import region_padding
 from core.estimation.inference.estimators import estimate_mean, estimate_median, estimate_sigma
 from core.estimation.descriptive import compute_histogram
 
@@ -201,13 +202,16 @@ def calculate_regions(data: pd.Series, params: ConfidenceRegionsParams, weights:
     fixed = params.model_copy(update=_REGION_FIXED)
     ci_table, _, mean_ci, sigma_ci, _, _ = calculate_intervals(data, fixed, None)
 
+    eps_mu, eps_sigma = region_padding(
+        data=data, probs=params.probs, mean_ci=mean_ci, sigma_ci=sigma_ci, include_box=params.add_ci_box,
+    )
     grid = compute_confidence_regions_data(
         data=data,
         mean_ci=mean_ci,
         sigma_ci=sigma_ci,
         probs=params.probs,
-        eps_mu=params.eps_mu,
-        eps_sigma=params.eps_sigma,
+        eps_mu=eps_mu,
+        eps_sigma=eps_sigma,
     )
     grid["mu_ci"] = [float(x) for x in mean_ci]
     grid["sigma_ci"] = [float(x) for x in sigma_ci]

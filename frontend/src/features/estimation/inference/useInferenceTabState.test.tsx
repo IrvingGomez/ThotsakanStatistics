@@ -91,11 +91,11 @@ afterEach(async () => {
 
 describe('Inference student workflow', () => {
   it('preserves drafts and disclosure state when controls leave and return', async () => {
-    await act(async () => state.setDraft({ alphaStr: '0.', advancedOpen: true, selected: withBootstrap('ci.mean.boot') }))
+    await act(async () => state.setDraft({ alphaStr: '0.', ciOpen: true, selected: withBootstrap('ci.mean.boot') }))
     await render(false)
     await render(true)
     expect(state.draft.alphaStr).toBe('0.')
-    expect(state.draft.advancedOpen).toBe(true)
+    expect(state.draft.ciOpen).toBe(true)
     expect(state.draft.selected).toContain('ci.mean.boot')
     expect(inferenceApi.computeCI).toHaveBeenCalledTimes(1)
     expect(panelText('notebook')).toContain('95% confidence · α = 0.05')
@@ -104,7 +104,7 @@ describe('Inference student workflow', () => {
 
   it('updates on its own after a short pause, and treats zoom/disclosures as display settings', async () => {
     vi.useFakeTimers()
-    await act(async () => state.setDraft({ zoomCI: true, advancedOpen: true }))
+    await act(async () => state.setDraft({ zoomCI: true, ciOpen: true }))
     await pause()
     expect(inferenceApi.computeCI).toHaveBeenCalledTimes(1)
     expect(state.isDirty).toBe(false)
@@ -350,6 +350,19 @@ describe('Inference student workflow', () => {
     expect(cards[0].textContent).toContain('Upper bound31.000')
     expect(cards[0].querySelector('details')?.open).toBe(false)
     expect(container.querySelector('[data-panel="notebook"] table')).toBeNull()
+  })
+
+  it('shows alpha in regions only with the CI box, and leaves the plot window to the backend', async () => {
+    await act(async () => state.setDraft({ estimationType: 'Confidence Regions' }))
+    expect(container.textContent).toContain('Significance level α')
+    expect(container.textContent).not.toContain('padding')
+    expect(vi.mocked(inferenceApi.computeRegions).mock.lastCall![0]).not.toHaveProperty('eps_mu')
+    vi.useFakeTimers()
+    await act(async () => state.setDraft({ alphaStr: '', addCiBox: false }))
+    await pause()
+    expect(container.textContent).not.toContain('Significance level α')
+    expect(state.fieldErrors).toEqual({}) // a hidden, empty alpha does not block the regions
+    expect(vi.mocked(inferenceApi.computeRegions).mock.lastCall![0]).toMatchObject({ alpha: 0.05, add_ci_box: false })
   })
 
   it('honors applied region-box settings and shows coverage as percentages', async () => {
