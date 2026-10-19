@@ -4,9 +4,6 @@ import type { HypothesisResponse } from '../../api/hypothesis';
 interface HypothesisNotebookProps {
   result: HypothesisResponse | null;
   precision: number;
-  revealed: boolean;
-  onReveal: () => void;
-  canReveal: boolean;
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -74,13 +71,13 @@ function RawTable({ rows, precision }: { rows: any[]; precision: number }) {
   );
 }
 
-export default function HypothesisNotebook({ result, precision, revealed, onReveal, canReveal }: HypothesisNotebookProps) {
+export default function HypothesisNotebook({ result, precision }: HypothesisNotebookProps) {
   const rows = useMemo(() => parseTable(result), [result]);
 
   if (!result) {
     return (
       <div className="py-4 text-sm text-[var(--color-text-muted)]">
-        Choose a test and press Run Test. The rejection region appears first; the numbers come after.
+        Complete the test settings to see the result.
       </div>
     );
   }
@@ -99,42 +96,13 @@ export default function HypothesisNotebook({ result, precision, revealed, onReve
         </div>
       </Section>
 
-      <Section title="Decision">
-        {revealed ? (
-          <div
-            className={`rounded-md px-3 py-2 mb-3 text-sm font-bold border ${
-              result.reject
-                ? 'bg-red-500/10 border-red-500/40 text-red-500'
-                : 'bg-[var(--color-bg-input)] border-[var(--color-border-md)] text-[var(--color-text)]'
-            }`}
-          >
-            {result.verdict}
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={onReveal}
-            disabled={!canReveal}
-            className="w-full rounded-md px-3 py-2 mb-3 text-xs font-semibold border border-dashed
-              border-[var(--color-border-md)] text-[var(--color-text-muted)]
-              hover:bg-[var(--color-bg-hover)] transition-colors cursor-pointer disabled:opacity-50"
-          >
-            Read the plot first — click to reveal the p-value and verdict
-          </button>
-        )}
-
-        {revealed && <p className="text-sm mb-3">p {result.p_value < result.alpha ? '<' : result.p_value > result.alpha ? '>' : '='} α ({formatCell(result.p_value, precision)} {result.p_value < result.alpha ? '<' : result.p_value > result.alpha ? '>' : '='} {result.alpha})</p>}
+      <Section title="Result">
         <div className="text-sm font-mono space-y-1 text-[var(--color-text)]">
           <p><span className="text-[var(--color-text-muted)]">Statistic </span>{formatCell(result.statistic, precision)}</p>
           <p><span className="text-[var(--color-text-muted)]">Degrees of freedom </span>{dofLabel}</p>
           <p><span className="text-[var(--color-text-muted)]">Critical boundary </span>{critLabel}</p>
-          <p><span className="text-[var(--color-text-muted)]">Significance α </span>{result.alpha}</p>
-          <p>
-            <span className="text-[var(--color-text-muted)]">p </span>
-            {revealed
-              ? formatCell(result.p_value, precision)
-              : <span className="tracking-widest text-[var(--color-text-muted)]">●●●●</span>}
-          </p>
+          <p><span className="text-[var(--color-text-muted)]">Significance level α </span>{result.alpha}</p>
+          <p><span className="text-[var(--color-text-muted)]">p-value </span>{formatCell(result.p_value, precision)}</p>
         </div>
       </Section>
 
@@ -161,9 +129,7 @@ export default function HypothesisNotebook({ result, precision, revealed, onReve
         </Section>
       )}
 
-      {/* The raw table carries the p-value too, so it stays behind the same gate. */}
-      {revealed && (
-        <details className="mb-6 rounded-md border border-[var(--color-border)] p-3">
+      <details className="mb-6 rounded-md border border-[var(--color-border)] p-3">
           <summary className="cursor-pointer text-sm font-medium mb-2">Detailed output</summary>
           <RawTable rows={rows} precision={precision} />
           <p className="text-xs text-[var(--color-text-muted)]">
@@ -171,14 +137,6 @@ export default function HypothesisNotebook({ result, precision, revealed, onReve
             Any CI95 interval has 95% confidence, regardless of α.
           </p>
         </details>
-      )}
-
-      <Section title="Lab notebook">
-        <p className="text-sm text-[var(--color-text-muted)] leading-relaxed">
-          Drag α to 0.01, then to 0.10. The statistic never moves — only the boundary does.
-          At which α does your verdict flip, and what did you trade away to get there?
-        </p>
-      </Section>
     </div>
   );
 }

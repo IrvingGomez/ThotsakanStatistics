@@ -2,6 +2,7 @@ import { useId, useState } from 'react'
 import { AnalysisActions, RadioGroup, SelectField, SwitchField, TextField, VariableSection } from '../../components/ControlPrimitives'
 import DualInput from '../../components/DualInput'
 import { EQUAL_VARIANCE, ONE_SAMPLE_T, ONE_WAY_ANOVA, TEST_TYPES, TWO_SAMPLE_T, type Alternative } from '../../api/hypothesis'
+import { LABELS, confidenceReadout } from '../../labels'
 import GroupBuilder from './GroupBuilder'
 import type { HypothesisTabState } from './useHypothesisTabState'
 
@@ -32,14 +33,14 @@ export default function HypothesisControls({ state, onOpenColumnTypes }: { state
   const [resetGeneration, setResetGeneration] = useState(0)
 
   return (
-    <form className="analysis-panel flex flex-col gap-2 pb-4" onSubmit={event => { event.preventDefault(); if (state.canRun) state.handleRun() }}>
+    <form className="analysis-panel flex flex-col gap-2 pb-4" onSubmit={event => event.preventDefault()}>
       <VariableSection value={draft.column} onChange={column => setDraft({ column })} options={state.numericCols} loaded={state.hasData} />
       {state.numericCols.length === 0 && <button type="button" onClick={onOpenColumnTypes} className="-mt-2 mb-2 self-start text-sm text-[var(--color-accent)] underline">
         {state.hasData ? 'Open Column Types' : 'Open Data'}</button>}
       <SelectField label="Test method" value={draft.testType} onChange={testType => setDraft({ testType })} options={TEST_TYPES} />
       <p className="-mt-2 mb-2 text-sm text-[var(--color-text-muted)]">{descriptions[draft.testType]}</p>
 
-      {draft.testType === ONE_SAMPLE_T && <TextField label="Null value mu0" value={draft.mu0Str}
+      {draft.testType === ONE_SAMPLE_T && <TextField label="Null value μ₀" value={draft.mu0Str}
         onChange={mu0Str => setDraft({ mu0Str })} inputMode="decimal" error={errors.mu0Str}
         hint="The population mean claimed by H0." placeholder="e.g. 30" />}
 
@@ -66,21 +67,16 @@ export default function HypothesisControls({ state, onOpenColumnTypes }: { state
       {errors.groups && <p id={`${id}-groups`} className="text-xs text-[var(--color-text-muted)]">{errors.groups}</p>}
 
       <div className="mt-2 border-t border-[var(--color-border)] pt-3">
-        <DualInput label="Significance alpha" value={sliderAlpha} min={0.001} max={0.5} step={0.001} decimals={3}
+        <DualInput label={LABELS.alpha} value={sliderAlpha} min={0.001} max={0.5} step={0.001} decimals={3}
           onChange={value => setDraft({ alphaStr: value.toFixed(3) })}
           textValue={draft.alphaStr} onTextChange={alphaStr => setDraft({ alphaStr })}
           resetSignal={resetGeneration}
-          hint="From 0.001 to 0.500. Changing alpha moves the rejection boundary, not the statistic."
+          hint={errors.alphaStr ? undefined : confidenceReadout(sliderAlpha)}
           error={errors.alphaStr} />
       </div>
 
-      <p className="mt-2 text-sm text-[var(--color-text-muted)]">Updates automatically after first run.{state.updatesAutomatically && ' Complete valid settings to update.'}</p>
-      {!state.canRun && !state.isComputing && <p id={`${id}-run-help`} className="text-xs text-[var(--color-text-muted)]">
-        {Object.values(errors)[0] || 'Waiting for an active dataset session.'}
-      </p>}
-      <AnalysisActions primaryLabel={state.isComputing ? 'Running...' : 'Run Test'}
-        primaryType="submit" primaryDisabled={!state.canRun}
-        onReset={() => { setResetGeneration(value => value + 1); state.handleReset() }} />
+      <p className="mt-2 text-sm text-[var(--color-text-muted)]">Results update automatically.</p>
+      <AnalysisActions onReset={() => { setResetGeneration(value => value + 1); state.handleReset() }} />
     </form>
   )
 }

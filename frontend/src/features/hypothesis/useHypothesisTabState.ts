@@ -18,7 +18,7 @@ export type HypothesisDraft = {
 export function initialDraft(column = ''): HypothesisDraft {
   return {
     column, testType: ONE_SAMPLE_T, alphaStr: '0.05', alternative: 'two-sided',
-    mu0Str: '', correction: true, varianceTestType: 'Levene',
+    mu0Str: '0', correction: true, varianceTestType: 'Levene',
     group1: { column: '', values: [], name: 'Group 1' },
     group2: { column: '', values: [], name: 'Group 2' },
     anovaGroup: { column: '', values: [], name: 'Groups' },
@@ -31,7 +31,7 @@ export function validateDraft(draft: HypothesisDraft, numericCols: string[], cat
   const anova = draft.testType === ONE_WAY_ANOVA;
   if (!numericCols.includes(draft.column)) errors.column = 'Select a numeric variable.';
   if (draft.testType === ONE_SAMPLE_T && (!draft.mu0Str.trim() || !Number.isFinite(Number(draft.mu0Str)))) {
-    errors.mu0Str = 'Enter a numeric null value μ₀.';
+    errors.mu0Str = 'Enter a number for μ₀.';
   }
   const alpha = Number(draft.alphaStr);
   if (!draft.alphaStr.trim() || !Number.isFinite(alpha) || alpha < 0.001 || alpha > 0.5) {
@@ -56,22 +56,36 @@ export function validateDraft(draft: HypothesisDraft, numericCols: string[], cat
   return { errors, config };
 }
 
-function substantiveKey(config: HypothesisConfig | null) {
-  if (!config) return null;
-  const { alpha: _alpha, ...rest } = config;
-  return JSON.stringify(rest);
+/**
+ * Group tests need groups from a categorical column. While a group points at no valid column, fill it
+ * with the first categorical column: group 1 = its first category, group 2 = its second, the ANOVA
+ * factor = all categories. A group the user has set up is never touched.
+ */
+export function withGroupDefaults(draft: HypothesisDraft, categoricalCols: string[], levelsOf: (column: string) => string[]): HypothesisDraft {
+  const column = categoricalCols[0];
+  if (!column) return draft;
+  const levels = levelsOf(column);
+  const fill = (group: GroupSpec, values: string[]) => categoricalCols.includes(group.column) ? group : { ...group, column, values };
+  return {
+    ...draft,
+    group1: fill(draft.group1, levels.slice(0, 1)),
+    group2: fill(draft.group2, levels.slice(1, 2)),
+    anovaGroup: fill(draft.anovaGroup, levels),
+  };
 }
+
+const AUTO_RUN_DELAY = 250;
 
 export function useHypothesisTabState() {
   const { state: data, filteredRows, getUniqueValues } = useData();
-  const [draft, updateDraft] = useState(() => initialDraft(data.numericCols[0]));
+  const prepare = useCallback((draft: HypothesisDraft) => withGroupDefaults(draft, data.categoricalCols, getUniqueValues),
+    [data.categoricalCols, getUniqueValues]);
+  const [draft, updateDraft] = useState(() => prepare(initialDraft(data.numericCols[0])));
   const draftRef = useRef(draft);
   const [result, setResult] = useState<HypothesisResponse | null>(null);
   const [applied, setApplied] = useState<{ config: HypothesisConfig; filename: string; filteredN: number } | null>(null);
   const [isComputing, setIsComputing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [revealed, setRevealed] = useState(false);
-  const hasRun = useRef(false);
   const requestId = useRef(0);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastAttempt = useRef<{ config: HypothesisConfig; context: string } | null>(null);
@@ -79,8 +93,6 @@ export function useHypothesisTabState() {
   const currentContext = useRef(context);
   currentContext.current = context;
   const previousSession = useRef(data.sessionId);
-  const appliedRef = useRef(applied);
-  appliedRef.current = applied;
 
   const invalidateRequest = useCallback(() => {
     requestId.current++;
@@ -88,25 +100,6 @@ export function useHypothesisTabState() {
     timer.current = null;
     setIsComputing(false);
   }, []);
-
-  useEffect(() => {
-    invalidateRequest();
-    hasRun.current = false;
-    lastAttempt.current = null;
-    setResult(null); setApplied(null); setError(null); setRevealed(false);
-    if (previousSession.current !== data.sessionId) {
-      previousSession.current = data.sessionId;
-      draftRef.current = initialDraft(data.numericCols[0]);
-      updateDraft(draftRef.current);
-    } else if (!data.numericCols.includes(draftRef.current.column)) {
-      draftRef.current = { ...draftRef.current, column: data.numericCols[0] ?? '' };
-      updateDraft(draftRef.current);
-    }
-    return () => {
-      requestId.current++;
-      if (timer.current) clearTimeout(timer.current);
-    };
-  }, [context, data.sessionId, data.numericCols, invalidateRequest]);
 
   const run = useCallback(async (config: HypothesisConfig) => {
     if (!data.sessionId || data.status !== 'ready') return;
@@ -117,7 +110,6 @@ export function useHypothesisTabState() {
     lastAttempt.current = { config, context: runContext };
     setError(null);
     setIsComputing(true);
-    if (substantiveKey(appliedRef.current?.config ?? null) !== substantiveKey(config)) setRevealed(false);
     try {
       const response = await hypothesisApi.runTest({
         session_id: data.sessionId, column: config.column, test_type: config.testType,
@@ -130,7 +122,6 @@ export function useHypothesisTabState() {
       if (id !== requestId.current || runContext !== currentContext.current) return;
       setResult(response);
       setApplied({ config, filename: data.filename, filteredN: filteredRows.length });
-      hasRun.current = true;
     } catch (err) {
       if (id !== requestId.current || runContext !== currentContext.current) return;
       setError(err instanceof Error ? err.message : 'Test failed. Try again.');
@@ -138,11 +129,40 @@ export function useHypothesisTabState() {
       if (id === requestId.current && runContext === currentContext.current) setIsComputing(false);
     }
   }, [context, data.sessionId, data.status, data.filters, data.filename, filteredRows.length]);
+  const runRef = useRef(run);
+  runRef.current = run;
 
+  /** Run the draft now if it is complete; an incomplete draft just waits for the user. */
+  const runIfValid = useCallback((next: HypothesisDraft) => {
+    const { config } = validateDraft(next, data.numericCols, data.categoricalCols);
+    if (config) void runRef.current(config);
+  }, [data.numericCols, data.categoricalCols]);
+
+  // New data, filters or column types: drop the old answer and calculate again.
+  useEffect(() => {
+    invalidateRequest();
+    lastAttempt.current = null;
+    setResult(null); setApplied(null); setError(null);
+    let next = draftRef.current;
+    if (previousSession.current !== data.sessionId) {
+      previousSession.current = data.sessionId;
+      next = initialDraft(data.numericCols[0]);
+    } else if (!data.numericCols.includes(next.column)) {
+      next = { ...next, column: data.numericCols[0] ?? '' };
+    }
+    next = prepare(next);
+    draftRef.current = next;
+    updateDraft(next);
+    runIfValid(next);
+    return () => {
+      requestId.current++;
+      if (timer.current) clearTimeout(timer.current);
+    };
+  }, [context, data.sessionId, data.numericCols, invalidateRequest, prepare, runIfValid]);
+
+  // Every change that alters the request updates the result on its own after a short pause.
   const setDraft = useCallback((patch: Partial<HypothesisDraft>) => {
-    const next = { ...draftRef.current, ...patch };
-    const { alphaStr: _beforeAlpha, ...beforeSettings } = draftRef.current;
-    const { alphaStr: _afterAlpha, ...afterSettings } = next;
+    const next = prepare({ ...draftRef.current, ...patch });
     const before = validateDraft(draftRef.current, data.numericCols, data.categoricalCols).config;
     const after = validateDraft(next, data.numericCols, data.categoricalCols).config;
     draftRef.current = next;
@@ -150,25 +170,22 @@ export function useHypothesisTabState() {
     if (before && after && JSON.stringify(before) === JSON.stringify(after)) return;
     invalidateRequest();
     setError(null);
-    // Typing a new α can temporarily leave an empty/invalid value. That is still
-    // an α-only edit, so keep the previous answer revealed while it is marked stale.
-    if (JSON.stringify(beforeSettings) !== JSON.stringify(afterSettings)) setRevealed(false);
-    if (after && hasRun.current) timer.current = setTimeout(() => void run(after), 250);
-  }, [data.numericCols, data.categoricalCols, invalidateRequest, run]);
+    if (after) timer.current = setTimeout(() => void runRef.current(after), AUTO_RUN_DELAY);
+  }, [data.numericCols, data.categoricalCols, invalidateRequest, prepare]);
 
   const validation = validateDraft(draft, data.numericCols, data.categoricalCols);
-  const handleRun = () => { if (validation.config) void run(validation.config); };
   const handleRetry = () => {
     const attempt = lastAttempt.current;
     if (attempt && attempt.context === context) void run(attempt.config);
   };
   const handleReset = () => {
     invalidateRequest();
-    hasRun.current = false;
     lastAttempt.current = null;
-    draftRef.current = initialDraft(data.numericCols[0]);
-    updateDraft(draftRef.current);
-    setResult(null); setApplied(null); setError(null); setRevealed(false);
+    const next = prepare(initialDraft(data.numericCols[0]));
+    draftRef.current = next;
+    updateDraft(next);
+    setResult(null); setApplied(null); setError(null);
+    runIfValid(next);
   };
   const isDirty = !!result && JSON.stringify(validation.config) !== JSON.stringify(applied?.config);
   const countGroup = (group: GroupSpec) => filteredRows.filter(row =>
@@ -176,15 +193,14 @@ export function useHypothesisTabState() {
   ).length;
 
   return {
-    draft, setDraft, result, applied, isComputing, error, isDirty, revealed,
-    onReveal: () => setRevealed(true), handleRun, handleRetry, handleReset,
-    validationErrors: validation.errors, canRun: data.status === 'ready' && !!data.sessionId && !!validation.config && !isComputing,
+    draft, setDraft, result, applied, isComputing, error, isDirty,
+    handleRetry, handleReset,
+    validationErrors: validation.errors,
     hasData: data.status === 'ready' && !!data.dataset,
     numericCols: data.numericCols, categoricalCols: data.categoricalCols,
     precision: data.displayPrecision, sessionId: data.sessionId, filename: data.filename,
     filteredN: filteredRows.length, getUniqueValues,
     groupCounts: [countGroup(draft.group1), countGroup(draft.group2)],
-    updatesAutomatically: hasRun.current,
   };
 }
 
