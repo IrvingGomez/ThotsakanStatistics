@@ -1,4 +1,4 @@
-import { useState, Suspense, lazy, useMemo, useRef, useEffect } from 'react'
+import { useState, Suspense, lazy, useMemo } from 'react'
 import { ErrorBoundary } from 'react-error-boundary'
 import LogoBar from './layout/LogoBar'
 import Header from './layout/Header'
@@ -131,20 +131,6 @@ export default function App() {
   // ── Navigation ──────────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<TabId>('home')
   const [subTabMap, setSubTabMap] = useState<Partial<Record<TabId, string>>>(DEFAULT_SUB_TAB)
-  const openColumnTypesRef = useRef(false)
-
-  function handleOpenColumnTypes() {
-    openColumnTypesRef.current = true
-    setActiveTab('data')
-  }
-
-  useEffect(() => {
-    if (activeTab !== 'data' || !openColumnTypesRef.current) return
-    openColumnTypesRef.current = false
-    const section = document.getElementById('column-types')
-    section?.focus({ preventScroll: true })
-    section?.scrollIntoView({ block: 'start' })
-  }, [activeTab])
 
   function handleTabChange(tab: string) {
     const t = tab as TabId
@@ -334,7 +320,7 @@ export default function App() {
     footerDataset = 'Hypothesis Testing'
     controls = (
       <Suspense fallback={<ChartFallback />}>
-        <HypothesisControlsSlot state={hypothesis} onOpenColumnTypes={handleOpenColumnTypes} />
+        <HypothesisControlsSlot state={hypothesis} />
       </Suspense>
     )
     observation = (

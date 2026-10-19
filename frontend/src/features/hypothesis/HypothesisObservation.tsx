@@ -2,6 +2,8 @@ import { useMemo } from 'react';
 import ReactPlotly from 'react-plotly.js';
 import type { HypothesisResponse, RejectionRegionData } from '../../api/hypothesis';
 import ResultToolbar from '../../components/ResultToolbar';
+import ResultSection from '../../components/ResultSection';
+import { PLOT_AXIS, PLOT_COLORS, PLOT_CONFIG, baseLayout } from '../../plot/theme';
 import { EmptyState } from '../../components/StatusBanner';
 import { useChartRegistry } from '../../hooks/useChartRegistry';
 import { downloadChartsPNG } from '../../utils/exportPNG';
@@ -21,22 +23,11 @@ interface HypothesisObservationProps {
   isDirty: boolean;
 }
 
-// ponytail: Plotly parses colors itself — CSS vars don't resolve, so use literals
-const C_REJECT = 'rgba(239,68,68,0.28)';
-const C_P_AREA = 'rgba(59,130,246,0.45)';
-const C_CURVE = '#9ca3af';
-const C_CRIT = '#ef4444';
-const C_STAT = '#e5e7eb'; // near-white: the panel behind the plot is dark
-
-const AXIS = { gridcolor: 'rgba(128,128,128,0.15)', zeroline: false };
-const BASE_LAYOUT = {
-  autosize: true,
-  paper_bgcolor: 'transparent',
-  plot_bgcolor: 'transparent',
-  font: { color: '#888', size: 11 },
-  showlegend: false,
-};
-const CONFIG = { responsive: true, displayModeBar: false };
+const C_REJECT = PLOT_COLORS.reject;
+const C_P_AREA = PLOT_COLORS.pValue;
+const C_CURVE = PLOT_COLORS.referenceMuted;
+const C_CRIT = PLOT_COLORS.rejectLine;
+const C_STAT = PLOT_COLORS.statistic;
 
 const DIST_LABEL: Record<RejectionRegionData['dist'], string> = { t: 't', chi2: 'χ²', f: 'F' };
 
@@ -60,8 +51,8 @@ function offscaleAnnotation(region: RejectionRegionData, precision: number): any
     yanchor: 'top',
     text: `${statSymbol(region.dist)} = ${region.statistic.toFixed(precision)} ${beyondUpper ? '→' : '←'}`,
     showarrow: false,
-    font: { color: C_STAT, size: 11 },
-    bgcolor: 'rgba(0,0,0,0.35)',
+    font: { color: C_STAT, size: 12 },
+    bgcolor: PLOT_COLORS.hoverBg,
     borderpad: 3,
   };
 }
@@ -140,11 +131,7 @@ export default function HypothesisObservation({
   }
 
   if (!result) {
-    return (
-      <div className="p-6 text-sm text-[var(--color-text-muted)] border border-dashed border-[var(--color-border-md)] rounded-xl">
-        Complete the test settings to see the result.
-      </div>
-    );
+    return <EmptyState loaded hasData />;
   }
 
   const region = result.rejection_region;
@@ -186,37 +173,29 @@ export default function HypothesisObservation({
     <div className="analysis-observation flex flex-col gap-3">
       <ResultToolbar title="Hypothesis test result" exports={exportHandlers} ready={canExport}
         disabledReason={isDirty ? 'Waiting for the updated result.' : isComputing ? 'Waiting for the result.' : 'Chart is still loading.'} />
-      <div className="flex flex-wrap items-baseline justify-between gap-2 shrink-0">
-        <h3 className="text-sm font-semibold text-[var(--color-text)]">
-          Null distribution · {DIST_LABEL[region.dist]}({dofLabel})
-        </h3>
-        <span className="text-xs text-[var(--color-text-muted)]">
-          Rejection area α = {result.alpha}
-        </span>
-      </div>
-
-      <ul aria-label="Plot legend" className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-[var(--color-text-muted)]">
-        <li className="flex items-center gap-2"><span aria-hidden="true" className="w-5 border-t-2 border-[#e5e7eb]" />Solid: observed statistic</li>
-        <li className="flex items-center gap-2"><span aria-hidden="true" className="w-5 border-t-2 border-dashed border-red-400" />Dashed: critical boundary</li>
-        <li className="flex items-center gap-2"><span aria-hidden="true" className="w-5 border-t-2 border-dotted border-gray-400" />Dotted: null density</li>
-        <li className="flex items-center gap-2"><span aria-hidden="true" className="w-4 h-3 bg-red-500/30 border border-red-400" />Red area: rejection region</li>
-        <li className="flex items-center gap-2"><span aria-hidden="true" className="w-4 h-3 bg-blue-500/50 border border-blue-400" />Blue area: p-value</li>
+      <ResultSection title={`Null distribution · ${DIST_LABEL[region.dist]}(${dofLabel})`} note={`Rejection area α = ${result.alpha}`}>
+      <ul aria-label="Plot legend" className="mb-2 flex flex-wrap gap-x-4 gap-y-2 text-xs text-[var(--color-text-muted)]">
+        <li className="flex items-center gap-2"><span aria-hidden="true" className="w-5 border-t-2" style={{ borderColor: C_STAT }} />Solid: observed statistic</li>
+        <li className="flex items-center gap-2"><span aria-hidden="true" className="w-5 border-t-2 border-dashed" style={{ borderColor: C_CRIT }} />Dashed: critical boundary</li>
+        <li className="flex items-center gap-2"><span aria-hidden="true" className="w-5 border-t-2 border-dotted" style={{ borderColor: C_CURVE }} />Dotted: null density</li>
+        <li className="flex items-center gap-2"><span aria-hidden="true" className="h-3 w-4 border" style={{ background: C_REJECT, borderColor: C_CRIT }} />Red area: rejection region</li>
+        <li className="flex items-center gap-2"><span aria-hidden="true" className="h-3 w-4" style={{ background: C_P_AREA }} />Blue area: p-value</li>
       </ul>
       <div className="hypothesis-plot min-w-0" style={{ height: 360 }} role="img" aria-label={`Null distribution. Observed ${statSymbol(region.dist)} statistic ${region.statistic.toFixed(precision)}; critical boundaries ${region.critical_values.map(value => value.toFixed(precision)).join(', ')}. p-value ${result.p_value.toPrecision(3)}.`}>
         <ReactPlotly
           data={traces}
           layout={{
-            ...BASE_LAYOUT,
+            ...baseLayout({ autosize: true }),
             margin: { l: 45, r: 20, t: 10, b: 40 },
             xaxis: {
-              ...AXIS,
+              ...PLOT_AXIS,
               range: region.x_range,
               title: { text: `${statSymbol(region.dist)} statistic`, standoff: 6 },
             },
-            yaxis: { ...AXIS, range: [0, region.y_max * 1.05], title: { text: 'density', standoff: 6 } },
+            yaxis: { ...PLOT_AXIS, range: [0, region.y_max * 1.05], title: { text: 'density', standoff: 6 } },
             annotations: region.statistic_offscale ? [offscaleAnnotation(region, precision)] : [],
           }}
-          config={CONFIG}
+          config={PLOT_CONFIG}
           style={{ width: '100%', height: '100%' }}
           useResizeHandler
           onInitialized={registry.register('hypothesis', 'Null distribution and rejection region')}
@@ -224,7 +203,7 @@ export default function HypothesisObservation({
           onPurge={registry.unregister('hypothesis')}
         />
       </div>
-
+      </ResultSection>
     </div>
   );
 }

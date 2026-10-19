@@ -4,6 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { hypothesisApi, ONE_SAMPLE_T, ONE_WAY_ANOVA, TWO_SAMPLE_T, type HypothesisResponse } from '../../api/hypothesis';
 import { useHypothesisTabState, type HypothesisTabState } from './useHypothesisTabState';
 import HypothesisControls from './HypothesisControls';
+import { NotebookSlot, ObservationSlot } from './HypothesisTab';
+
+vi.mock('react-plotly.js', () => ({ default: () => null }));
 
 function dataFixture() {
   return {
@@ -43,7 +46,7 @@ let container: HTMLDivElement;
 let state: HypothesisTabState;
 function Harness({ controls = true }: { controls?: boolean }) {
   state = useHypothesisTabState();
-  return controls ? <HypothesisControls state={state} onOpenColumnTypes={() => {}} /> : null;
+  return controls ? <HypothesisControls state={state} /> : null;
 }
 async function render(controls = true) {
   await act(async () => root.render(<Harness controls={controls} />));
@@ -82,7 +85,8 @@ describe('Hypothesis student workflow', () => {
     expect(select.disabled).toBe(true);
     expect(container.textContent).toContain('— no dataset loaded —');
     expect(container.textContent).toContain('Test method');
-    expect(container.textContent).toContain('Open Data');
+    expect(container.textContent).toContain('Upload a CSV file in the Data tab.');
+    expect(container.textContent).not.toContain('Open Data');
     expect(hypothesisApi.runTest).not.toHaveBeenCalled();
   });
 
@@ -122,8 +126,8 @@ describe('Hypothesis student workflow', () => {
   it('explains the grouping prerequisite and sends nothing without a categorical column', async () => {
     await act(async () => state.setDraft({ testType: TWO_SAMPLE_T }));
     await advance();
-    expect(container.textContent).toContain('No categorical columns available');
-    expect(container.textContent).toContain('Open Column Types');
+    expect(container.textContent).toContain('Mark a grouping column as categorical in Data → Column Types.');
+    expect(container.textContent).not.toContain('Open Column Types');
     expect(hypothesisApi.runTest).toHaveBeenCalledTimes(1);
   });
 
@@ -212,5 +216,32 @@ describe('Hypothesis student workflow', () => {
     expect(lastRequest().mu0).toBe(35);
     expect(state.result).not.toBeNull();
     expect(state.error).toBeNull();
+  });
+});
+
+describe('Hypothesis panels', () => {
+  function Slots() {
+    state = useHypothesisTabState();
+    return <>
+      <div data-panel="controls"><HypothesisControls state={state} /></div>
+      <div data-panel="observation"><ObservationSlot state={state} /></div>
+      <div data-panel="notebook"><NotebookSlot state={state} /></div>
+    </>;
+  }
+  const panel = (name: string) => container.querySelector(`[data-panel="${name}"]`) as HTMLElement;
+
+  it('shows backend warnings above the plot, not in the notebook', async () => {
+    vi.mocked(hypothesisApi.runTest).mockResolvedValue({ ...response(), warnings: ['Group 2 has n < 5'] });
+    await act(async () => root.render(<Slots />));
+    expect(panel('observation').querySelector('[aria-label="Warnings"]')?.textContent).toContain('Group 2 has n < 5');
+    expect(panel('notebook').textContent).not.toContain('Group 2 has n < 5');
+  });
+
+  it('never shows the settings-changed message or filler sentences', async () => {
+    await act(async () => root.render(<Slots />));
+    await setNull('12');
+    expect(container.textContent).not.toContain('Settings changed');
+    expect(panel('controls').textContent).not.toContain('Results update automatically');
+    expect(panel('controls').textContent).not.toContain('Compare one population mean');
   });
 });

@@ -7,11 +7,12 @@ import type { HypothesisTabState } from './useHypothesisTabState';
 function ResultStatus({ state }: { state: HypothesisTabState }) {
   const config = state.applied?.config;
   return <StatusBanner isComputing={state.isComputing} error={state.error} hasResult={!!state.result} onRetry={state.handleRetry}
-    summary={config && summaryLine([state.applied?.filename, config.column, config.testType, 'n = ' + state.applied?.filteredN, 'α = ' + config.alpha])} />;
+    summary={config && summaryLine([state.applied?.filename, config.column, config.testType, 'n = ' + state.applied?.filteredN, 'α = ' + config.alpha])}
+    warnings={state.result?.warnings} />;
 }
 
-export function ControlsSlot({ state, onOpenColumnTypes }: { state: HypothesisTabState; onOpenColumnTypes: () => void }) {
-  return <HypothesisControls state={state} onOpenColumnTypes={onOpenColumnTypes} />;
+export function ControlsSlot({ state }: { state: HypothesisTabState }) {
+  return <HypothesisControls state={state} />;
 }
 
 export function ObservationSlot({ state }: { state: HypothesisTabState }) {
