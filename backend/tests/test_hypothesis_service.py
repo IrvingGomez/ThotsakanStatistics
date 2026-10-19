@@ -288,3 +288,24 @@ def test_table_is_the_unrounded_library_output():
     # pingouin's own columns, whichever generation is installed, not renamed by us.
     assert "T" in rows[0] and ("p-val" in rows[0] or "p_val" in rows[0])
     assert rows[0]["T"] == pytest.approx(run_hypothesis_test(DATA, _params())["statistic"])
+
+
+# ── degenerate groups give a clear error, never a null statistic ──────────────
+
+@pytest.mark.parametrize("test_type,extra", [(VARIANCE, {"variance_test_type": "Bartlett"}), (VARIANCE, {}), (TWO_SAMPLE, {})])
+def test_a_group_with_one_value_is_rejected_with_its_name(test_type, extra):
+    data = DATA.assign(region=["Solo"] + list(DATA["region"][1:]))
+    params = _params(test_type=test_type, mu0=None, group1=_group("region", ["Solo"], "Solo"),
+                     group2=_group("region", ["South"], "South"), **extra)
+    with pytest.raises(ValueError, match="'Solo' has 1 value"):
+        run_hypothesis_test(data, params)
+
+
+@pytest.mark.filterwarnings("ignore::RuntimeWarning")  # scipy takes log(0) on the way to NaN
+def test_an_undefined_statistic_is_an_error_not_null():
+    """Bartlett is undefined when a group has zero variance; scipy returns NaN."""
+    data = DATA.assign(score=[5.0] * 20 + list(DATA["score"][20:]))
+    params = _params(test_type=VARIANCE, mu0=None, variance_test_type="Bartlett",
+                     group1=_group("region", ["North"], "North"), group2=_group("region", ["South"], "South"))
+    with pytest.raises(ValueError, match="cannot be computed"):
+        run_hypothesis_test(data, params)
