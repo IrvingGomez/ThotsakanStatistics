@@ -1,7 +1,7 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import ResultTable from './ResultTable'
+import ResultTable, { TABLE_TAG_STYLES } from './ResultTable'
 
 let root: Root
 let container: HTMLDivElement
@@ -41,5 +41,13 @@ describe('ResultTable', () => {
     const row = container.querySelector('tbody tr') as HTMLTableRowElement
     expect(row.className).not.toMatch(/-950/)
     expect(row.children).toHaveLength(2)
+  })
+})
+
+describe('table tags', () => {
+  it('all tags use the same light-on-tint pattern, so they read the same size', () => {
+    for (const [tag, style] of Object.entries(TABLE_TAG_STYLES)) {
+      expect(style, tag).toMatch(/^border-\w+-400\/40 bg-\w+-500\/20 text-\w+-300$/)
+    }
   })
 })

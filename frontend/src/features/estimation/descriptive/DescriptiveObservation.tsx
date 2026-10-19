@@ -19,6 +19,9 @@ import { useChartRegistry } from '../../../hooks/useChartRegistry'
 
 const CHART_ORDER = ['descriptive'] as const
 
+/** Where the box plot sits, in paper coordinates (the histogram fills the space below). */
+const BOX = { bottom: 0.78, low: 0.81, capLow: 0.85, middle: 0.89, capHigh: 0.93, high: 0.97 } as const
+
 // ─── Statistics Table ─────────────────────────────────────────────────────────
 
 function StatsTable({ rows, showConsistencyCorr, precision }: {
@@ -53,8 +56,8 @@ function StatsTable({ rows, showConsistencyCorr, precision }: {
 
 // ─── Charts ───────────────────────────────────────────────────────────────────
 
-function DescriptiveCharts({ result, colName, onReady, onPurge }: {
-  result: DescriptiveResult; colName: string
+function DescriptiveCharts({ result, colName, precision, onReady, onPurge }: {
+  result: DescriptiveResult; colName: string; precision: number
   onReady: (figure: unknown, element: HTMLElement) => void
   onPurge: () => void
 }) {
@@ -82,9 +85,7 @@ function DescriptiveCharts({ result, colName, onReady, onPurge }: {
     ? histogram.binEdges[1] - histogram.binEdges[0]
     : 1
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
-  // 4 sig-figs, no trailing zeros
-  const fmt = (v: number) => parseFloat(v.toPrecision(4)).toString()
+  const fmt = (v: number) => v.toFixed(precision)
 
   // Invisible scatter marker on the box strip — one per stat, gives clean
   // individual hover labels. opacity:0 = invisible, size:14 = generous hit area.
@@ -115,27 +116,6 @@ function DescriptiveCharts({ result, colName, onReady, onPurge }: {
       hovertemplate: '%{customdata[0]} – %{customdata[1]}<br>Count: %{y}<extra></extra>',
       showlegend: false,
     },
-    // Horizontal box plot (top subplot, shared x-axis)
-    {
-      type: 'box' as const,
-      orientation: 'h' as const,
-      q1: [boxData.q1],
-      median: [boxData.median],
-      q3: [boxData.q3],
-      lowerfence: [boxData.whiskerLo],
-      upperfence: [boxData.whiskerHi],
-      mean: [result.summary.mean],
-      xaxis: 'x',
-      yaxis: 'y2',
-      marker: { color: PLOT_COLORS.data, size: 4 },
-      line: { color: PLOT_COLORS.data },
-      fillcolor: PLOT_COLORS.dataBand,
-      name: colName,
-      // Annotations already cover Q1/Mdn/Q3/Mean — disable box hover entirely
-      // to prevent the 45° rotated multi-label pile-up
-      hoverinfo: 'skip' as const,
-      showlegend: false,
-    },
     // ── Invisible stat-point overlays for individual hover labels ────────────
     // One scatter marker per key stat on the box strip. opacity:0 = invisible,
     // size:14 = generous hit area. hovermode:'closest' ensures only one fires.
@@ -153,7 +133,7 @@ function DescriptiveCharts({ result, colName, onReady, onPurge }: {
       y: boxData.outliers.map(() => 0),
       xaxis: 'x', yaxis: 'y2',
       marker: { opacity: 0.85, size: 10, color: PLOT_COLORS.outlier },
-      hovertemplate: 'Outlier: %{x:.4~g}<extra></extra>',
+      hovertemplate: `Outlier: %{x:.${precision}f}<extra></extra>`,
       showlegend: false,
     }] : []),
   ]
@@ -166,97 +146,44 @@ function DescriptiveCharts({ result, colName, onReady, onPurge }: {
     dragmode: 'pan' as const,
     hovermode: 'closest' as const,
     xaxis: { ...PLOT_AXIS, title: { text: colName }, tickformat: '.4~g', nticks: 6, automargin: true },
-    yaxis: { ...PLOT_AXIS, title: { text: 'Frequency' }, domain: [0, 0.73], tickformat: 'd', automargin: true },
-    yaxis2: { domain: [0.78, 1.0], showticklabels: false, showgrid: false, zeroline: false },
-    annotations: [
-      // Strip identity label — top-left of the box plot area
-      {
-        text: 'Box Plot (Tukey)',
-        xref: 'paper' as const, x: 0.01,
-        yref: 'paper' as const, y: 0.99,
-        xanchor: 'left' as const, yanchor: 'top' as const,
-        showarrow: false,
-        font: { color: PLOT_COLORS.text, size: 12 },
-      },
-      // Q1
-      {
-        text: `Q1: ${fmt(boxData.q1)}`,
-        xref: 'x' as const, x: boxData.q1,
-        yref: 'paper' as const, y: 0.82,
-        xanchor: 'center' as const, yanchor: 'bottom' as const,
-        showarrow: false,
-        font: { color: PLOT_COLORS.axisText, size: 12 },
-      },
-      // Median — brightest, most important
-      {
-        text: `Mdn: ${fmt(boxData.median)}`,
-        xref: 'x' as const, x: boxData.median,
-        yref: 'paper' as const, y: 0.82,
-        xanchor: 'center' as const, yanchor: 'bottom' as const,
-        showarrow: false,
-        font: { color: PLOT_COLORS.text, size: 12 },
-      },
-      // Q3
-      {
-        text: `Q3: ${fmt(boxData.q3)}`,
-        xref: 'x' as const, x: boxData.q3,
-        yref: 'paper' as const, y: 0.82,
-        xanchor: 'center' as const, yanchor: 'bottom' as const,
-        showarrow: false,
-        font: { color: PLOT_COLORS.axisText, size: 12 },
-      },
-      // Mean line label — top of histogram, left of line
-      {
-        text: `Mean: ${fmt(result.summary.mean)}`,
-        xref: 'x' as const, x: result.summary.mean,
-        yref: 'paper' as const, y: 0.72,
-        xanchor: 'center' as const, yanchor: 'top' as const,
-        showarrow: false,
-        font: { color: PLOT_COLORS.mean, size: 12 },
-        bgcolor: PLOT_COLORS.hoverBg,
-        borderpad: 2,
-      },
-      // Median line label — staggered lower to prevent overlap with mean label
-      {
-        text: `Mdn: ${fmt(boxData.median)}`,
-        xref: 'x' as const, x: boxData.median,
-        yref: 'paper' as const, y: 0.64,
-        xanchor: 'center' as const, yanchor: 'top' as const,
-        showarrow: false,
-        font: { color: PLOT_COLORS.median, size: 12 },
-        bgcolor: PLOT_COLORS.hoverBg,
-        borderpad: 2,
-      },
-    ],
+    yaxis: { ...PLOT_AXIS, title: { text: 'Frequency' }, domain: [0, BOX.bottom - 0.05], tickformat: 'd', automargin: true },
+    // The box strip: hover points and outliers sit at y = 0, the middle of the strip.
+    yaxis2: { domain: [BOX.bottom, 1], range: [-1, 1], showticklabels: false, showgrid: false, zeroline: false, fixedrange: true },
     shapes: [
-      // Mean reference line — spans histogram area only
-      {
-        type: 'line' as const,
-        xref: 'x' as const, x0: result.summary.mean, x1: result.summary.mean,
-        yref: 'paper' as const, y0: 0, y1: 0.73,
-        line: { color: PLOT_COLORS.mean, width: 1.5, dash: 'dash' },
-      },
-      // Median reference line — dotted, lighter indigo
-      {
-        type: 'line' as const,
-        xref: 'x' as const, x0: boxData.median, x1: boxData.median,
-        yref: 'paper' as const, y0: 0, y1: 0.73,
-        line: { color: PLOT_COLORS.median, width: 1.5, dash: 'dot' },
-      },
+      // Box plot (Tukey), drawn as shapes so the mean and median lines below cross it unchanged.
+      { type: 'line' as const, xref: 'x' as const, x0: boxData.whiskerLo, x1: boxData.q1, yref: 'paper' as const, y0: BOX.middle, y1: BOX.middle, line: { color: PLOT_COLORS.data, width: 1.5 } },
+      { type: 'line' as const, xref: 'x' as const, x0: boxData.q3, x1: boxData.whiskerHi, yref: 'paper' as const, y0: BOX.middle, y1: BOX.middle, line: { color: PLOT_COLORS.data, width: 1.5 } },
+      ...[boxData.whiskerLo, boxData.whiskerHi].map((x) => (
+        { type: 'line' as const, xref: 'x' as const, x0: x, x1: x, yref: 'paper' as const, y0: BOX.capLow, y1: BOX.capHigh, line: { color: PLOT_COLORS.data, width: 1.5 } })),
+      { type: 'rect' as const, xref: 'x' as const, x0: boxData.q1, x1: boxData.q3, yref: 'paper' as const, y0: BOX.low, y1: BOX.high,
+        fillcolor: PLOT_COLORS.dataBand, line: { color: PLOT_COLORS.data, width: 1.5 } },
+      // Mean and median: one line each, through the histogram and the box.
+      { type: 'line' as const, xref: 'x' as const, x0: result.summary.mean, x1: result.summary.mean, yref: 'paper' as const, y0: 0, y1: 1,
+        line: { color: PLOT_COLORS.mean, width: 2, dash: 'dash' } },
+      { type: 'line' as const, xref: 'x' as const, x0: boxData.median, x1: boxData.median, yref: 'paper' as const, y0: 0, y1: 1,
+        line: { color: PLOT_COLORS.median, width: 2, dash: 'dot' } },
     ],
   })
 
+  const value = (v: number) => <span className="font-mono tabular-nums text-[var(--color-text)]">{fmt(v)}</span>
   return (
     <div ref={wrapperRef}>
-        <Plot
-          data={traces}
-          layout={layout}
-          config={PLOT_CONFIG}
-          useResizeHandler
-          onInitialized={onReady}
-          onUpdate={onReady}
-          onPurge={onPurge}
-        />
+      <ul aria-label="Plot legend" className="mb-2 flex flex-wrap gap-x-4 gap-y-2 text-xs text-[var(--color-text-muted)]">
+        <li className="flex items-center gap-2"><span aria-hidden="true" className="w-5 border-t-2 border-dashed" style={{ borderColor: PLOT_COLORS.mean }} />Mean {value(result.summary.mean)}</li>
+        <li className="flex items-center gap-2"><span aria-hidden="true" className="w-5 border-t-2 border-dotted" style={{ borderColor: PLOT_COLORS.median }} />Median {value(boxData.median)}</li>
+        <li className="flex items-center gap-2"><span aria-hidden="true" className="h-3 w-4 border" style={{ background: PLOT_COLORS.dataBand, borderColor: PLOT_COLORS.data }} />Box Q1 {value(boxData.q1)} – Q3 {value(boxData.q3)}</li>
+        <li className="flex items-center gap-2"><span aria-hidden="true" className="w-5 border-t-2" style={{ borderColor: PLOT_COLORS.data }} />Whiskers {value(boxData.whiskerLo)} – {value(boxData.whiskerHi)}</li>
+        <li className="flex items-center gap-2"><span aria-hidden="true" className="h-2.5 w-2.5 rounded-full" style={{ background: PLOT_COLORS.outlier }} />Outliers <span className="font-mono tabular-nums text-[var(--color-text)]">{boxData.outliers.length}</span></li>
+      </ul>
+      <Plot
+        data={traces}
+        layout={layout}
+        config={PLOT_CONFIG}
+        useResizeHandler
+        onInitialized={onReady}
+        onUpdate={onReady}
+        onPurge={onPurge}
+      />
     </div>
   )
 }
@@ -321,7 +248,7 @@ export default function DescriptiveObservation({
       </ResultSection>
 
       <ResultSection title="Distribution">
-        <DescriptiveCharts result={result} colName={config.column}
+        <DescriptiveCharts result={result} colName={config.column} precision={precision}
           onReady={registry.register('descriptive', `Distribution of ${config.column}`)}
           onPurge={registry.unregister('descriptive')} />
       </ResultSection>

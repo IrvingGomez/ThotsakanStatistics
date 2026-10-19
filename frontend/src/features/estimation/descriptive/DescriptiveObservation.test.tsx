@@ -5,7 +5,10 @@ import type { DescriptiveResult, StatRow } from '../../../api/descriptive'
 import DescriptiveObservation from './DescriptiveObservation'
 import type { DescriptiveConfig } from './useDescriptiveTabState'
 
-vi.mock('react-plotly.js', () => ({ default: () => null }))
+interface Shape { x0: number; y0: number; y1: number; line: { color: string; dash?: string } }
+interface Layout { annotations?: unknown[]; shapes?: Shape[] }
+const plot = vi.hoisted(() => ({ layout: null as null | Layout, data: [] as { type: string }[] }))
+vi.mock('react-plotly.js', () => ({ default: (props: { layout: Layout; data: { type: string }[] }) => { plot.layout = props.layout; plot.data = props.data; return null } }))
 vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} })
 
 const rows: StatRow[] = [
@@ -16,7 +19,7 @@ const rows: StatRow[] = [
 const result: DescriptiveResult = {
   rows, summary: { n: 10, mean: 1, median: 1, std: 1, iqr: 1 },
   histogram: { binEdges: [0, 1], counts: [10] },
-  boxData: { whiskerLo: 0, q1: 1, median: 1, q3: 2, whiskerHi: 3, outliers: [] },
+  boxData: { whiskerLo: 0, q1: 1.11111, median: 1.5, q3: 2.22222, whiskerHi: 3, outliers: [7, 8] },
 }
 const config = (showConsistencyCorr: boolean): DescriptiveConfig => ({
   column: 'score', weightsCol: null, quantileProbs: [], trimAlpha: null, winsorLimits: null,
@@ -58,5 +61,29 @@ describe('Descriptive statistics table', () => {
     const tags = (name: string) => [...rowOf(name).querySelectorAll('[data-tag="correction"]')].map((tag) => tag.textContent)
     expect(tags('Std (ddof=1)')).toEqual(['Consistent'])
     expect(tags('MAD')).toEqual([])
+  })
+})
+
+describe('Descriptive distribution chart', () => {
+  it('draws no numbers on the plot', () => {
+    render(true)
+    expect(plot.layout?.annotations ?? []).toHaveLength(0)
+  })
+
+  it('lists the key values beside the plot, in display precision', () => {
+    render(true)
+    const legend = container.querySelector('[aria-label="Plot legend"]')!
+    const items = [...legend.querySelectorAll('li')].map((li) => li.textContent)
+    expect(items).toEqual(['Mean 1.00', 'Median 1.50', 'Box Q1 1.11 – Q3 2.22', 'Whiskers 0.00 – 3.00', 'Outliers 2'])
+  })
+
+  it('draws the mean and median as one line each, the same through the histogram and the box', () => {
+    render(true)
+    expect(plot.data.some((trace) => trace.type === 'box')).toBe(false)
+    const at = (x: number) => (plot.layout?.shapes ?? []).filter((shape) => shape.x0 === x && shape.y1 - shape.y0 > 0.9)
+    expect(at(1)).toHaveLength(1) // mean
+    expect(at(1)[0].line.dash).toBe('dash')
+    expect(at(1.5)).toHaveLength(1) // median
+    expect(at(1.5)[0].line.dash).toBe('dot')
   })
 })

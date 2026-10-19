@@ -14,7 +14,7 @@ export const TABLE_GROUP_TINTS: Readonly<Record<string, { row: string; text: str
 
 /** Small labels beside a statistic's name, e.g. Robust. One color per meaning, in every table. */
 export const TABLE_TAG_STYLES = {
-  Robust: 'border-[var(--color-accent)]/30 bg-[var(--color-accent)]/20 text-[var(--color-accent)]',
+  Robust: 'border-indigo-400/40 bg-indigo-500/20 text-indigo-300',
   Unbiased: 'border-sky-400/40 bg-sky-500/20 text-sky-300',
   Consistent: 'border-fuchsia-400/40 bg-fuchsia-500/20 text-fuchsia-300',
 } as const

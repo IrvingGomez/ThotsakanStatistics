@@ -28,9 +28,9 @@ export const PLOT_COLORS = {
   outlier: '#f87171',
   /** Observed test statistic (Hypothesis). */
   statistic: '#e5e7eb',
-  /** Reference lines drawn over data: sample mean and median. */
-  mean: '#818cf8',
-  median: '#a5b4fc',
+  /** Reference lines drawn over data: sample mean and median (same hues as their intervals). */
+  mean: '#60a5fa',
+  median: '#34d399',
   /** Part of a distribution selected by a query (Probability), and the rest of it. */
   highlight: '#6366f1',
   highlightFill: 'rgba(99,102,241,0.25)',
