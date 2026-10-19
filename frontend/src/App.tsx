@@ -10,7 +10,7 @@ import DataTab from './features/data/DataTab'
 
 // ── Probability: Common Distributions ────────────────────────────────────────
 import CommonDistControls from './features/probability/common/CommonDistControls'
-import CommonDistNotebook from './features/probability/common/CommonDistNotebook'
+import { useData } from './context/DataContext'
 import {
   useDistribution,
   DISTRIBUTIONS,
@@ -19,6 +19,7 @@ import {
 
 // Lazy-loaded heavy chart components
 const CommonDistObservation = lazy(() => import('./features/probability/common/CommonDistObservation'))
+const CommonDistNotebook = lazy(() => import('./features/probability/common/CommonDistNotebook'))
 
 // ─── Navigation config ────────────────────────────────────────────────────────
 
@@ -161,7 +162,8 @@ export default function App() {
     queryK: probQueryK,
   }), [probDistName, probParamValues, probQueryOp, probQueryK])
 
-  const { result: probResult, isLoading: probLoading, appliedParams: probAppliedParams } = useDistribution(probDistParams)
+  const { result: probResult, isLoading: probLoading, error: probError, retry: probRetry, appliedParams: probAppliedParams } = useDistribution(probDistParams)
+  const { state: dataState } = useData()
 
   function handleDistChange(name: string) {
     const dist = DISTRIBUTIONS.find((d) => d.name === name)!
@@ -204,7 +206,6 @@ export default function App() {
           paramValues={probParamValues}
           queryOp={probQueryOp}
           queryK={probQueryK}
-          queryResult={probResult?.queryResult ?? null}
           onModelTypeChange={handleModelTypeChange}
           onDistChange={handleDistChange}
           onParamChange={(key, val) => {
@@ -227,15 +228,16 @@ export default function App() {
             appliedParams={probAppliedParams}
             result={probResult}
             isLoading={probLoading}
+            error={probError}
+            onRetry={probRetry}
+            precision={dataState.displayPrecision}
           />
         </Suspense>
       )
       notebook = (
-        <CommonDistNotebook
-          distParams={probDistParams}
-          result={probResult}
-          isLoading={probLoading}
-        />
+        <Suspense fallback={<ChartFallback />}>
+          <CommonDistNotebook distParams={probDistParams} />
+        </Suspense>
       )
     } else {
       controls    = <ComingSoon label="Custom Distribution" />

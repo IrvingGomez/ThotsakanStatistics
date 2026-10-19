@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect } from 'react'
 import DualInput from '../../../components/DualInput'
-import { AnalysisActions, SelectField, TextField } from '../../../components/ControlPrimitives'
+import { AnalysisActions, Divider, RadioGroup, SectionLabel, SelectField, TextField } from '../../../components/ControlPrimitives'
 import { DISTRIBUTIONS, type QueryOp } from '../../../hooks/useDistribution'
 
 interface CommonDistControlsProps {
@@ -9,7 +9,6 @@ interface CommonDistControlsProps {
   paramValues: Record<string, number>
   queryOp: QueryOp
   queryK: number
-  queryResult: number | null
   onModelTypeChange: (t: 'discrete' | 'continuous') => void
   onDistChange: (name: string) => void
   onParamChange: (key: string, value: number) => void
@@ -26,7 +25,6 @@ export default function CommonDistControls({
   paramValues,
   queryOp,
   queryK,
-  queryResult,
   onModelTypeChange,
   onDistChange,
   onParamChange,
@@ -71,44 +69,19 @@ export default function CommonDistControls({
   return (
     <div className="flex flex-col gap-5">
 
-      {/* Model Type toggle */}
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-widest
-          text-[var(--color-text-muted)] mb-2">
-          Model Type
-        </p>
-        <div className="flex rounded-md overflow-hidden border border-[var(--color-border-md)]" role="group" aria-label="Model type">
-          {(['discrete', 'continuous'] as const).map((t) => (
-            <button
-              key={t}
-              type="button"
-              aria-pressed={modelType === t}
-              onClick={() => onModelTypeChange(t)}
-              className={`flex-1 py-1.5 text-sm capitalize transition-colors cursor-pointer
-                ${modelType === t
-                  ? 'bg-[var(--color-accent)] text-white'
-                  : 'bg-[var(--color-bg-input)] text-[var(--color-text-muted)] hover:text-[var(--color-text)]'
-                }`}
-            >
-              {t}
-            </button>
-          ))}
-        </div>
-      </div>
+      <RadioGroup label="Model type" value={modelType} onChange={onModelTypeChange}
+        options={[{ value: 'discrete', label: 'Discrete' }, { value: 'continuous', label: 'Continuous' }]} />
 
       {/* Distribution dropdown */}
       <SelectField label="Distribution" value={distName} onChange={onDistChange}
         options={availableDists.map((dist) => ({ value: dist.name, label: `${dist.name} Distribution` }))} />
 
-      <div className="h-px bg-[var(--color-border)]" />
+      <Divider />
 
       {/* Distribution parameters */}
       {currentDist && (
         <div>
-          <p className="text-xs font-semibold uppercase tracking-widest
-            text-[var(--color-text-muted)] mb-3">
-            Distribution Parameters
-          </p>
+          <SectionLabel>Parameters</SectionLabel>
           <div className="flex flex-col gap-4">
             {currentDist.params.map((param) => (
               <DualInput
@@ -127,14 +100,11 @@ export default function CommonDistControls({
         </div>
       )}
 
-      <div className="h-px bg-[var(--color-border)]" />
+      <Divider />
 
       {/* Probability Query */}
       <div>
-        <p className="text-xs font-semibold uppercase tracking-widest
-          text-[var(--color-text-muted)] mb-3">
-          Probability Query
-        </p>
+        <SectionLabel>Probability query</SectionLabel>
         <div className="flex gap-2 mb-3">
           {/* Op select */}
           <div className="w-20"><SelectField label="Op" value={queryOp}
@@ -143,16 +113,6 @@ export default function CommonDistControls({
           <div className="flex-1"><TextField label="Value (k)" value={queryKText} error={queryError}
             inputMode="decimal" onChange={handleQueryKChange} onBlur={handleQueryKBlur} />
           </div>
-        </div>
-        {/* Live query result */}
-        <div className="mt-2 rounded-md px-3 py-2 border border-[var(--color-accent)]/30
-          bg-[var(--color-accent)]/5 text-center">
-          <p className="text-[10px] uppercase tracking-widest text-[var(--color-text-muted)] mb-0.5">
-            P(X {queryOp} {modelType === 'discrete' ? Math.round(queryK) : queryK})
-          </p>
-          <p className="text-lg font-bold font-mono tabular-nums text-[var(--color-accent)]">
-            {queryResult != null ? queryResult.toFixed(4) : '—'}
-          </p>
         </div>
       </div>
 

@@ -60,4 +60,17 @@ describe('distribution authoritative results', () => {
     expect(hook.appliedParams?.queryK).toBe(6)
     expect(hook.result?.requestFingerprint).toBe(JSON.stringify(['Poisson', { lambda: 5 }, '<=', 6]))
   })
+
+  it('retries the last request after a failure', async () => {
+    vi.mocked(computeDistribution).mockRejectedValueOnce(new Error('Service unavailable')).mockResolvedValueOnce(response(0.3))
+    act(() => root.render(<Harness params={params(5)} />))
+    await act(async () => vi.advanceTimersByTimeAsync(250))
+    expect(hook.error).toBe('Service unavailable')
+    act(() => hook.retry())
+    await act(async () => vi.advanceTimersByTimeAsync(250))
+    expect(computeDistribution).toHaveBeenCalledTimes(2)
+    expect(hook.error).toBeNull()
+    expect(hook.result?.provisional).toBe(false)
+    expect(hook.result?.queryResult).toBe(0.3)
+  })
 })

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useCallback, useState, useEffect, useRef } from 'react'
 import { computeDistribution } from '../api/probability'
 import type { DistributionResponse } from '../api/probability'
 import { computeLocalDistribution } from '../math/localDistributions'
@@ -146,11 +146,14 @@ export function useDistribution({ distName, paramValues, queryOp, queryK }: Dist
   isLoading: boolean
   error: string | null
   appliedParams: DistParams | null
+  /** Sends the current parameters again, e.g. after a failed request. */
+  retry: () => void
 } {
   const [result, setResult] = useState<DistResult | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [appliedParams, setAppliedParams] = useState<DistParams | null>(null)
+  const [attempt, setAttempt] = useState(0)
 
   const abortRef = useRef<AbortController | null>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -198,7 +201,8 @@ export function useDistribution({ distName, paramValues, queryOp, queryK }: Dist
     function controllerCleanup() {
       if (request === generation.current) abortRef.current?.abort()
     }
-  }, [fingerprint]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [fingerprint, attempt]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  return { result, isLoading, error, appliedParams }
+  const retry = useCallback(() => setAttempt((value) => value + 1), [])
+  return { result, isLoading, error, appliedParams, retry }
 }
