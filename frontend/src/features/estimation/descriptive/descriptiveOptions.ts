@@ -53,3 +53,26 @@ export function parseQuantiles(raw: string): number[] | null {
   const values = tokens.map(Number)
   return values.every(value => Number.isFinite(value) && value >= 0 && value <= 1) ? values : null
 }
+
+type EstimatorTag = 'Unbiased' | 'Consistent'
+const MOMENTS = { shown: ['Consistent'], corrected: ['Unbiased', 'Consistent'] } as const
+const SCALE_ONLY = { shown: [], corrected: ['Consistent'] } as const
+
+/**
+ * Properties of a statistic, under normality. `shown` holds for the value as computed: the variance
+ * and standard deviations already converge to σ² and σ. `corrected` holds once the normal-corrected
+ * value is shown: their constant also removes the finite-sample bias, the range divided by d₂(n) is
+ * unbiased and consistent for σ, and MAD, IQR and AAD become consistent for σ (not unbiased). The ddof = 1
+ * variance is unbiased for σ² as computed, for any distribution with finite variance.
+ */
+const ESTIMATOR_TAGS: Readonly<Record<string, { shown: readonly EstimatorTag[]; corrected: readonly EstimatorTag[] }>> = {
+  variance_0: MOMENTS, variance_1: { shown: ['Unbiased', 'Consistent'], corrected: ['Unbiased', 'Consistent'] }, std_dev_0: MOMENTS, std_dev_1: MOMENTS,
+  range: { shown: [], corrected: ['Unbiased', 'Consistent'] },
+  aad: SCALE_ONLY, iqr: SCALE_ONLY, mad: SCALE_ONLY,
+}
+
+export function estimatorTags(row: { statId?: string; consistencyCorr: number | null }, corrected: boolean): readonly EstimatorTag[] {
+  const tags = row.statId ? ESTIMATOR_TAGS[row.statId] : undefined
+  if (!tags) return []
+  return corrected && row.consistencyCorr != null ? tags.corrected : tags.shown
+}

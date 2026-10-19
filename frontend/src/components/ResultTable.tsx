@@ -12,6 +12,20 @@ export const TABLE_GROUP_TINTS: Readonly<Record<string, { row: string; text: str
   'Shape': { row: 'bg-amber-950/50', text: 'text-amber-300', label: 'text-amber-400' },
 }
 
+/** Small labels beside a statistic's name, e.g. Robust. One color per meaning, in every table. */
+export const TABLE_TAG_STYLES = {
+  Robust: 'border-[var(--color-accent)]/30 bg-[var(--color-accent)]/20 text-[var(--color-accent)]',
+  Unbiased: 'border-sky-400/40 bg-sky-500/20 text-sky-300',
+  Consistent: 'border-fuchsia-400/40 bg-fuchsia-500/20 text-fuchsia-300',
+} as const
+export type TableTag = keyof typeof TABLE_TAG_STYLES
+
+export function TableTagLabel({ tag, title, dataTag }: { tag: TableTag; title: string; dataTag?: string }) {
+  return (
+    <span data-tag={dataTag} title={title} className={`rounded border px-1.5 py-0.5 text-xs font-semibold ${TABLE_TAG_STYLES[tag]}`}>{tag}</span>
+  )
+}
+
 export interface ResultColumn { key: string; label: string; align?: 'left' | 'right' }
 export interface ResultRow { group?: string; cells: Record<string, ReactNode> }
 

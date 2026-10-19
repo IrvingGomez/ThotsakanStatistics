@@ -1,13 +1,16 @@
 // features/estimation/descriptive/DescriptiveObservation.tsx
-// Center panel: stat cards + grouped table + histogram/box-plot
+// Center panel: statistics table + histogram and box plot
 
-import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import Plot from 'react-plotly.js'
 import { type DescriptiveResult, type StatRow } from '../../../api/descriptive'
-import type { DescriptiveConfig } from './DescriptiveControls'
-import { isRowVisible } from './descriptiveOptions'
+import type { DescriptiveConfig } from './useDescriptiveTabState'
+import { estimatorTags } from './descriptiveOptions'
 import ResultToolbar from '../../../components/ResultToolbar'
+import ResultSection from '../../../components/ResultSection'
+import ResultTable, { TableTagLabel } from '../../../components/ResultTable'
 import { EmptyState } from '../../../components/StatusBanner'
+import { PLOT_AXIS, PLOT_COLORS, PLOT_CONFIG, baseLayout } from '../../../plot/theme'
 import { downloadCSV } from '../../../utils/exportCSV'
 import { downloadChartsPNG } from '../../../utils/exportPNG'
 import { downloadPDF } from '../../../utils/exportPDF'
@@ -16,169 +19,39 @@ import { useChartRegistry } from '../../../hooks/useChartRegistry'
 
 const CHART_ORDER = ['descriptive'] as const
 
-// ─── Warning Snackbar ─────────────────────────────────────────────────────────
-
-interface SnackItem { id: number; measure: string; warning: string }
-
-function WarningSnackbar({ warnings }: { warnings: SnackItem[] }) {
-  const [dismissed, setDismissed] = useState<Set<number>>(new Set())
-
-  // Build a stable fingerprint so effects only fire when warnings actually change
-  const fingerprint = warnings.map(w => w.measure).join('|')
-
-  // Reset dismissed state when warnings list actually changes
-  const prevFingerprint = useRef(fingerprint)
-  useEffect(() => {
-    if (prevFingerprint.current !== fingerprint) {
-      prevFingerprint.current = fingerprint
-      setDismissed(new Set())
-    }
-  }, [fingerprint])
-
-  // Auto-dismiss each item after 6 s
-  useEffect(() => {
-    if (warnings.length === 0) return
-    const timers = warnings.map(w =>
-      setTimeout(() => setDismissed(prev => new Set(prev).add(w.id)), 6000)
-    )
-    return () => timers.forEach(clearTimeout)
-  }, [fingerprint]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const visible = warnings.filter(w => !dismissed.has(w.id))
-  if (visible.length === 0) return null
-
-  return (
-    <div className="flex flex-col gap-2" role="alert" aria-live="polite">
-      {visible.map(w => (
-        <div
-          key={w.id}
-          className="flex items-start gap-3 px-3 py-2.5 rounded-lg
-            bg-amber-950/60 border border-amber-500/40 text-amber-300
-            shadow-lg animate-fade-in"
-        >
-          <span className="text-base leading-none mt-0.5 shrink-0">⚠</span>
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-semibold text-amber-200 truncate">{w.measure}</p>
-            <p className="text-[11px] text-amber-400 leading-snug mt-0.5">{w.warning}</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setDismissed(prev => new Set(prev).add(w.id))}
-            className="shrink-0 text-amber-500 hover:text-amber-200 transition-colors text-sm leading-none cursor-pointer"
-            aria-label="Dismiss"
-          >
-            ✕
-          </button>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-// ─── Category colors ──────────────────────────────────────────────────────────
-
-const CATEGORY_STYLE: Record<string, { bg: string; text: string; label: string }> = {
-  'Extremes': { bg: 'bg-rose-950/50', text: 'text-rose-300', label: 'text-rose-400' },
-  'Quantiles': { bg: 'bg-violet-950/50', text: 'text-violet-300', label: 'text-violet-400' },
-  'Central Tendency': { bg: 'bg-blue-950/50', text: 'text-blue-300', label: 'text-blue-400' },
-  'Dispersion': { bg: 'bg-emerald-950/50', text: 'text-emerald-300', label: 'text-emerald-400' },
-  'Shape': { bg: 'bg-amber-950/50', text: 'text-amber-300', label: 'text-amber-400' },
-}
-
 // ─── Statistics Table ─────────────────────────────────────────────────────────
 
-function StatsTable({
-  rows, showConsistencyCorr, precision,
-}: {
+function StatsTable({ rows, showConsistencyCorr, precision }: {
   rows: StatRow[]; showConsistencyCorr: boolean; precision: number
 }) {
-  // Group by category maintaining order
-  const groups: { cat: string; rows: StatRow[] }[] = []
-  for (const row of rows) {
-    const last = groups[groups.length - 1]
-    if (last?.cat === row.category) last.rows.push(row)
-    else groups.push({ cat: row.category, rows: [row] })
-  }
-
-  function fmt(v: number | null) {
-    if (v === null || isNaN(v)) return '—'
-    return v.toFixed(precision)
-  }
-
+  const fmt = (v: number | null) => v === null || Number.isNaN(v) ? '—' : v.toFixed(precision)
+  const columns = [
+    { key: 'measure', label: 'Statistic' },
+    { key: 'value', label: 'Value', align: 'right' as const },
+    ...(showConsistencyCorr ? [{ key: 'corr', label: 'Normal-corrected', align: 'right' as const }] : []),
+  ]
   return (
-    <div className="rounded-xl shadow-sm bg-[var(--color-bg-panel)] overflow-hidden">
-      <div className="px-4 py-2.5 border-b border-[var(--color-border)]/30">
-        <span className="text-[10px] uppercase tracking-widest font-semibold text-[var(--color-text-muted)]">
-          Descriptive Statistics
-        </span>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-xs">
-          <thead>
-            <tr className="border-b border-[var(--color-border)]/50">
-              <th className="px-3 py-2 text-left text-[var(--color-text-muted)] font-normal w-36">Category</th>
-              <th className="px-3 py-2 text-left text-[var(--color-text-muted)] font-normal">Measure</th>
-              <th className="px-3 py-2 text-right text-[var(--color-text-muted)] font-normal w-28">Value</th>
-              {showConsistencyCorr && (
-                <th className="px-3 py-2 text-right text-[var(--color-text-muted)] font-normal w-28">Consist. Corr.</th>
-              )}
-            </tr>
-          </thead>
-          <tbody>
-            {groups.map(({ cat, rows: gRows }) => {
-              const style = CATEGORY_STYLE[cat] ?? { bg: '', text: 'text-[var(--color-text)]', label: 'text-[var(--color-text-muted)]' }
-              return gRows.map((row, i) => (
-                <tr
-                  key={`${cat}-${row.measure}`}
-                  className={`border-b border-[var(--color-border)]/30 last:border-0 ${style.bg}`}
-                >
-                  <td className={`px-3 py-1.5 font-medium ${style.label}`}>
-                    {i === 0 ? cat : ''}
-                  </td>
-                  <td className={`px-3 py-1.5 ${style.text}`}>
-                    <div className="flex items-center gap-2">
-                      <span>{row.measure}</span>
-                      {row.robust && (
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider bg-[var(--color-accent)]/20 text-[var(--color-accent)] border border-[var(--color-accent)]/30" title="Robust statistic">
-                          Robust
-                        </span>
-                      )}
-                      {row.warning && (
-                        <span
-                          className="inline-flex items-center px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider bg-amber-500/20 text-amber-400 border border-amber-500/30 cursor-help"
-                          title={row.warning}
-                        >
-                          ⚠
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td className={`px-3 py-1.5 text-right font-mono tabular-nums ${style.text}`}>
-                    {fmt(row.value)}
-                  </td>
-                  {showConsistencyCorr && (
-                    <td className="px-3 py-1.5 text-right font-mono tabular-nums text-[var(--color-text-muted)]">
-                      {fmt(row.consistencyCorr)}
-                    </td>
-                  )}
-                </tr>
-              ))
-            })}
-          </tbody>
-        </table>
-      </div>
-    </div>
+    <ResultTable caption="Descriptive statistics" columns={columns} rows={rows.map((row) => ({
+      group: row.category,
+      cells: {
+        measure: (
+          <span className="flex items-center gap-2">
+            {row.measure}
+            {row.robust && <TableTagLabel tag="Robust" title="Robust statistic" />}
+            {estimatorTags(row, showConsistencyCorr).map((tag) => (
+              <TableTagLabel key={tag} tag={tag} dataTag="correction"
+                title={tag === 'Unbiased' ? 'Unbiased under normality' : 'Consistent: converges to the true value as n grows'} />
+            ))}
+          </span>
+        ),
+        value: fmt(row.value),
+        corr: fmt(row.consistencyCorr),
+      },
+    }))} />
   )
 }
 
 // ─── Charts ───────────────────────────────────────────────────────────────────
-
-const PLOT_BG     = 'rgba(0,0,0,0)'
-const GRID_COLOR  = '#1f2937'
-const LABEL_COLOR = '#d1d5db'   // gray-300  — tick numbers  (~5.7:1 on gray-900)
-const TITLE_COLOR = '#e5e7eb'   // gray-200  — axis titles   (~7:1   on gray-900)
-const ACCENT      = '#6366f1'
-const BOX_COLOR   = '#818cf8'
 
 function DescriptiveCharts({ result, colName, onReady, onPurge }: {
   result: DescriptiveResult; colName: string
@@ -220,7 +93,7 @@ function DescriptiveCharts({ result, colName, onReady, onPurge }: {
     mode: 'markers' as const,
     x: [x], y: [0],
     xaxis: 'x', yaxis: 'y2',
-    marker: { opacity: 0, size: 14, color: BOX_COLOR },
+    marker: { opacity: 0, size: 14, color: PLOT_COLORS.data },
     hovertemplate: `${label}: ${fmt(x)}<extra></extra>`,
     showlegend: false,
   })
@@ -233,7 +106,7 @@ function DescriptiveCharts({ result, colName, onReady, onPurge }: {
       x: histX,
       y: histogram.counts,
       width: histWidth,
-      marker: { color: ACCENT, opacity: 0.85 },
+      marker: { color: PLOT_COLORS.data, opacity: 0.85 },
       // Pass bin edges so the hover template can show the range instead of the center
       customdata: histogram.binEdges.slice(0, -1).map((lo, i) => [
         parseFloat(lo.toPrecision(4)),
@@ -254,9 +127,9 @@ function DescriptiveCharts({ result, colName, onReady, onPurge }: {
       mean: [result.summary.mean],
       xaxis: 'x',
       yaxis: 'y2',
-      marker: { color: BOX_COLOR, size: 4 },
-      line: { color: BOX_COLOR },
-      fillcolor: `${BOX_COLOR}22`,
+      marker: { color: PLOT_COLORS.data, size: 4 },
+      line: { color: PLOT_COLORS.data },
+      fillcolor: PLOT_COLORS.dataBand,
       name: colName,
       // Annotations already cover Q1/Mdn/Q3/Mean — disable box hover entirely
       // to prevent the 45° rotated multi-label pile-up
@@ -279,51 +152,22 @@ function DescriptiveCharts({ result, colName, onReady, onPurge }: {
       x: boxData.outliers,
       y: boxData.outliers.map(() => 0),
       xaxis: 'x', yaxis: 'y2',
-      marker: { opacity: 0.85, size: 10, color: '#f87171' },
+      marker: { opacity: 0.85, size: 10, color: PLOT_COLORS.outlier },
       hovertemplate: 'Outlier: %{x:.4~g}<extra></extra>',
       showlegend: false,
     }] : []),
   ]
 
   // ── Layout ──────────────────────────────────────────────────────────────
-  const layout = {
-    paper_bgcolor: PLOT_BG,
-    plot_bgcolor: PLOT_BG,
-    font: { color: LABEL_COLOR, size: 11 },
+  const layout = baseLayout({
     margin: { t: 12, b: 48, l: 52, r: 12 },
     width: plotWidth,
     height: 400,
-    showlegend: false,
     dragmode: 'pan' as const,
     hovermode: 'closest' as const,
-    hoverlabel: {
-      bgcolor: '#1e293b',       // slate-800 — dark, slightly lighter than the panel
-      bordercolor: '#475569',   // slate-600 — visible but subtle border
-      font: { color: '#e5e7eb', size: 11 },
-      align: 'left' as const,
-    },
-    xaxis: {
-      gridcolor: GRID_COLOR,
-      zerolinecolor: GRID_COLOR,
-      title: { text: colName, font: { color: TITLE_COLOR, size: 11 } },
-      tickformat: '.4~g',
-      nticks: 6,
-      automargin: true,
-    },
-    yaxis: {
-      gridcolor: GRID_COLOR,
-      zerolinecolor: GRID_COLOR,
-      title: { text: 'Frequency', font: { color: TITLE_COLOR, size: 11 } },
-      domain: [0, 0.73],
-      tickformat: 'd',
-      automargin: true,
-    },
-    yaxis2: {
-      domain: [0.78, 1.0],
-      showticklabels: false,
-      showgrid: false,
-      zeroline: false,
-    },
+    xaxis: { ...PLOT_AXIS, title: { text: colName }, tickformat: '.4~g', nticks: 6, automargin: true },
+    yaxis: { ...PLOT_AXIS, title: { text: 'Frequency' }, domain: [0, 0.73], tickformat: 'd', automargin: true },
+    yaxis2: { domain: [0.78, 1.0], showticklabels: false, showgrid: false, zeroline: false },
     annotations: [
       // Strip identity label — top-left of the box plot area
       {
@@ -332,7 +176,7 @@ function DescriptiveCharts({ result, colName, onReady, onPurge }: {
         yref: 'paper' as const, y: 0.99,
         xanchor: 'left' as const, yanchor: 'top' as const,
         showarrow: false,
-        font: { color: TITLE_COLOR, size: 10 },
+        font: { color: PLOT_COLORS.text, size: 12 },
       },
       // Q1
       {
@@ -341,7 +185,7 @@ function DescriptiveCharts({ result, colName, onReady, onPurge }: {
         yref: 'paper' as const, y: 0.82,
         xanchor: 'center' as const, yanchor: 'bottom' as const,
         showarrow: false,
-        font: { color: LABEL_COLOR, size: 9 },
+        font: { color: PLOT_COLORS.axisText, size: 12 },
       },
       // Median — brightest, most important
       {
@@ -350,7 +194,7 @@ function DescriptiveCharts({ result, colName, onReady, onPurge }: {
         yref: 'paper' as const, y: 0.82,
         xanchor: 'center' as const, yanchor: 'bottom' as const,
         showarrow: false,
-        font: { color: TITLE_COLOR, size: 9 },
+        font: { color: PLOT_COLORS.text, size: 12 },
       },
       // Q3
       {
@@ -359,7 +203,7 @@ function DescriptiveCharts({ result, colName, onReady, onPurge }: {
         yref: 'paper' as const, y: 0.82,
         xanchor: 'center' as const, yanchor: 'bottom' as const,
         showarrow: false,
-        font: { color: LABEL_COLOR, size: 9 },
+        font: { color: PLOT_COLORS.axisText, size: 12 },
       },
       // Mean line label — top of histogram, left of line
       {
@@ -368,8 +212,8 @@ function DescriptiveCharts({ result, colName, onReady, onPurge }: {
         yref: 'paper' as const, y: 0.72,
         xanchor: 'center' as const, yanchor: 'top' as const,
         showarrow: false,
-        font: { color: ACCENT, size: 9 },
-        bgcolor: 'rgba(11,16,32,0.8)',
+        font: { color: PLOT_COLORS.mean, size: 12 },
+        bgcolor: PLOT_COLORS.hoverBg,
         borderpad: 2,
       },
       // Median line label — staggered lower to prevent overlap with mean label
@@ -379,8 +223,8 @@ function DescriptiveCharts({ result, colName, onReady, onPurge }: {
         yref: 'paper' as const, y: 0.64,
         xanchor: 'center' as const, yanchor: 'top' as const,
         showarrow: false,
-        font: { color: '#a5b4fc', size: 9 },
-        bgcolor: 'rgba(11,16,32,0.8)',
+        font: { color: PLOT_COLORS.median, size: 12 },
+        bgcolor: PLOT_COLORS.hoverBg,
         borderpad: 2,
       },
     ],
@@ -390,38 +234,29 @@ function DescriptiveCharts({ result, colName, onReady, onPurge }: {
         type: 'line' as const,
         xref: 'x' as const, x0: result.summary.mean, x1: result.summary.mean,
         yref: 'paper' as const, y0: 0, y1: 0.73,
-        line: { color: ACCENT, width: 1.5, dash: 'dash' },
+        line: { color: PLOT_COLORS.mean, width: 1.5, dash: 'dash' },
       },
       // Median reference line — dotted, lighter indigo
       {
         type: 'line' as const,
         xref: 'x' as const, x0: boxData.median, x1: boxData.median,
         yref: 'paper' as const, y0: 0, y1: 0.73,
-        line: { color: '#a5b4fc', width: 1.5, dash: 'dot' },
+        line: { color: PLOT_COLORS.median, width: 1.5, dash: 'dot' },
       },
     ],
-  }
-
-  const config = { displayModeBar: false, responsive: true }
+  })
 
   return (
-    <div ref={wrapperRef} className="rounded-xl shadow-sm bg-[var(--color-bg-panel)] overflow-hidden">
-      <div className="px-4 py-2.5 border-b border-[var(--color-border)]/30">
-        <span className="text-[10px] uppercase tracking-widest font-semibold text-[var(--color-text-muted)]">
-          Distribution
-        </span>
-      </div>
-      <div className="p-2">
+    <div ref={wrapperRef}>
         <Plot
           data={traces}
           layout={layout}
-          config={config}
+          config={PLOT_CONFIG}
           useResizeHandler
           onInitialized={onReady}
           onUpdate={onReady}
           onPurge={onPurge}
         />
-      </div>
     </div>
   )
 }
@@ -431,6 +266,8 @@ function DescriptiveCharts({ result, colName, onReady, onPurge }: {
 interface DescriptiveObservationProps {
   result: DescriptiveResult | null
   config: DescriptiveConfig | null
+  /** The rows of the statistics that are ticked. */
+  rows: StatRow[]
   hasData: boolean
   /** A dataset is loaded (it may have no numeric variables). */
   loaded: boolean
@@ -439,23 +276,15 @@ interface DescriptiveObservationProps {
 }
 
 export default function DescriptiveObservation({
-  result, config, hasData, loaded, precision, isComputing = false,
+  result, config, rows: visibleRows, hasData, loaded, precision, isComputing = false,
 }: DescriptiveObservationProps) {
   const registry = useChartRegistry(CHART_ORDER)
-  const visibleRows = useMemo(() => !result || !config ? []
-    : result.rows.filter((row) => isRowVisible(row, config.selectedStats)), [result, config])
-  const warnings: SnackItem[] = useMemo(() => {
-    return visibleRows
-      .filter(r => r.warning)
-      .map((r, i) => ({ id: i, measure: r.measure, warning: r.warning! }))
-  }, [visibleRows])
-
   const baseName = config ? `descriptive-${config.column}` : 'descriptive-statistics'
   const exportCSV = useCallback(() => {
     if (!result || !config) throw new Error('No applied descriptive result is available.')
     downloadCSV([
-      ['category', 'measure', 'value', 'consistency_corrected', 'robust', 'warning'],
-      ...visibleRows.map((row) => [row.category, row.measure, row.value, row.consistencyCorr, !!row.robust, row.warning ?? '']),
+      ['category', 'statistic', 'value', 'normal_corrected', 'normal_corrected_properties', 'robust', 'warning'],
+      ...visibleRows.map((row) => [row.category, row.measure, row.value, row.consistencyCorr, estimatorTags(row, true).join(' '), !!row.robust, row.warning ?? '']),
     ], exportFilename(baseName, 'csv', 'descriptive-statistics'))
   }, [result, config, visibleRows, baseName])
   const exportPNG = useCallback(() => downloadChartsPNG(registry.charts,
@@ -472,7 +301,7 @@ export default function DescriptiveObservation({
         { label: 'Standard deviation', value: String(result.summary.std) },
         { label: 'IQR', value: String(result.summary.iqr) },
       ],
-      tables: [{ title: 'Statistics', columns: ['Category', 'Measure', 'Value', 'Consistency corrected'],
+      tables: [{ title: 'Statistics', columns: ['Category', 'Statistic', 'Value', 'Normal-corrected'],
         rows: visibleRows.map((row) => [row.category, row.measure, row.value, row.consistencyCorr]) }],
       filename: exportFilename(`${baseName}-report`, 'pdf', 'descriptive-statistics'),
     })
@@ -482,26 +311,20 @@ export default function DescriptiveObservation({
   if (!result || !config) return <EmptyState hasData={hasData} loaded={loaded} />
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-4">
       <ResultToolbar title={`Descriptive statistics — ${config.column}`}
         exports={exportReady ? { png: exportPNG, csv: exportCSV, pdf: exportPDF } : undefined}
         ready={exportReady} disabledReason={isComputing ? 'Waiting for the updated result.' : 'Chart is still loading.'} />
 
-      {/* Warning snackbar */}
-      <WarningSnackbar warnings={warnings} />
+      <ResultSection title="Statistics">
+        <StatsTable rows={visibleRows} showConsistencyCorr={config.showConsistencyCorr} precision={precision} />
+      </ResultSection>
 
-      {/* Statistics Table */}
-      <StatsTable
-        rows={visibleRows}
-        showConsistencyCorr={config.showConsistencyCorr}
-        precision={precision}
-      />
-
-      {/* Charts */}
-      <DescriptiveCharts result={result} colName={config.column}
-        onReady={registry.register('descriptive', `Distribution of ${config.column}`)}
-        onPurge={registry.unregister('descriptive')} />
-
+      <ResultSection title="Distribution">
+        <DescriptiveCharts result={result} colName={config.column}
+          onReady={registry.register('descriptive', `Distribution of ${config.column}`)}
+          onPurge={registry.unregister('descriptive')} />
+      </ResultSection>
     </div>
   )
 }

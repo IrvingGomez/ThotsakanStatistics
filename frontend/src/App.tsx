@@ -285,34 +285,17 @@ export default function App() {
       footerDataset = 'Descriptive Statistics'
       controls = (
         <Suspense fallback={<ChartFallback />}>
-          <DescriptiveControlsSlot onRun={descriptive.handleRun} onReset={descriptive.handleReset} isComputing={descriptive.isComputing} />
+          <DescriptiveControlsSlot state={descriptive} />
         </Suspense>
       )
       observation = (
         <Suspense fallback={<ChartFallback />}>
-          <DescriptiveObservationSlot
-            result={descriptive.result}
-            config={descriptive.config}
-            hasData={descriptive.hasData}
-            loaded={!!descriptive.filename}
-            precision={descriptive.precision}
-            isComputing={descriptive.isComputing}
-            error={descriptive.error}
-          />
+          <DescriptiveObservationSlot state={descriptive} />
         </Suspense>
       )
       notebook = (
         <Suspense fallback={<ChartFallback />}>
-          <DescriptiveNotebookSlot
-            result={descriptive.result}
-            config={descriptive.config}
-            filename={descriptive.filename}
-            filteredN={descriptive.filteredN}
-            rawN={descriptive.rawN}
-            precision={descriptive.precision}
-            hasData={descriptive.hasData}
-            loaded={!!descriptive.filename}
-          />
+          <DescriptiveNotebookSlot state={descriptive} />
         </Suspense>
       )
     }
