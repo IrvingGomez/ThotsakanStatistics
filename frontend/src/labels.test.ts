@@ -5,9 +5,9 @@ import { barWidth, baseLayout, PLOT_COLORS } from './plot/theme'
 describe('labels', () => {
   it('shows consistent names without "bias corrected" but keeps the wire value', () => {
     expect(estimatorLabel('Sample Mean')).toBe('Mean')
-    expect(estimatorLabel('MAD (bias corrected)')).toBe('MAD')
+    expect(estimatorLabel('MAD (bias corrected)')).toBe('MAD (median abs. deviation)')
     expect(estimatorOptions(['IQR (bias corrected)', 'Deviation (1 ddof)'])).toEqual([
-      { value: 'IQR (bias corrected)', label: 'IQR' },
+      { value: 'IQR (bias corrected)', label: 'IQR (interquartile range)' },
       { value: 'Deviation (1 ddof)', label: 'Std dev (ddof=1)' },
     ])
   })

@@ -115,7 +115,20 @@ export function Accordion({ title, open, onToggle, children }: {
   )
 }
 
-export function AnalysisActions({ primaryLabel, onPrimary, primaryType = 'button', primaryDisabled, resetLabel = 'Reset', onReset, status }: {
+/** Small grey heading over a group of controls in the left panel, e.g. VARIABLE. */
+export function SectionLabel({ children }: { children: ReactNode }) {
+  return (
+    <p className="text-xs font-semibold uppercase tracking-widest text-[var(--color-text-muted)] mb-2">
+      {children}
+    </p>
+  )
+}
+
+export function Divider() {
+  return <div className="border-t border-[var(--color-border)] my-3" />
+}
+
+export function AnalysisActions({ primaryLabel, onPrimary, primaryType = 'button', primaryDisabled, resetLabel = 'Reset to defaults', onReset, status }: {
   primaryLabel?: string; onPrimary?: () => void; primaryDisabled?: boolean
   primaryType?: 'button' | 'submit'; resetLabel?: string; onReset: () => void; status?: ReactNode
 }) {

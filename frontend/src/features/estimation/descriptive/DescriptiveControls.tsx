@@ -4,7 +4,7 @@
 
 import { useState, useCallback, useEffect } from 'react'
 import { useData } from '../../../context/DataContext'
-import { Accordion, AnalysisActions, SelectField, SwitchField, TextField } from '../../../components/ControlPrimitives'
+import { Accordion, AnalysisActions, Divider, SectionLabel, SelectField, SwitchField, TextField } from '../../../components/ControlPrimitives'
 import CheckboxTree, { type CheckboxNode } from '../../../components/CheckboxTree'
 import { LABELS } from '../../../labels'
 import {
@@ -43,18 +43,6 @@ interface DescriptiveControlsProps {
 
 // ─── Small UI pieces ──────────────────────────────────────────────────────────
 
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="text-xs font-semibold uppercase tracking-widest text-[var(--color-text-muted)] mb-2">
-      {children}
-    </p>
-  )
-}
-
-function Divider() {
-  return <div className="border-t border-[var(--color-border)] my-3" />
-}
-
 function parsePair(raw: string): [number, number] | null {
   const tokens = raw.split(',').map((s) => s.trim())
   if (tokens.some((token) => token === '')) return null
@@ -79,6 +67,7 @@ export default function DescriptiveControls({ onRun, onReset }: DescriptiveContr
   const [winsorRaw, setWinsorRaw] = useState('')
   const [showConsistencyCorr, setShowConsistencyCorr] = useState(true)
   const [selected, setSelected] = useState<string[]>([...DEFAULT_SELECTED])
+  const [basicOpen, setBasicOpen] = useState(false)
   const [advancedOpen, setAdvancedOpen] = useState(false)
 
   const [error, setError] = useState<string | null>(null)
@@ -104,7 +93,7 @@ export default function DescriptiveControls({ onRun, onReset }: DescriptiveContr
     setError(null)
     setFieldErrors({})
 
-    if (!column) { setError('Please select a numeric variable.'); return }
+    if (!column) { setError('Please select a variable.'); return }
 
     // Blank means "no quantiles"; an unticked Quantiles box asks for none either.
     const probs = parseQuantiles(quantilesRaw)
@@ -164,6 +153,7 @@ export default function DescriptiveControls({ onRun, onReset }: DescriptiveContr
     setWinsorRaw('')
     setShowConsistencyCorr(true)
     setSelected([...DEFAULT_SELECTED])
+    setBasicOpen(false)
     setAdvancedOpen(false)
     setError(null)
     setFieldErrors({})
@@ -210,7 +200,7 @@ export default function DescriptiveControls({ onRun, onReset }: DescriptiveContr
 
       <SectionLabel>Variable</SectionLabel>
       <SelectField
-        label="Numeric variable"
+        label="Variable"
         value={column}
         onChange={(v) => { setColumn(v); setError(null) }}
         options={state.numericCols}
@@ -219,8 +209,9 @@ export default function DescriptiveControls({ onRun, onReset }: DescriptiveContr
 
       <Divider />
 
-      <SectionLabel>Basic statistics</SectionLabel>
-      <CheckboxTree label="Show" nodes={basicNodes} checked={selected} onChange={onSelect} />
+      <Accordion title="Basic statistics" open={basicOpen} onToggle={() => setBasicOpen(!basicOpen)}>
+        <CheckboxTree label="Show" nodes={basicNodes} checked={selected} onChange={onSelect} />
+      </Accordion>
 
       <Accordion title="Advanced statistics" open={advancedOpen} onToggle={() => setAdvancedOpen(!advancedOpen)}>
         {ADVANCED_GROUPS.map(({ title, items }) => (
@@ -243,7 +234,7 @@ export default function DescriptiveControls({ onRun, onReset }: DescriptiveContr
         <p className="text-xs text-[var(--color-text-muted)] mb-3">Weighted mean needs a weights column.</p>
       )}
 
-      <AnalysisActions onReset={handleReset} resetLabel="Reset to Defaults" />
+      <AnalysisActions onReset={handleReset} />
     </div>
   )
 }

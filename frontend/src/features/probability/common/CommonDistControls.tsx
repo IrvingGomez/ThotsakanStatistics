@@ -161,7 +161,7 @@ export default function CommonDistControls({
         setQueryKText('5')
         setQueryError(undefined)
         onReset()
-      }} resetLabel="Reset to defaults" />
+      }} />
 
     </div>
   )

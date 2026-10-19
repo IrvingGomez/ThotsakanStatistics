@@ -4,24 +4,12 @@
 import { useEffect, useId, useRef } from 'react'
 import type { GraphicalTabState } from './useGraphicalTabState'
 import DualInput from '../../../components/DualInput'
-import { AnalysisActions, SelectField, SwitchField, TextField } from '../../../components/ControlPrimitives'
+import { AnalysisActions, Divider, SectionLabel, SelectField, SwitchField, TextField } from '../../../components/ControlPrimitives'
 import type { GraphType } from '../../../api/graphical'
 import { LABELS, confidenceReadout, estimatorOptions } from '../../../labels'
 import { BOUNDS, supportedOverlays } from './graphicalState'
 
 // ─── Small UI pieces ──────────────────────────────────────────────────────────
-
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="text-xs font-semibold uppercase tracking-widest text-[var(--color-text-muted)] mb-2">
-      {children}
-    </p>
-  )
-}
-
-function Divider() {
-  return <div className="border-t border-[var(--color-border)] my-3" />
-}
 
 /** Indented block revealed by the switch above it. */
 function Nested({ children }: { children: React.ReactNode }) {
@@ -66,7 +54,7 @@ export default function GraphicalControls({ state }: { state: GraphicalTabState 
 
       <SectionLabel>Variable</SectionLabel>
       <SelectField
-        label="Numeric column"
+        label="Variable"
         value={cfg.column}
         onChange={(v) => set('column', v)}
         options={numericCols}

@@ -98,7 +98,7 @@ describe('Graphical: every setting updates the plot on its own', () => {
 
   it('offers the sample median beside the mean estimators for mu', async () => {
     await advance()
-    expect(state.muEstimators).toEqual(['Sample Mean', 'Trimmed Mean', 'Winsorized Mean', 'Weighted Mean', 'Sample Median'])
+    expect(state.muEstimators).toEqual(['Sample Mean', 'Sample Median', 'Trimmed Mean', 'Winsorized Mean', 'Weighted Mean'])
   })
 
   it('asks again for the ECDF band when alpha changes', async () => {

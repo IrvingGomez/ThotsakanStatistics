@@ -209,7 +209,8 @@ export function useGraphicalTabState() {
 
   return {
     cfg, winsorRaw: draft.winsorRaw, autoBins: draft.autoBins, fieldErrors,
-    muEstimators: [...meanEstimators, SAMPLE_MEDIAN], deviationEstimators, estimatorNotice,
+    // Median second: after the mean it is the most common choice.
+    muEstimators: [...meanEstimators.slice(0, 1), SAMPLE_MEDIAN, ...meanEstimators.slice(1)], deviationEstimators, estimatorNotice,
     updateConfig, setWinsorRaw, setAutoBins, normalOn: normalApplies(cfg),
     result, warnings: result?.warnings ?? [], column: currentApplied?.cfg.column ?? cfg.column,
     graphType: currentApplied?.cfg.graphType ?? cfg.graphType,

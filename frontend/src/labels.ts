@@ -15,9 +15,9 @@ const ESTIMATOR_LABELS: Readonly<Record<string, string>> = {
   'Weighted Mean': 'Weighted mean',
   'Sample Median': 'Median',
   'Deviation (1 ddof)': 'Std dev (ddof=1)',
-  'IQR (bias corrected)': 'IQR',
-  'MAD (bias corrected)': 'MAD',
-  'AAD (bias corrected)': 'AAD',
+  'IQR (bias corrected)': 'IQR (interquartile range)',
+  'MAD (bias corrected)': 'MAD (median abs. deviation)',
+  'AAD (bias corrected)': 'AAD (mean abs. deviation)',
 }
 
 export function estimatorLabel(wire: string): string {

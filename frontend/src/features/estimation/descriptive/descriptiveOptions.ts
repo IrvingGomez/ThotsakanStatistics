@@ -17,13 +17,13 @@ export const BASIC_TREE: readonly CheckboxNode[] = [
 /** Advanced statistics: off by default; some need an extra parameter (trim, winsor, weights). */
 export const ADVANCED_GROUPS: readonly { title: string; items: readonly { id: string; label: string }[] }[] = [
   { title: 'Central tendency', items: [
-    { id: 'iqm', label: 'Interquartile mean (IQM)' }, { id: 'trimmed_mean', label: 'Trimmed mean' },
+    { id: 'iqm', label: 'Interquartile mean' }, { id: 'trimmed_mean', label: 'Trimmed mean' },
     { id: 'winsorized_mean', label: 'Winsorized mean' }, { id: 'geometric_mean', label: 'Geometric mean' },
     { id: 'harmonic_mean', label: 'Harmonic mean' }, { id: 'weighted_mean', label: 'Weighted mean' },
   ] },
   { title: 'Dispersion', items: [
     { id: 'std_dev_0', label: 'Std dev (ddof=0)' }, { id: 'variance_0', label: 'Variance (ddof=0)' },
-    { id: 'iqr', label: 'IQR' }, { id: 'range', label: 'Range' },
+    { id: 'range', label: 'Range' }, { id: 'iqr', label: 'IQR (interquartile range)' },
     { id: 'mad', label: 'MAD (median abs. deviation)' }, { id: 'aad', label: 'AAD (mean abs. deviation)' },
   ] },
   { title: 'Shape', items: [{ id: 'skewness', label: 'Skewness' }, { id: 'kurtosis', label: 'Kurtosis' }] },
