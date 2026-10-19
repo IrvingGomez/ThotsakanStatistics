@@ -7,6 +7,7 @@ import createPlotlyComponent from 'react-plotly.js/factory'
 import Plotly from 'plotly.js-basic-dist-min'
 import type { GraphicalResponse } from '../../../api/graphical'
 import ResultToolbar from '../../../components/ResultToolbar'
+import { NoDataState } from '../../../components/StatusBanner'
 import { downloadChartsPNG } from '../../../utils/exportPNG'
 import { downloadCSV } from '../../../utils/exportCSV'
 import { downloadPDF } from '../../../utils/exportPDF'
@@ -33,6 +34,8 @@ interface GraphicalObservationProps {
   column: string
   graphType: string
   hasData: boolean
+  /** A dataset is loaded (it may have no numeric variables). */
+  loaded: boolean
   isComputing: boolean
 }
 
@@ -48,7 +51,7 @@ function barsFromEdges(bins: number[], densities: number[]) {
 }
 
 export default function GraphicalObservation({
-  result, column, graphType, hasData, isComputing,
+  result, column, graphType, hasData, loaded, isComputing,
 }: GraphicalObservationProps) {
   const registry = useChartRegistry(CHART_ORDER)
 
@@ -206,12 +209,7 @@ export default function GraphicalObservation({
 
   // ── States ────────────────────────────────────────────────────────────────
   if (!hasData) {
-    return (
-      <div className="min-h-48 flex items-center justify-center text-[var(--color-text-muted)]
-        border border-dashed border-[var(--color-border-md)] rounded-xl m-4">
-        Waiting for data — upload a CSV on the Data tab.
-      </div>
-    )
+    return <NoDataState loaded={loaded} topic="draw graphs of your data" />
   }
 
   if (!result) {

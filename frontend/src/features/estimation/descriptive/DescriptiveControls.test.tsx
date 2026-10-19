@@ -2,10 +2,11 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import DescriptiveControls, { type DescriptiveConfig } from './DescriptiveControls'
+import type { DataState } from '../../../context/DataContext'
 
 const data = {
   state: {
-    status: 'ready' as const, sessionId: 's', filename: 'f.csv', numericCols: ['score', 'w'], categoricalCols: [] as string[],
+    status: 'ready' as DataState['status'], sessionId: 's' as string | null, filename: 'f.csv', numericCols: ['score', 'w'], categoricalCols: [] as string[],
     filters: {}, displayPrecision: 3,
   },
 }
@@ -120,5 +121,20 @@ describe('Descriptive controls', () => {
     for (const key of ['column', 'weightsCol', 'quantileProbs', 'trimAlpha', 'winsorLimits'] as const) {
       expect(after[key]).toEqual(before[key])
     }
+  })
+
+  it('shows the whole panel without a dataset, and picks the first variable once one loads', async () => {
+    const loaded = data.state
+    onRun.mockClear()
+    data.state = { ...loaded, status: 'idle', sessionId: null, filename: '', numericCols: [] }
+    await act(async () => root.render(<DescriptiveControls onRun={onRun} onReset={onReset} key="empty" />))
+    expect((field('Variable') as HTMLSelectElement).disabled).toBe(true)
+    expect(container.textContent).toContain('Upload a CSV file in the Data tab.')
+    expect(container.textContent).toContain('Basic statistics')
+    expect(container.textContent).toContain('Reset to defaults')
+    expect(onRun).not.toHaveBeenCalled()
+    data.state = loaded
+    await act(async () => root.render(<DescriptiveControls onRun={onRun} onReset={onReset} key="empty" />))
+    expect(lastConfig().column).toBe('score')
   })
 })

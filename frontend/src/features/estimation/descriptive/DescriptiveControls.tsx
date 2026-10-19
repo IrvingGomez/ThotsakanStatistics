@@ -4,7 +4,7 @@
 
 import { useState, useCallback, useEffect } from 'react'
 import { useData } from '../../../context/DataContext'
-import { Accordion, AnalysisActions, Divider, SectionLabel, SelectField, SwitchField, TextField } from '../../../components/ControlPrimitives'
+import { Accordion, AnalysisActions, Divider, SectionLabel, SelectField, SwitchField, TextField, VariableSection } from '../../../components/ControlPrimitives'
 import CheckboxTree, { type CheckboxNode } from '../../../components/CheckboxTree'
 import { LABELS } from '../../../labels'
 import {
@@ -140,6 +140,11 @@ export default function DescriptiveControls({ onRun, onReset }: DescriptiveContr
     })
   }, [column, weightsCol, quantilesRaw, trimRaw, winsorRaw, showConsistencyCorr, selected, onRun])
 
+  // The panel is usable before any data arrives; pick the first variable once there is one.
+  useEffect(() => {
+    if (!state.numericCols.includes(column)) setColumn(state.numericCols[0] ?? '')
+  }, [state.numericCols, column])
+
   // Auto-run on every change; the hook decides whether the backend is needed.
   useEffect(() => {
     if (hasData) handleRun()
@@ -159,16 +164,6 @@ export default function DescriptiveControls({ onRun, onReset }: DescriptiveContr
     setFieldErrors({})
     onReset()
   }, [state.numericCols, onReset])
-
-  if (!hasData) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full gap-3 pt-10 pb-6 text-center">
-        <p className="text-sm text-[var(--color-text-muted)]">
-          No dataset loaded. Go to the <strong className="text-[var(--color-text)]">Data</strong> tab to upload a CSV file.
-        </p>
-      </div>
-    )
-  }
 
   const quantilesField = (
     <TextField label="Quantile probabilities" value={quantilesRaw} onChange={setQuantilesRaw}
@@ -198,16 +193,8 @@ export default function DescriptiveControls({ onRun, onReset }: DescriptiveContr
   return (
     <div className="flex flex-col gap-0">
 
-      <SectionLabel>Variable</SectionLabel>
-      <SelectField
-        label="Variable"
-        value={column}
-        onChange={(v) => { setColumn(v); setError(null) }}
-        options={state.numericCols}
-        placeholder="— select column —"
-      />
-
-      <Divider />
+      <VariableSection value={column} onChange={(v) => { setColumn(v); setError(null) }}
+        options={state.numericCols} loaded={!!state.sessionId} />
 
       <Accordion title="Basic statistics" open={basicOpen} onToggle={() => setBasicOpen(!basicOpen)}>
         <CheckboxTree label="Show" nodes={basicNodes} checked={selected} onChange={onSelect} />

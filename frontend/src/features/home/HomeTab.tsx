@@ -35,7 +35,7 @@ const PRODUCTS = [
 const FEATURES = [
   { tab: 'data',        icon: '📁', label: 'Data',              desc: 'Load datasets and explore their structure' },
   { tab: 'probability', icon: '🎲', label: 'Probability',       desc: 'Explore distributions and model randomness' },
-  { tab: 'estimation',  icon: '📐', label: 'Estimation',        desc: 'Summarize data and quantify uncertainty' },
+  { tab: 'estimation',  icon: '📐', label: 'Statistics',        desc: 'Summarize data and quantify uncertainty' },
   { tab: 'hypothesis',  icon: '🧪', label: 'Hypothesis Testing', desc: 'Evaluate claims and compare groups' },
   { tab: 'regression',  icon: '📈', label: 'Linear Regression',  desc: 'Model relationships and interpret evidence' },
 ]

@@ -1,5 +1,5 @@
 import { useId, useState } from 'react'
-import { AnalysisActions, RadioGroup, SelectField, SwitchField, TextField } from '../../components/ControlPrimitives'
+import { AnalysisActions, RadioGroup, SelectField, SwitchField, TextField, VariableSection } from '../../components/ControlPrimitives'
 import DualInput from '../../components/DualInput'
 import { EQUAL_VARIANCE, ONE_SAMPLE_T, ONE_WAY_ANOVA, TEST_TYPES, TWO_SAMPLE_T, type Alternative } from '../../api/hypothesis'
 import GroupBuilder from './GroupBuilder'
@@ -31,18 +31,13 @@ export default function HypothesisControls({ state, onOpenColumnTypes }: { state
   const sliderAlpha = !errors.alphaStr && Number.isFinite(alpha) ? alpha : 0.05
   const [resetGeneration, setResetGeneration] = useState(0)
 
-  if (!state.hasData || state.numericCols.length === 0) return (
-    <div className="analysis-panel space-y-3 text-sm">
-      <p>{state.hasData ? 'This dataset has no numeric variables. Review Column Types to choose a measurement.' : 'Upload a dataset in Data to start testing a hypothesis.'}</p>
-      <button type="button" onClick={onOpenColumnTypes} className="text-[var(--color-accent)] underline">{state.hasData ? 'Open Column Types' : 'Open Data'}</button>
-    </div>
-  )
-
   return (
     <form className="analysis-panel flex flex-col gap-2 pb-4" onSubmit={event => { event.preventDefault(); if (state.canRun) state.handleRun() }}>
+      <VariableSection value={draft.column} onChange={column => setDraft({ column })} options={state.numericCols} loaded={state.hasData} />
+      {state.numericCols.length === 0 && <button type="button" onClick={onOpenColumnTypes} className="-mt-2 mb-2 self-start text-sm text-[var(--color-accent)] underline">
+        {state.hasData ? 'Open Column Types' : 'Open Data'}</button>}
       <SelectField label="Test method" value={draft.testType} onChange={testType => setDraft({ testType })} options={TEST_TYPES} />
       <p className="-mt-2 mb-2 text-sm text-[var(--color-text-muted)]">{descriptions[draft.testType]}</p>
-      <SelectField label="Measurement variable" value={draft.column} onChange={column => setDraft({ column })} options={state.numericCols} />
 
       {draft.testType === ONE_SAMPLE_T && <TextField label="Null value mu0" value={draft.mu0Str}
         onChange={mu0Str => setDraft({ mu0Str })} inputMode="decimal" error={errors.mu0Str}

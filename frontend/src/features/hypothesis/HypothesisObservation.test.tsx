@@ -41,7 +41,7 @@ beforeEach(() => {
 afterEach(() => { act(() => root.unmount()); container.remove() })
 
 function render(revealed: boolean, isDirty = false, isComputing = false) {
-  act(() => root.render(<HypothesisObservation result={result} hasData precision={3} canReveal
+  act(() => root.render(<HypothesisObservation result={result} hasData loaded precision={3} canReveal
     revealed={revealed} onReveal={() => {}} isDirty={isDirty} isComputing={isComputing} />))
 }
 

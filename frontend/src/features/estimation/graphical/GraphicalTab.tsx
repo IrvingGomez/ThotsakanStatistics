@@ -1,4 +1,4 @@
-import StatusBanner from '../../../components/StatusBanner'
+import StatusBanner, { NoDataState } from '../../../components/StatusBanner'
 import GraphicalControls from './GraphicalControls'
 import GraphicalObservation from './GraphicalObservation'
 import GraphicalNotebook from './GraphicalNotebook'
@@ -26,12 +26,13 @@ export function ObservationSlot({ state }: SlotProps) {
     <div className="analysis-panel flex flex-col min-h-0">
       <Status state={state} warnings />
       {(!state.error || state.result) && <GraphicalObservation result={state.result} column={state.column} graphType={state.graphType}
-        hasData={state.hasData} isComputing={state.isComputing} />}
+        hasData={state.hasData} loaded={!!state.sessionId} isComputing={state.isComputing} />}
     </div>
   )
 }
 
 export function NotebookSlot({ state }: SlotProps) {
+  if (!state.hasData) return <NoDataState loaded={!!state.sessionId} topic="see the interpretation and notes" compact />
   return (
     <div className="analysis-panel">
       <Status state={state} />

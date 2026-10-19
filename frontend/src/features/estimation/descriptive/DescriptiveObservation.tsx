@@ -7,6 +7,7 @@ import { type DescriptiveResult, type StatRow } from '../../../api/descriptive'
 import type { DescriptiveConfig } from './DescriptiveControls'
 import { isRowVisible } from './descriptiveOptions'
 import ResultToolbar from '../../../components/ResultToolbar'
+import { NoDataState } from '../../../components/StatusBanner'
 import { downloadCSV } from '../../../utils/exportCSV'
 import { downloadChartsPNG } from '../../../utils/exportPNG'
 import { downloadPDF } from '../../../utils/exportPDF'
@@ -427,15 +428,12 @@ function DescriptiveCharts({ result, colName, onReady, onPurge }: {
 
 // ─── Empty State ──────────────────────────────────────────────────────────────
 
-function EmptyState({ hasData }: { hasData: boolean }) {
+function EmptyState({ hasData, loaded }: { hasData: boolean; loaded: boolean }) {
+  if (!hasData) return <NoDataState loaded={loaded} topic="explore descriptive statistics" />
   return (
     <div className="flex flex-col items-center justify-center h-64 gap-4 opacity-50">
-      <span className="text-5xl">{hasData ? '🚀' : '📂'}</span>
-      <p className="text-sm text-[var(--color-text-muted)] text-center max-w-xs">
-        {hasData
-          ? 'Select variables to see results.'
-          : 'Load a dataset from the Data tab to explore descriptive statistics.'}
-      </p>
+      <span className="text-5xl">🚀</span>
+      <p className="text-sm text-[var(--color-text-muted)] text-center max-w-xs">Select variables to see results.</p>
     </div>
   )
 }
@@ -446,12 +444,14 @@ interface DescriptiveObservationProps {
   result: DescriptiveResult | null
   config: DescriptiveConfig | null
   hasData: boolean
+  /** A dataset is loaded (it may have no numeric variables). */
+  loaded: boolean
   precision: number
   isComputing?: boolean
 }
 
 export default function DescriptiveObservation({
-  result, config, hasData, precision, isComputing = false,
+  result, config, hasData, loaded, precision, isComputing = false,
 }: DescriptiveObservationProps) {
   const registry = useChartRegistry(CHART_ORDER)
   const visibleRows = useMemo(() => !result || !config ? []
@@ -491,7 +491,7 @@ export default function DescriptiveObservation({
   }, [result, config, registry.charts, visibleRows, baseName])
   const exportReady = !!result && !!config && !isComputing && registry.ready
 
-  if (!result || !config) return <EmptyState hasData={hasData} />
+  if (!result || !config) return <EmptyState hasData={hasData} loaded={loaded} />
 
   return (
     <div className="flex flex-col gap-5">

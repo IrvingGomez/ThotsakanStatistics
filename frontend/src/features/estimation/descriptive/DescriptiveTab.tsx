@@ -15,6 +15,7 @@ interface SlotProps {
   isComputing: boolean
   error?: string | null
   hasData: boolean
+  loaded: boolean
   precision: number
   filename: string
   filteredN: number
@@ -27,17 +28,17 @@ export function ControlsSlot({ onRun, onReset, isComputing }: Pick<SlotProps, 'o
   return <DescriptiveControls onRun={onRun} onReset={onReset} isComputing={isComputing} />
 }
 
-export function ObservationSlot({ result, config, hasData, precision, isComputing, error = null }: Pick<SlotProps, 'result' | 'config' | 'hasData' | 'precision' | 'isComputing' | 'error'>) {
+export function ObservationSlot({ result, config, hasData, loaded, precision, isComputing, error = null }: Pick<SlotProps, 'result' | 'config' | 'hasData' | 'loaded' | 'precision' | 'isComputing' | 'error'>) {
   return (
     <div className="h-full">
       <StatusBanner isComputing={isComputing} error={error} hasResult={!!result} />
-      <DescriptiveObservation result={result} config={config} hasData={hasData} precision={precision} isComputing={isComputing} />
+      <DescriptiveObservation result={result} config={config} hasData={hasData} loaded={loaded} precision={precision} isComputing={isComputing} />
     </div>
   )
 }
 
-export function NotebookSlot({ result, config, filename, filteredN, rawN, precision }:
-  Pick<SlotProps, 'result' | 'config' | 'filename' | 'filteredN' | 'rawN' | 'precision'>) {
+export function NotebookSlot({ result, config, filename, filteredN, rawN, precision, hasData, loaded }:
+  Pick<SlotProps, 'result' | 'config' | 'filename' | 'filteredN' | 'rawN' | 'precision' | 'hasData' | 'loaded'>) {
   return (
     <DescriptiveNotebook
       result={result}
@@ -46,6 +47,8 @@ export function NotebookSlot({ result, config, filename, filteredN, rawN, precis
       filteredN={filteredN}
       rawN={rawN}
       precision={precision}
+      hasData={hasData}
+      loaded={loaded}
     />
   )
 }

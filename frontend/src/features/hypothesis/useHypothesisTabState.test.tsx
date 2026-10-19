@@ -76,6 +76,17 @@ afterEach(async () => {
 });
 
 describe('Hypothesis student workflow', () => {
+  it('shows the full panel without a dataset, with the variable disabled', async () => {
+    data = { ...data, state: { ...data.state, status: 'idle' as never, sessionId: null as never, filename: '', dataset: null as never, numericCols: [] } };
+    await render();
+    const select = [...container.querySelectorAll('select')][0];
+    expect(select.disabled).toBe(true);
+    expect(container.textContent).toContain('— no dataset loaded —');
+    expect(container.textContent).toContain('Test method');
+    expect(container.textContent).toContain('Open Data');
+    expect(hypothesisApi.runTest).not.toHaveBeenCalled();
+  });
+
   it('keeps incomplete numeric text when controls unmount and return', async () => {
     await act(async () => state.setDraft({ mu0Str: '-', alphaStr: '0.' }));
     await render(false);

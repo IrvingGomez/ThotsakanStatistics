@@ -26,7 +26,7 @@ afterEach(async () => {
 
 const base = { summary: { n: 20, n_unique: 4 }, warnings: [] as string[] }
 async function draw(result: GraphicalResponse, graphType: string) {
-  await act(async () => root.render(<GraphicalObservation result={result} column="Dice" graphType={graphType} hasData isComputing={false} />))
+  await act(async () => root.render(<GraphicalObservation result={result} column="Dice" graphType={graphType} hasData loaded isComputing={false} />))
   const element = container.querySelector<HTMLElement>('[data-plot]')!
   return {
     traces: JSON.parse(element.dataset.plot!) as Record<string, any>[],

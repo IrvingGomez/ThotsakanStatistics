@@ -67,15 +67,15 @@ const SUB_TABS: Partial<Record<TabId, SubTab[]>> = {
     { key: 'approx',  label: '🤏 Approximations' },
   ],
   estimation: [
+    { key: 'graphical',   label: '📊 Graphical Analysis' },
     { key: 'descriptive', label: '🧮 Descriptive Statistics' },
     { key: 'inference',   label: '💭 Statistical Inference' },
-    { key: 'graphical',   label: '📊 Graphical Analysis' },
   ],
 }
 
 const DEFAULT_SUB_TAB: Partial<Record<TabId, string>> = {
   probability: 'common',
-  estimation:  'inference',
+  estimation:  'graphical',
 }
 
 // ─── Placeholders ─────────────────────────────────────────────────────────────
@@ -257,7 +257,7 @@ export default function App() {
       notebook    = <ComingSoon label="Custom Distribution" />
     }
 
-  // ── Estimation tab ─────────────────────────────────────────────────────────
+  // ── Statistics tab (id 'estimation') ─────────────────────────────────────────────────────────
   } else if (activeTab === 'estimation') {
     if (activeSubTab === 'graphical') {
       footerDataset = 'Graphical Analysis'
@@ -306,6 +306,7 @@ export default function App() {
             result={descriptive.result}
             config={descriptive.config}
             hasData={descriptive.hasData}
+            loaded={!!descriptive.filename}
             precision={descriptive.precision}
             isComputing={descriptive.isComputing}
             error={descriptive.error}
@@ -321,6 +322,8 @@ export default function App() {
             filteredN={descriptive.filteredN}
             rawN={descriptive.rawN}
             precision={descriptive.precision}
+            hasData={descriptive.hasData}
+            loaded={!!descriptive.filename}
           />
         </Suspense>
       )

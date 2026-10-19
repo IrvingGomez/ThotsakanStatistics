@@ -3,7 +3,7 @@ import type { InferenceState } from './useInferenceTabState'
 import InferenceResultStatus from './InferenceResultStatus'
 import { coveragePercent, formatInferenceNumber, parseIntervalRows, pointEstimate, quantityLabel, rowLabel } from './inferencePresentation'
 import { ResultCard } from '../../../components/notebook/NotebookParts'
-import { EmptyState } from '../../../components/StatusBanner'
+import { EmptyState, NoDataState } from '../../../components/StatusBanner'
 
 function IntervalCards({ title, result, precision }: { title: string; result: IntervalsResponse; precision: number }) {
   const rows = parseIntervalRows(result)
@@ -55,7 +55,9 @@ export default function InferenceNotebook({ state }: { state: InferenceState }) 
   return <div className="analysis-panel p-4">
     <h2 className="text-lg font-bold mb-3">Statistical inference</h2>
     <InferenceResultStatus state={state} />
-    {!hasResult && !state.isComputing && !state.error && <EmptyState message={state.hasData ? 'Choose a variable to calculate intervals.' : 'Upload a CSV in Data to begin.'} />}
+    {!hasResult && !state.isComputing && !state.error && (state.hasData
+      ? <EmptyState message="Choose a variable to calculate intervals." />
+      : <NoDataState loaded={!!state.sessionId} topic="see the interpretation and notes" compact />)}
     {state.ciResult && <IntervalCards title="Confidence intervals" result={state.ciResult} precision={state.precision} />}
     {state.piResult && <IntervalCards title="Prediction intervals" result={state.piResult} precision={state.precision} />}
     {state.regionResult && <RegionSummary result={state.regionResult} precision={state.precision} showCiBox={state.appliedConfig?.add_ci_box ?? true} />}

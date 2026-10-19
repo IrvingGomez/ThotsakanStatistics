@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { Accordion, AnalysisActions, Divider, SectionLabel, SelectField, SwitchField, TextField } from '../../../components/ControlPrimitives'
+import { Accordion, AnalysisActions, SelectField, VariableSection, SwitchField, TextField } from '../../../components/ControlPrimitives'
 import CheckboxTree from '../../../components/CheckboxTree'
 import DualInput from '../../../components/DualInput'
 import { LABELS, confidenceReadout, estimatorOptions } from '../../../labels'
@@ -20,8 +20,6 @@ export default function InferenceControls({ state }: { state: InferenceState }) 
     if (Object.keys(fieldErrors).length) formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus()
   }, [fieldErrors])
 
-  if (!state.hasData) return <p className="p-4 text-sm text-[var(--color-text-muted)]">{state.filename ? 'This dataset has no numeric variables. Check column types in Data.' : 'Upload a CSV in Data to calculate intervals.'}</p>
-
   const isRegions = draft.estimationType === 'Confidence Regions'
   const info = selectionInfo(draft.selected)
   const alpha = Number(draft.alphaStr)
@@ -37,9 +35,8 @@ export default function InferenceControls({ state }: { state: InferenceState }) 
     error={fieldErrors.alphaStr} />
 
   return <form ref={formRef} onSubmit={event => { event.preventDefault(); void state.handleRun() }} noValidate className="analysis-panel flex flex-col gap-1 pb-4">
-    <SectionLabel>Variable</SectionLabel>
-    <SelectField label="Variable" value={draft.column} onChange={column => setDraft({ column })} options={state.numericCols} error={fieldErrors.column} />
-    <Divider />
+    <VariableSection value={draft.column} onChange={column => setDraft({ column })} options={state.numericCols}
+      error={fieldErrors.column} loaded={!!state.sessionId} />
     <SelectField label="Estimate" value={draft.estimationType} onChange={value => setDraft({ estimationType: value as InferenceDraft['estimationType'] })} options={['Confidence and Prediction Intervals', 'Confidence Regions']} />
     <p className="mb-3 text-sm text-[var(--color-text-muted)]">A confidence interval describes uncertainty about a population quantity. A prediction interval gives a range for one future observation.</p>
     {!isRegions && alphaInput}

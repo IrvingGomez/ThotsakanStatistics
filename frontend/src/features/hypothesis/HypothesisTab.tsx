@@ -1,4 +1,5 @@
 import AnalysisStatus from '../../components/AnalysisStatus';
+import { NoDataState } from '../../components/StatusBanner';
 import { EQUAL_VARIANCE, TWO_SAMPLE_T } from '../../api/hypothesis';
 import HypothesisControls from './HypothesisControls';
 import HypothesisObservation from './HypothesisObservation';
@@ -27,13 +28,15 @@ export function ControlsSlot({ state, onOpenColumnTypes }: { state: HypothesisTa
 export function ObservationSlot({ state }: { state: HypothesisTabState }) {
   return <div className="analysis-panel flex flex-col gap-3">
     <ResultStatus state={state} />
-    {(state.result || (!state.isComputing && !state.error)) && <HypothesisObservation result={state.result} hasData={state.hasData} revealed={state.revealed}
+    {(state.result || (!state.isComputing && !state.error)) && <HypothesisObservation result={state.result}
+      hasData={state.hasData && state.numericCols.length > 0} loaded={state.hasData} revealed={state.revealed}
       onReveal={state.onReveal} precision={state.precision} canReveal={!state.isComputing && !state.isDirty && !state.error}
       isComputing={state.isComputing} isDirty={state.isDirty} />}
   </div>;
 }
 
 export function NotebookSlot({ state }: { state: HypothesisTabState }) {
+  if (!state.hasData || state.numericCols.length === 0) return <NoDataState loaded={state.hasData} topic="see the interpretation and notes" compact />;
   return <div className="analysis-panel">
     <ResultStatus state={state} />
     {(state.result || (!state.isComputing && !state.error)) && <HypothesisNotebook result={state.result} precision={state.precision} revealed={state.revealed}

@@ -4,7 +4,7 @@
 import { useEffect, useId, useRef } from 'react'
 import type { GraphicalTabState } from './useGraphicalTabState'
 import DualInput from '../../../components/DualInput'
-import { AnalysisActions, Divider, SectionLabel, SelectField, SwitchField, TextField } from '../../../components/ControlPrimitives'
+import { AnalysisActions, Divider, SectionLabel, SelectField, SwitchField, TextField, VariableSection } from '../../../components/ControlPrimitives'
 import type { GraphType } from '../../../api/graphical'
 import { LABELS, confidenceReadout, estimatorOptions } from '../../../labels'
 import { BOUNDS, supportedOverlays } from './graphicalState'
@@ -27,7 +27,7 @@ const GRAPH_TYPES: { value: GraphType; label: string }[] = [
 ]
 
 export default function GraphicalControls({ state }: { state: GraphicalTabState }) {
-  const { cfg, winsorRaw, autoBins, hasData, numericCols, muEstimators, deviationEstimators,
+  const { cfg, winsorRaw, autoBins, sessionId, numericCols, muEstimators, deviationEstimators,
     estimatorNotice, fieldErrors, resetVersion, updateConfig: set,
     setWinsorRaw, setAutoBins, reset } = state
   const rootRef = useRef<HTMLDivElement>(null)
@@ -39,30 +39,11 @@ export default function GraphicalControls({ state }: { state: GraphicalTabState 
     if (Object.keys(fieldErrors).length) rootRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus()
   }, [fieldErrors])
 
-  if (!hasData) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full gap-3 pt-10 pb-6 text-center">
-        <p className="text-sm text-[var(--color-text-muted)]">
-          No dataset loaded. Go to the <strong className="text-[var(--color-text)]">Data</strong> tab to upload a CSV file.
-        </p>
-      </div>
-    )
-  }
-
   return (
     <div ref={rootRef} className="flex flex-col gap-0">
 
-      <SectionLabel>Variable</SectionLabel>
-      <SelectField
-        label="Variable"
-        value={cfg.column}
-        onChange={(v) => set('column', v)}
-        options={numericCols}
-        error={fieldErrors.column}
-        placeholder="— select column —"
-      />
-
-      <Divider />
+      <VariableSection value={cfg.column} onChange={(v) => set('column', v)} options={numericCols}
+        error={fieldErrors.column} loaded={!!sessionId} />
 
       <fieldset className="mb-3">
         <legend className="text-xs font-semibold text-[var(--color-text-muted)] mb-2">Graph</legend>

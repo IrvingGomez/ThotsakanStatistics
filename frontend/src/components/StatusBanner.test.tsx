@@ -1,7 +1,7 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import StatusBanner, { EmptyState } from './StatusBanner'
+import StatusBanner, { EmptyState, NoDataState } from './StatusBanner'
 import { ResultCard, Row, Section } from './notebook/NotebookParts'
 
 let root: Root
@@ -41,6 +41,13 @@ describe('EmptyState and notebook parts', () => {
   it('renders the empty message as a status', () => {
     act(() => root.render(<EmptyState message="Upload a CSV in Data to begin." />))
     expect(container.querySelector('[role="status"]')?.textContent).toBe('Upload a CSV in Data to begin.')
+  })
+
+  it('points to the Data tab, and tells a dataset without numeric variables apart', () => {
+    act(() => root.render(<NoDataState loaded={false} topic="explore descriptive statistics" />))
+    expect(container.querySelector('[role="status"]')?.textContent).toContain('Load a dataset from the Data tab to explore descriptive statistics.')
+    act(() => root.render(<NoDataState loaded topic="explore descriptive statistics" />))
+    expect(container.querySelector('[role="status"]')?.textContent).toContain('This dataset has no numeric variables.')
   })
 
   it('renders a section with rows and a result card', () => {

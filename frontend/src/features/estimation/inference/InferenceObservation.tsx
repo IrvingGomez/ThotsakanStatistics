@@ -6,6 +6,7 @@ import InferenceResultStatus from './InferenceResultStatus'
 import { coveragePercent, intervalRange, parseIntervalRows, pointEstimate, quantityLabel, rowLabel, type IntervalRow } from './inferencePresentation'
 import { PLOT_AXIS, PLOT_COLORS, PLOT_CONFIG, baseLayout } from '../../../plot/theme'
 import ResultToolbar from '../../../components/ResultToolbar'
+import { NoDataState } from '../../../components/StatusBanner'
 import { useChartRegistry } from '../../../hooks/useChartRegistry'
 import { downloadChartsPNG } from '../../../utils/exportPNG'
 import { downloadCSV } from '../../../utils/exportCSV'
@@ -184,7 +185,9 @@ export default function InferenceObservation({ state }: { state: InferenceState 
     <ResultToolbar title={`Inference — ${variable || 'results'}`}
       exports={exportReady ? { png: exportPNG, csv: exportCSV, pdf: exportPDF } : undefined}
       ready={exportReady} disabledReason={state.isComputing ? 'Waiting for the applied result.' : 'Charts are still loading.'} />
-    {!hasResult && !state.isComputing && !state.error && <p className="text-sm text-[var(--color-text-muted)] p-6">{state.hasData ? 'Choose a variable to see interval plots.' : 'Upload a CSV in Data to begin.'}</p>}
+    {!hasResult && !state.isComputing && !state.error && (state.hasData
+      ? <p className="text-sm text-[var(--color-text-muted)] p-6">Choose a variable to see interval plots.</p>
+      : <NoDataState loaded={!!state.sessionId} topic="estimate intervals and regions" />)}
     {content}
   </div>
 }

@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import ReactPlotly from 'react-plotly.js';
 import type { HypothesisResponse, RejectionRegionData } from '../../api/hypothesis';
 import ResultToolbar from '../../components/ResultToolbar';
+import { NoDataState } from '../../components/StatusBanner';
 import { useChartRegistry } from '../../hooks/useChartRegistry';
 import { downloadChartsPNG } from '../../utils/exportPNG';
 import { downloadCSV } from '../../utils/exportCSV';
@@ -13,6 +14,8 @@ const CHART_ORDER = ['hypothesis'] as const;
 interface HypothesisObservationProps {
   result: HypothesisResponse | null;
   hasData: boolean;
+  /** A dataset is loaded (it may have no numeric variables). */
+  loaded: boolean;
   precision: number;
   canReveal: boolean;
   revealed: boolean;
@@ -87,7 +90,7 @@ function shade(region: RejectionRegionData, lo: number, hi: number, color: strin
 }
 
 export default function HypothesisObservation({
-  result, hasData, revealed, onReveal, precision, canReveal, isComputing, isDirty,
+  result, hasData, loaded, revealed, onReveal, precision, canReveal, isComputing, isDirty,
 }: HypothesisObservationProps) {
   const registry = useChartRegistry(CHART_ORDER);
   const traces = useMemo(() => {
@@ -139,11 +142,7 @@ export default function HypothesisObservation({
   }, [result, revealed, precision]);
 
   if (!hasData) {
-    return (
-      <div className="p-6 text-sm text-[var(--color-text-muted)] border border-dashed border-[var(--color-border-md)] rounded-xl">
-        Upload a dataset in Data to start testing a hypothesis.
-      </div>
-    );
+    return <NoDataState loaded={loaded} topic="test hypotheses" />;
   }
 
   if (!result) {

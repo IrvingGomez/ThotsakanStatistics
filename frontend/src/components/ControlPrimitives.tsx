@@ -128,6 +128,27 @@ export function Divider() {
   return <div className="border-t border-[var(--color-border)] my-3" />
 }
 
+/**
+ * The VARIABLE section at the top of every analysis panel. Without numeric variables the select stays
+ * visible but disabled, with a pointer to the Data tab, so the rest of the panel can still be explored.
+ */
+export function VariableSection({ value, onChange, options, error, loaded }: {
+  value: string; onChange: (value: string) => void; options: readonly string[]; error?: string
+  /** A dataset is loaded (it may still have no numeric variables). */
+  loaded: boolean
+}) {
+  const empty = options.length === 0
+  return (
+    <>
+      <SectionLabel>Variable</SectionLabel>
+      <SelectField label="Variable" value={empty ? '' : value} onChange={onChange} options={options} error={error}
+        disabled={empty} placeholder={empty ? (loaded ? '— no numeric variables —' : '— no dataset loaded —') : '— select column —'}
+        hint={empty ? (loaded ? 'Check the column types in the Data tab.' : 'Upload a CSV file in the Data tab.') : undefined} />
+      <Divider />
+    </>
+  )
+}
+
 export function AnalysisActions({ primaryLabel, onPrimary, primaryType = 'button', primaryDisabled, resetLabel = 'Reset to defaults', onReset, status }: {
   primaryLabel?: string; onPrimary?: () => void; primaryDisabled?: boolean
   primaryType?: 'button' | 'submit'; resetLabel?: string; onReset: () => void; status?: ReactNode
