@@ -13,6 +13,12 @@
   --color-text-muted: #9ca3af;
   --color-accent:     #6366f1;
   --color-accent-hover: #4f46e5;
+  --color-warning-bg:     rgba(245,158,11,0.10);
+  --color-warning-border: rgba(245,158,11,0.40);
+  --color-warning-text:   #fde68a;
+  --color-error-bg:       rgba(239,68,68,0.10);
+  --color-error-border:   rgba(239,68,68,0.45);
+  --color-error-text:     #fecaca;
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
 }
@@ -99,6 +105,14 @@ html, body, #app {
 .analysis-observation { min-width: 0; width: 100%; }
 .analysis-status { font-size: 14px; line-height: 1.5; margin-bottom: 16px; overflow-wrap: anywhere; }
 .analysis-context { margin-bottom: 8px; }
+.status-warning, .status-error {
+  border-radius: 8px;
+  border: 1px solid;
+  padding: 12px;
+  font-size: 14px;
+}
+.status-warning { background: var(--color-warning-bg); border-color: var(--color-warning-border); color: var(--color-warning-text); }
+.status-error { background: var(--color-error-bg); border-color: var(--color-error-border); color: var(--color-error-text); }
 .analysis-actions {
   position: sticky;
   bottom: -16px;

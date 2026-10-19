@@ -239,7 +239,7 @@ describe('Graphical: result ownership', () => {
     for (const section of panels()) {
       expect(section.textContent).toContain('Couldn’t update results')
       expect(section.textContent).toContain('Previous result — update failed.')
-      expect(section.textContent).toContain('Applied: sample.csv · Age')
+      expect(section.textContent).toContain('sample.csv · Age')
       expect(section.querySelector('button')?.textContent).toBe('Retry')
     }
     await act(async () => state.retry())

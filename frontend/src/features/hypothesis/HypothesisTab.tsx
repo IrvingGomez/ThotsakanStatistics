@@ -1,6 +1,4 @@
-import AnalysisStatus from '../../components/AnalysisStatus';
-import { NoDataState } from '../../components/StatusBanner';
-import { EQUAL_VARIANCE, TWO_SAMPLE_T } from '../../api/hypothesis';
+import StatusBanner, { EmptyState, summaryLine } from '../../components/StatusBanner';
 import HypothesisControls from './HypothesisControls';
 import HypothesisObservation from './HypothesisObservation';
 import HypothesisNotebook from './HypothesisNotebook';
@@ -8,17 +6,8 @@ import type { HypothesisTabState } from './useHypothesisTabState';
 
 function ResultStatus({ state }: { state: HypothesisTabState }) {
   const config = state.applied?.config;
-  return <AnalysisStatus isComputing={state.isComputing} error={state.error} hasResult={!!state.result}
-    isDirty={state.isDirty} onRetry={state.handleRetry}>
-    <p>{state.applied?.filename || state.filename || 'No dataset'}{config ? ' · ' + config.column + ' · ' + config.testType : ''}</p>
-    {state.hasData && <p>{state.applied?.filteredN ?? state.filteredN} rows after filters{config ? ' · α = ' + config.alpha : ''}</p>}
-    {config && <p>Applied settings: {config.mu0 !== null ? 'μ₀ = ' + config.mu0 + ' · ' : ''}
-      {config.alternative}{config.testType === TWO_SAMPLE_T ? ' · ' + (config.correction ? 'Welch correction' : 'Pooled variance') : ''}
-      {config.testType === EQUAL_VARIANCE ? ' · ' + config.varianceTestType : ''}</p>}
-    {config?.group1 && config.group2 && [config.group1, config.group2].map((group, index) =>
-      <p key={index}>{group.name || 'Group ' + (index + 1)}: {group.column} = {group.values.join(', ')}</p>)}
-    {config?.anovaColumn && <p>Factor: {config.anovaColumn} · {config.anovaLevels?.join(', ')}</p>}
-  </AnalysisStatus>;
+  return <StatusBanner isComputing={state.isComputing} error={state.error} hasResult={!!state.result} onRetry={state.handleRetry}
+    summary={config && summaryLine([state.applied?.filename, config.column, config.testType, 'n = ' + state.applied?.filteredN, 'α = ' + config.alpha])} />;
 }
 
 export function ControlsSlot({ state, onOpenColumnTypes }: { state: HypothesisTabState; onOpenColumnTypes: () => void }) {
@@ -35,9 +24,8 @@ export function ObservationSlot({ state }: { state: HypothesisTabState }) {
 }
 
 export function NotebookSlot({ state }: { state: HypothesisTabState }) {
-  if (!state.hasData || state.numericCols.length === 0) return <NoDataState loaded={state.hasData} topic="see the interpretation and notes" compact />;
+  if (!state.hasData || state.numericCols.length === 0) return <EmptyState loaded={state.hasData} hasData={false} compact />;
   return <div className="analysis-panel">
-    <ResultStatus state={state} />
     {(state.result || (!state.isComputing && !state.error)) && <HypothesisNotebook result={state.result} precision={state.precision} />}
   </div>;
 }

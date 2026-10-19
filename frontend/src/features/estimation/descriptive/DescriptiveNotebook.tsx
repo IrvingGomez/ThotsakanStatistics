@@ -3,7 +3,7 @@
 
 import { type DescriptiveResult, type DescriptiveSummary } from '../../../api/descriptive'
 import type { DescriptiveConfig } from './DescriptiveControls'
-import { NoDataState } from '../../../components/StatusBanner'
+import { EmptyState } from '../../../components/StatusBanner'
 
 // ─── Narrative types ─────────────────────────────────────────────────────────
 
@@ -393,7 +393,7 @@ interface DescriptiveNotebookProps {
 export default function DescriptiveNotebook({
   result, config, filename, filteredN, rawN, precision, hasData, loaded,
 }: DescriptiveNotebookProps) {
-  if (!hasData) return <NoDataState loaded={loaded} topic="see the interpretation and notes" compact />
+  if (!hasData) return <EmptyState loaded={loaded} hasData={false} compact />
   if (!result || !config) {
     return (
       <div className="flex flex-col items-center justify-center h-32 gap-2 opacity-40">

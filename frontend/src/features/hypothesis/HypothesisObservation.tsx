@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import ReactPlotly from 'react-plotly.js';
 import type { HypothesisResponse, RejectionRegionData } from '../../api/hypothesis';
 import ResultToolbar from '../../components/ResultToolbar';
-import { NoDataState } from '../../components/StatusBanner';
+import { EmptyState } from '../../components/StatusBanner';
 import { useChartRegistry } from '../../hooks/useChartRegistry';
 import { downloadChartsPNG } from '../../utils/exportPNG';
 import { downloadCSV } from '../../utils/exportCSV';
@@ -136,7 +136,7 @@ export default function HypothesisObservation({
   }, [result, precision]);
 
   if (!hasData) {
-    return <NoDataState loaded={loaded} topic="test hypotheses" />;
+    return <EmptyState loaded={loaded} hasData={false} />;
   }
 
   if (!result) {

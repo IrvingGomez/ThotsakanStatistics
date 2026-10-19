@@ -7,7 +7,7 @@ import { type DescriptiveResult, type StatRow } from '../../../api/descriptive'
 import type { DescriptiveConfig } from './DescriptiveControls'
 import { isRowVisible } from './descriptiveOptions'
 import ResultToolbar from '../../../components/ResultToolbar'
-import { NoDataState } from '../../../components/StatusBanner'
+import { EmptyState } from '../../../components/StatusBanner'
 import { downloadCSV } from '../../../utils/exportCSV'
 import { downloadChartsPNG } from '../../../utils/exportPNG'
 import { downloadPDF } from '../../../utils/exportPDF'
@@ -422,18 +422,6 @@ function DescriptiveCharts({ result, colName, onReady, onPurge }: {
           onPurge={onPurge}
         />
       </div>
-    </div>
-  )
-}
-
-// ─── Empty State ──────────────────────────────────────────────────────────────
-
-function EmptyState({ hasData, loaded }: { hasData: boolean; loaded: boolean }) {
-  if (!hasData) return <NoDataState loaded={loaded} topic="explore descriptive statistics" />
-  return (
-    <div className="flex flex-col items-center justify-center h-64 gap-4 opacity-50">
-      <span className="text-5xl">🚀</span>
-      <p className="text-sm text-[var(--color-text-muted)] text-center max-w-xs">Select variables to see results.</p>
     </div>
   )
 }

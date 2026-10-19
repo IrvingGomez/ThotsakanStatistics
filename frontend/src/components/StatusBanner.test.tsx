@@ -1,7 +1,7 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import StatusBanner, { EmptyState, NoDataState } from './StatusBanner'
+import StatusBanner, { EmptyState, summaryLine } from './StatusBanner'
 import { ResultCard, Row, Section } from './notebook/NotebookParts'
 
 let root: Root
@@ -35,19 +35,40 @@ describe('StatusBanner', () => {
     act(() => root.render(<StatusBanner isComputing={false} error={null} hasResult warnings={['n is small']} />))
     expect(container.querySelector('[aria-label="Warnings"]')?.textContent).toBe('n is small')
   })
+
+  it('shows the summary line only when a result exists', () => {
+    act(() => root.render(<StatusBanner isComputing={false} error={null} hasResult summary="data.csv · x · n = 10" />))
+    expect(container.textContent).toContain('data.csv · x · n = 10')
+    act(() => root.render(<StatusBanner isComputing={false} error={null} hasResult={false} summary="data.csv · x · n = 10" />))
+    expect(container.textContent).not.toContain('data.csv')
+  })
+
+  it('has no settings-changed message', () => {
+    act(() => root.render(<StatusBanner isComputing={false} error={null} hasResult summary="s" warnings={['w']} resultNotice="r" onRetry={() => {}} />))
+    expect(container.textContent).not.toContain('Settings changed')
+  })
+})
+
+describe('summaryLine', () => {
+  it('drops empty parts', () => {
+    expect(summaryLine(['a.csv', null, 'x', false, 'n = 3'])).toBe('a.csv · x · n = 3')
+  })
 })
 
 describe('EmptyState and notebook parts', () => {
-  it('renders the empty message as a status', () => {
-    act(() => root.render(<EmptyState message="Upload a CSV in Data to begin." />))
-    expect(container.querySelector('[role="status"]')?.textContent).toBe('Upload a CSV in Data to begin.')
+  it('asks for a dataset when none is loaded', () => {
+    act(() => root.render(<EmptyState loaded={false} hasData={false} />))
+    expect(container.querySelector('[role="status"]')?.textContent).toBe('Load a dataset in the Data tab to see results.')
   })
 
-  it('points to the Data tab, and tells a dataset without numeric variables apart', () => {
-    act(() => root.render(<NoDataState loaded={false} topic="explore descriptive statistics" />))
-    expect(container.querySelector('[role="status"]')?.textContent).toContain('Load a dataset from the Data tab to explore descriptive statistics.')
-    act(() => root.render(<NoDataState loaded topic="explore descriptive statistics" />))
-    expect(container.querySelector('[role="status"]')?.textContent).toContain('This dataset has no numeric variables.')
+  it('tells a dataset without numeric variables apart', () => {
+    act(() => root.render(<EmptyState loaded hasData={false} />))
+    expect(container.querySelector('[role="status"]')?.textContent).toBe('This dataset has no numeric variables. Check the column types in the Data tab.')
+  })
+
+  it('points to the left panel when data is ready but there is no result', () => {
+    act(() => root.render(<EmptyState loaded hasData />))
+    expect(container.querySelector('[role="status"]')?.textContent).toBe('Choose the settings in the left panel to see results.')
   })
 
   it('renders a section with rows and a result card', () => {

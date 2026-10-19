@@ -22,6 +22,16 @@ export function Row({ label, value }: { label: string; value: ReactNode }) {
   )
 }
 
+/** A formula with its name above it, for the notebook's formula reference. */
+export function Formula({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="mb-2">
+      <p className="text-xs text-[var(--color-text-muted)]">{label}</p>
+      <p className="break-words font-mono text-xs text-[var(--color-text)]">{children}</p>
+    </div>
+  )
+}
+
 export function ResultCard({ title, children }: { title: string; children: ReactNode }) {
   return (
     <article className="min-w-0 rounded-lg border border-[var(--color-border-md)] bg-[var(--color-bg-input)] p-3">

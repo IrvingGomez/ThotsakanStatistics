@@ -26,6 +26,17 @@ export const PLOT_COLORS = {
   rejectLine: '#ef4444',
   pValue: 'rgba(59,130,246,0.45)',
   outlier: '#f87171',
+  /** Observed test statistic (Hypothesis). */
+  statistic: '#e5e7eb',
+  /** Reference lines drawn over data: sample mean and median. */
+  mean: '#818cf8',
+  median: '#a5b4fc',
+  /** Part of a distribution selected by a query (Probability), and the rest of it. */
+  highlight: '#6366f1',
+  highlightFill: 'rgba(99,102,241,0.25)',
+  inactive: '#334155',
+  hoverBg: '#1e293b',
+  hoverBorder: '#475569',
   grid: 'rgba(148,163,184,0.18)',
   axisText: '#9ca3af',
   text: '#cbd5e1',
@@ -50,6 +61,7 @@ export function baseLayout(overrides: Record<string, unknown> = {}): Record<stri
     xaxis: { ...PLOT_AXIS },
     yaxis: { ...PLOT_AXIS },
     showlegend: false,
+    hoverlabel: { bgcolor: PLOT_COLORS.hoverBg, bordercolor: PLOT_COLORS.hoverBorder, font: { color: PLOT_COLORS.text, size: 12 } },
     ...overrides,
   }
 }

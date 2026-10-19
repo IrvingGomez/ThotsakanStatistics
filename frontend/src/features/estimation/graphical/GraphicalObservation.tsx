@@ -7,7 +7,7 @@ import createPlotlyComponent from 'react-plotly.js/factory'
 import Plotly from 'plotly.js-basic-dist-min'
 import type { GraphicalResponse } from '../../../api/graphical'
 import ResultToolbar from '../../../components/ResultToolbar'
-import { NoDataState } from '../../../components/StatusBanner'
+import { EmptyState } from '../../../components/StatusBanner'
 import { downloadChartsPNG } from '../../../utils/exportPNG'
 import { downloadCSV } from '../../../utils/exportCSV'
 import { downloadPDF } from '../../../utils/exportPDF'
@@ -209,7 +209,7 @@ export default function GraphicalObservation({
 
   // ── States ────────────────────────────────────────────────────────────────
   if (!hasData) {
-    return <NoDataState loaded={loaded} topic="draw graphs of your data" />
+    return <EmptyState loaded={loaded} hasData={false} />
   }
 
   if (!result) {

@@ -21,7 +21,7 @@ const DEFINITIONS: Record<string, string[]> = {
 }
 
 export default function GraphicalNotebook({ result, column, graphType, precision }: GraphicalNotebookProps) {
-  if (!result) return <EmptyState message="Pick a column to see results." />
+  if (!result) return <EmptyState loaded hasData compact />
 
   const fmt = (v: number | null | undefined) =>
     v === null || v === undefined ? '—' : Number(v).toFixed(precision)
