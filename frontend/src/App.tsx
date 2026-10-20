@@ -14,8 +14,11 @@ import { useData } from './context/DataContext'
 import {
   useDistribution,
   DISTRIBUTIONS,
-  type QueryOp,
+  clampParams,
 } from './hooks/useDistribution'
+import type { DistQuery } from './math/probabilityQuery'
+import { queryDomain } from './math/localDistributions'
+import { clampQuery, defaultQuery } from './math/queryDomain'
 
 // Lazy-loaded heavy chart components
 const CommonDistObservation = lazy(() => import('./features/probability/common/CommonDistObservation'))
@@ -152,23 +155,24 @@ export default function App() {
   const [probParamValues, setProbParamValues] = useState<Record<string, number>>(
     Object.fromEntries(firstDiscrete.params.map((p) => [p.key, p.default]))
   )
-  const [probQueryOp, setProbQueryOp] = useState<QueryOp>('<=')
-  const [probQueryK, setProbQueryK] = useState(5)
+  const [probQuery, setProbQuery] = useState<DistQuery>(() => defaultQuery(firstDiscrete.name, probParamValues))
 
   const probDistParams = useMemo(() => ({
     distName: probDistName,
     paramValues: probParamValues,
-    queryOp: probQueryOp,
-    queryK: probQueryK,
-  }), [probDistName, probParamValues, probQueryOp, probQueryK])
+    query: probQuery,
+  }), [probDistName, probParamValues, probQuery])
 
   const { result: probResult, isLoading: probLoading, error: probError, retry: probRetry, appliedParams: probAppliedParams } = useDistribution(probDistParams)
   const { state: dataState } = useData()
 
   function handleDistChange(name: string) {
     const dist = DISTRIBUTIONS.find((d) => d.name === name)!
+    const defaults = Object.fromEntries(dist.params.map((p) => [p.key, p.default]))
     setProbDistName(name)
-    setProbParamValues(Object.fromEntries(dist.params.map((p) => [p.key, p.default])))
+    setProbParamValues(defaults)
+    // A query for another distribution may lie outside this one's support (x = 5 for a Beta).
+    setProbQuery((query) => defaultQuery(name, defaults, query))
   }
 
   function handleModelTypeChange(t: 'discrete' | 'continuous') {
@@ -204,20 +208,21 @@ export default function App() {
           modelType={probModelType}
           distName={probDistName}
           paramValues={probParamValues}
-          queryOp={probQueryOp}
-          queryK={probQueryK}
+          query={probQuery}
           onModelTypeChange={handleModelTypeChange}
           onDistChange={handleDistChange}
           onParamChange={(key, val) => {
-            setProbParamValues((prev) => ({ ...prev, [key]: val }))
+            const dist = DISTRIBUTIONS.find((entry) => entry.name === probDistName)!
+            const values = clampParams(dist, { ...probParamValues, [key]: val })
+            setProbParamValues(values)
+            setProbQuery((query) => clampQuery(query, queryDomain(probDistName, values)))
           }}
-          onQueryOpChange={setProbQueryOp}
-          onQueryKChange={setProbQueryK}
+          onQueryChange={setProbQuery}
           onReset={() => {
             const dist = DISTRIBUTIONS.find((entry) => entry.name === probDistName)!
-            setProbParamValues(Object.fromEntries(dist.params.map((param) => [param.key, param.default])))
-            setProbQueryOp('<=')
-            setProbQueryK(5)
+            const defaults = Object.fromEntries(dist.params.map((param) => [param.key, param.default]))
+            setProbParamValues(defaults)
+            setProbQuery(defaultQuery(probDistName, defaults))
           }}
         />
       )

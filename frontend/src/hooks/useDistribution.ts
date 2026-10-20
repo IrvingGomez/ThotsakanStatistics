@@ -2,6 +2,7 @@ import { useCallback, useState, useEffect, useRef } from 'react'
 import { computeDistribution } from '../api/probability'
 import type { DistributionResponse } from '../api/probability'
 import { computeLocalDistribution } from '../math/localDistributions'
+import { queryRequestFields, type DistQuery } from '../math/probabilityQuery'
 
 // ─── Distribution catalogue ───────────────────────────────────────────────────
 
@@ -22,6 +23,10 @@ export interface ParamDef {
   default: number
   decimals?: number
   integer?: boolean
+  /** The value may not exceed another parameter minus `gap` (Hypergeometric K ≤ N, Uniform a < b). */
+  maxParam?: { key: string; gap: number }
+  /** The value may not fall below another parameter plus `gap` (Uniform b > a). */
+  minParam?: { key: string; gap: number }
 }
 
 export const DISTRIBUTIONS: DistDef[] = [
@@ -61,8 +66,8 @@ export const DISTRIBUTIONS: DistDef[] = [
     type: 'discrete',
     params: [
       { key: 'N', label: 'Population (N)', min: 5, max: 100, step: 1, default: 50, decimals: 0, integer: true },
-      { key: 'K', label: 'Success States (K)', min: 1, max: 50, step: 1, default: 20, decimals: 0, integer: true },
-      { key: 'n', label: 'Draws (n)', min: 1, max: 50, step: 1, default: 10, decimals: 0, integer: true },
+      { key: 'K', label: 'Success States (K)', min: 1, max: 100, step: 1, default: 20, decimals: 0, integer: true, maxParam: { key: 'N', gap: 0 } },
+      { key: 'n', label: 'Draws (n)', min: 1, max: 100, step: 1, default: 10, decimals: 0, integer: true, maxParam: { key: 'N', gap: 0 } },
     ],
   },
   // ── Continuous ────────────────────────────────────────────────────────────
@@ -85,8 +90,8 @@ export const DISTRIBUTIONS: DistDef[] = [
     name: 'Uniform',
     type: 'continuous',
     params: [
-      { key: 'a', label: 'Min (a)', min: -10, max: 9.5, step: 0.5, default: 0, decimals: 2 },
-      { key: 'b', label: 'Max (b)', min: -9.5, max: 10, step: 0.5, default: 1, decimals: 2 },
+      { key: 'a', label: 'Min (a)', min: -10, max: 9.5, step: 0.5, default: 0, decimals: 2, maxParam: { key: 'b', gap: 0.5 } },
+      { key: 'b', label: 'Max (b)', min: -9.5, max: 10, step: 0.5, default: 1, decimals: 2, minParam: { key: 'a', gap: 0.5 } },
     ],
   },
   {
@@ -121,9 +126,24 @@ export const DISTRIBUTIONS: DistDef[] = [
   },
 ]
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+/** The slider range of a parameter, given the other parameters' current values. */
+export function paramBounds(param: ParamDef, values: Record<string, number>): { min: number; max: number } {
+  const max = param.maxParam ? Math.min(param.max, values[param.maxParam.key] - param.maxParam.gap) : param.max
+  const min = param.minParam ? Math.max(param.min, values[param.minParam.key] + param.minParam.gap) : param.min
+  return { min, max }
+}
 
-export type QueryOp = '<=' | '>=' | '=' | '<' | '>'
+/** Pulls parameters back inside their bounds, e.g. K and n down to N when N is lowered. */
+export function clampParams(dist: DistDef, values: Record<string, number>): Record<string, number> {
+  const next = { ...values }
+  for (const param of dist.params) {
+    const { min, max } = paramBounds(param, next)
+    next[param.key] = Math.min(max, Math.max(min, next[param.key] ?? param.default))
+  }
+  return next
+}
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface DistResult extends DistributionResponse {
   provisional?: boolean
@@ -133,15 +153,14 @@ export interface DistResult extends DistributionResponse {
 export interface DistParams {
   distName: string
   paramValues: Record<string, number>
-  queryOp: QueryOp
-  queryK: number
+  query: DistQuery
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 const DEBOUNCE_MS = 250
 
-export function useDistribution({ distName, paramValues, queryOp, queryK }: DistParams): {
+export function useDistribution({ distName, paramValues, query }: DistParams): {
   result: DistResult | null
   isLoading: boolean
   error: string | null
@@ -158,7 +177,7 @@ export function useDistribution({ distName, paramValues, queryOp, queryK }: Dist
   const abortRef = useRef<AbortController | null>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const generation = useRef(0)
-  const fingerprint = JSON.stringify([distName, paramValues, queryOp, queryK])
+  const fingerprint = JSON.stringify([distName, paramValues, query])
 
   useEffect(() => {
     const request = ++generation.current
@@ -168,7 +187,7 @@ export function useDistribution({ distName, paramValues, queryOp, queryK }: Dist
     setError(null)
 
     try {
-      setResult({ ...computeLocalDistribution(distName, paramValues, queryOp, queryK), provisional: true, requestFingerprint: fingerprint })
+      setResult({ ...computeLocalDistribution(distName, paramValues, query), provisional: true, requestFingerprint: fingerprint })
     } catch {
       setResult(null)
     }
@@ -178,13 +197,13 @@ export function useDistribution({ distName, paramValues, queryOp, queryK }: Dist
       abortRef.current = controller
 
       computeDistribution(
-        { distName, params: paramValues, queryOp, queryK },
+        { distName, params: paramValues, ...queryRequestFields(query) },
         controller.signal,
       )
         .then((data) => {
           if (request !== generation.current || controller.signal.aborted) return
           setResult({ ...data, provisional: false, requestFingerprint: fingerprint })
-          setAppliedParams({ distName, paramValues: { ...paramValues }, queryOp, queryK })
+          setAppliedParams({ distName, paramValues: { ...paramValues }, query })
           setIsLoading(false)
         })
         .catch((err: unknown) => {

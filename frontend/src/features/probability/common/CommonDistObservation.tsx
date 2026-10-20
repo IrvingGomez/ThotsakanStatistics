@@ -1,8 +1,9 @@
 import { useMemo, useCallback } from 'react'
 import createPlotlyComponent from 'react-plotly.js/factory'
 import Plotly from 'plotly.js-basic-dist-min'
-import type { DistResult, DistParams, QueryOp } from '../../../hooks/useDistribution'
+import type { DistResult, DistParams } from '../../../hooks/useDistribution'
 import { DISTRIBUTIONS } from '../../../hooks/useDistribution'
+import { queryIncludes, queryLabel, type DistQuery } from '../../../math/probabilityQuery'
 import ResultToolbar from '../../../components/ResultToolbar'
 import ResultSection from '../../../components/ResultSection'
 import StatusBanner from '../../../components/StatusBanner'
@@ -37,25 +38,7 @@ const LAYOUT_BASE = baseLayout({
 })
 const AXIS = PLOT_AXIS
 
-function opLabel(op: QueryOp, k: number, result: number, precision: number): string {
-  return `P(X ${op} ${k}) = ${result.toFixed(precision)}`
-}
-
-function barColors(ks: number[], op: QueryOp, kVal: number): string[] {
-  return ks.map((k) => {
-    switch (op) {
-      case '<=': return k <= kVal ? PLOT_COLORS.highlight : PLOT_COLORS.inactive
-      case '>=': return k >= kVal ? PLOT_COLORS.highlight : PLOT_COLORS.inactive
-      case '=':  return k === kVal ? PLOT_COLORS.highlight : PLOT_COLORS.inactive
-      case '<':  return k < kVal  ? PLOT_COLORS.highlight : PLOT_COLORS.inactive
-      case '>':  return k > kVal  ? PLOT_COLORS.highlight : PLOT_COLORS.inactive
-      default:   return PLOT_COLORS.inactive
-    }
-  })
-}
-
-function buildDiscreteChart(result: DistResult, op: QueryOp, queryK: number) {
-  const kVal = Math.round(queryK)
+function buildDiscreteChart(result: DistResult, query: DistQuery) {
   const ks = result.ks ?? []
   const probs = result.probs ?? []
   return {
@@ -63,7 +46,7 @@ function buildDiscreteChart(result: DistResult, op: QueryOp, queryK: number) {
       x: ks,
       y: probs,
       type: 'bar' as const,
-      marker: { color: barColors(ks, op, kVal) },
+      marker: { color: ks.map((k) => queryIncludes(query, k) ? PLOT_COLORS.highlight : PLOT_COLORS.inactive) },
       name: 'P(X = k)',
       hovertemplate: 'k=%{x}<br>P(X=k)=%{y:.4f}<extra></extra>',
     }],
@@ -75,22 +58,42 @@ function buildDiscreteChart(result: DistResult, op: QueryOp, queryK: number) {
   }
 }
 
-function buildContinuousChart(result: DistResult, op: QueryOp, queryK: number, precision: number) {
+/** The x range whose area is P(query); null when the area is zero (P(X = x) of a continuous X). */
+function shadedRange(query: DistQuery): [number, number] | null {
+  if (query.kind === 'interval') return [query.lower, query.upper]
+  switch (query.op) {
+    case '<=': case '<': return [-Infinity, query.k]
+    case '>=': case '>': return [query.k, Infinity]
+    case '=': return null
+  }
+}
+
+/** Density at x by linear interpolation on the plotted grid, so the shading starts exactly at x. */
+function densityAt(xs: number[], ys: number[], x: number): number {
+  const i = xs.findIndex((value) => value >= x)
+  if (i <= 0) return i === 0 ? ys[0] : ys[ys.length - 1]
+  const t = (x - xs[i - 1]) / (xs[i] - xs[i - 1])
+  return ys[i - 1] + t * (ys[i] - ys[i - 1])
+}
+
+function buildContinuousChart(result: DistResult, query: DistQuery, precision: number) {
   const xs = result.xs ?? []
   const ys = result.ys ?? []
 
   const shadeXs: number[] = []
   const shadeYs: number[] = []
-  for (let i = 0; i < xs.length; i++) {
-    const x = xs[i]
-    let match = false
-    switch (op) {
-      case '<=': case '<': match = x <= queryK; break
-      case '>=': case '>': match = x >= queryK; break
-      case '=': match = false; break
+  const range = shadedRange(query)
+  if (range && xs.length > 0) {
+    const from = Math.max(range[0], xs[0])
+    const to = Math.min(range[1], xs[xs.length - 1])
+    if (from <= to) {
+      shadeXs.push(from); shadeYs.push(densityAt(xs, ys, from))
+      xs.forEach((x, i) => { if (x > from && x < to) { shadeXs.push(x); shadeYs.push(ys[i]) } })
+      shadeXs.push(to); shadeYs.push(densityAt(xs, ys, to))
     }
-    if (match) { shadeXs.push(x); shadeYs.push(ys[i]) }
   }
+  const marks = query.kind === 'interval' ? [query.lower, query.upper] : [query.k]
+  const top = Math.max(0, ...ys.filter((y) => isFinite(y))) * 1.05
 
   return {
     traces: [
@@ -100,7 +103,7 @@ function buildContinuousChart(result: DistResult, op: QueryOp, queryK: number, p
         mode: 'none' as const,
         fill: 'tozeroy' as const,
         fillcolor: PLOT_COLORS.highlightFill,
-        name: opLabel(op, queryK, result.queryResult, precision),
+        name: `${queryLabel(query)} = ${result.queryResult.toFixed(precision)}`,
         showlegend: true,
         hoverinfo: 'skip' as const,
       }] : []),
@@ -111,14 +114,14 @@ function buildContinuousChart(result: DistResult, op: QueryOp, queryK: number, p
         name: 'PDF',
         line: { color: PLOT_COLORS.highlight, width: 2.5 },
       },
-      {
-        x: [queryK, queryK],
-        y: [0, Math.max(0, ...ys.filter((y) => isFinite(y))) * 1.05],
+      ...marks.map((x) => ({
+        x: [x, x],
+        y: [0, top],
         type: 'scatter' as const,
         mode: 'lines' as const,
-        name: `x = ${queryK}`,
+        name: `x = ${x}`,
         line: { color: PLOT_COLORS.reference, width: 1.5, dash: 'dash' as const },
-      },
+      })),
     ],
     layout: {
       ...LAYOUT_BASE,
@@ -130,7 +133,8 @@ function buildContinuousChart(result: DistResult, op: QueryOp, queryK: number, p
 
 export default function CommonDistObservation({ distParams, appliedParams, result, isLoading, error, onRetry, precision }: CommonDistObservationProps) {
   const displayParams = result?.provisional ? distParams : (appliedParams ?? distParams)
-  const { distName, queryOp, queryK, paramValues } = displayParams
+  const { distName, query, paramValues } = displayParams
+  const probabilityLabel = queryLabel(query)
   const dist = DISTRIBUTIONS.find((d) => d.name === distName)
   const registry = useChartRegistry(CHART_ORDER)
   const baseName = `${distName}-distribution`
@@ -161,18 +165,18 @@ export default function CommonDistObservation({ distParams, appliedParams, resul
     await downloadPDF({
       charts: registry.charts,
       title: `${distName} Distribution`,
-      subtitle: `Query: P(X ${queryOp} ${queryK}) = ${result.queryResult.toFixed(precision)}`,
+      subtitle: `Query: ${probabilityLabel} = ${result.queryResult.toFixed(precision)}`,
       stats: [
         { label: 'Distribution', value: distName },
         { label: 'Type',         value: dist?.type === 'discrete' ? 'Discrete' : 'Continuous' },
         { label: 'Mean E[X]',    value: meanStr },
         { label: 'Variance',     value: varStr },
-        { label: `P(X ${queryOp} ${queryK})`, value: result.queryResult.toFixed(precision) },
+        { label: probabilityLabel, value: result.queryResult.toFixed(precision) },
         ...Object.entries(paramValues).map(([k, v]) => ({ label: k, value: String(v) })),
       ],
       filename: exportFilename(`${baseName}-report`, 'pdf', 'distribution'),
     })
-  }, [distName, dist, queryOp, queryK, result, paramValues, baseName, registry.charts, precision])
+  }, [distName, dist, probabilityLabel, result, paramValues, baseName, registry.charts, precision])
 
   const exportReady = !!result && !result.provisional && !isLoading && !!appliedParams && registry.ready
   const exportHandlers = exportReady ? { png: handleExportPNG, csv: handleExportCSV, pdf: handleExportPDF } : undefined
@@ -181,7 +185,7 @@ export default function CommonDistObservation({ distParams, appliedParams, resul
     if (!result) return []
     return [
       {
-        label: 'Theoretical Mean',
+        label: 'Mean',
         value: typeof result.theorMean === 'number' ? result.theorMean.toFixed(precision) : String(result.theorMean),
       },
       {
@@ -189,19 +193,19 @@ export default function CommonDistObservation({ distParams, appliedParams, resul
         value: typeof result.theorVariance === 'number' ? result.theorVariance.toFixed(precision) : String(result.theorVariance),
       },
       {
-        label: `P(X ${queryOp} ${queryK})`,
+        label: probabilityLabel,
         value: result.queryResult.toFixed(precision),
         highlight: true,
       },
     ]
-  }, [result, queryOp, queryK, precision])
+  }, [result, probabilityLabel, precision])
 
   const { traces, layout } = useMemo(() => {
     if (!dist || !result) return { traces: [], layout: LAYOUT_BASE }
     return dist.type === 'discrete'
-      ? buildDiscreteChart(result, queryOp, queryK)
-      : buildContinuousChart(result, queryOp, queryK, precision)
-  }, [dist, result, queryOp, queryK, precision])
+      ? buildDiscreteChart(result, query)
+      : buildContinuousChart(result, query, precision)
+  }, [dist, result, query, precision])
 
   const status = <StatusBanner isComputing={false} error={error} hasResult={!!result} onRetry={onRetry} />
 

@@ -19,7 +19,7 @@ let root: Root
 let container: HTMLDivElement
 let hook!: ReturnType<typeof useDistribution>
 function Harness({ params }: { params: DistParams }) { hook = useDistribution(params); return null }
-const params = (queryK: number): DistParams => ({ distName: 'Poisson', paramValues: { lambda: 5 }, queryOp: '<=', queryK })
+const params = (queryK: number): DistParams => ({ distName: 'Poisson', paramValues: { lambda: 5 }, query: { kind: 'one-sided', op: '<=', k: queryK } })
 
 beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
@@ -57,8 +57,8 @@ describe('distribution authoritative results', () => {
     await act(async () => second.resolve(response(0.2)))
     expect(hook.result?.provisional).toBe(false)
     expect(hook.result?.queryResult).toBe(0.2)
-    expect(hook.appliedParams?.queryK).toBe(6)
-    expect(hook.result?.requestFingerprint).toBe(JSON.stringify(['Poisson', { lambda: 5 }, '<=', 6]))
+    expect(hook.appliedParams?.query).toEqual({ kind: 'one-sided', op: '<=', k: 6 })
+    expect(hook.result?.requestFingerprint).toBe(JSON.stringify(['Poisson', { lambda: 5 }, { kind: 'one-sided', op: '<=', k: 6 }]))
   })
 
   it('retries the last request after a failure', async () => {

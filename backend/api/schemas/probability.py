@@ -6,8 +6,12 @@ from typing import Optional, Union
 class DistributionRequest(BaseModel):
     distName: str
     params: dict[str, float]
-    queryOp: str
-    queryK: float
+    queryOp: str  # '<=', '<', '>=', '>', '=' or 'between'
+    queryK: float  # the value, or the lower end of a 'between' interval
+    # 'between' only: P(queryK lowerOp X upperOp queryUpper), each op '<' or '<='
+    queryUpper: Optional[float] = None
+    lowerOp: Optional[str] = None
+    upperOp: Optional[str] = None
 
 
 class DistributionResponse(BaseModel):
