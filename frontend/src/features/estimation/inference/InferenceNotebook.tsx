@@ -1,15 +1,12 @@
 ﻿import type { ConfidenceRegionsResponse, IntervalsResponse } from '../../../api/inference'
 import type { InferenceState } from './useInferenceTabState'
-import InferenceResultStatus from './InferenceResultStatus'
 import { coveragePercent, formatInferenceNumber, parseIntervalRows, pointEstimate, quantityLabel, rowLabel } from './inferencePresentation'
-import { ResultCard } from '../../../components/notebook/NotebookParts'
+import { ResultCard, Section } from '../../../components/notebook/NotebookParts'
 import { EmptyState } from '../../../components/StatusBanner'
 
 function IntervalCards({ title, result, precision }: { title: string; result: IntervalsResponse; precision: number }) {
   const rows = parseIntervalRows(result)
-  return <section className="mb-6">
-    <h3 className="text-base font-semibold mb-2">{title}</h3>
-    <p className="text-sm text-[var(--color-text-muted)] mb-3">{title === 'Confidence intervals' ? 'Uncertainty about each population quantity.' : 'Ranges for one future observation, using the listed methods.'}</p>
+  return <Section title={title}>
     {!rows.length && <p role="status" className="text-sm">No interval rows were returned for this result.</p>}
     <div className="grid gap-3">
       {rows.map((row, index) => {
@@ -28,12 +25,10 @@ function IntervalCards({ title, result, precision }: { title: string; result: In
         </ResultCard>
       })}
     </div>
-  </section>
+  </Section>
 }
 function RegionSummary({ result, precision, showCiBox }: { result: ConfidenceRegionsResponse; precision: number; showCiBox: boolean }) {
-  return <section className="space-y-3 text-sm">
-    <h3 className="font-semibold text-base">Mean and spread together</h3>
-    <p className="text-[var(--color-text-muted)]">Contours show joint confidence regions for the population mean (μ) and deviation (σ). Larger coverage levels include a wider set of parameter pairs.</p>
+  return <Section title="Joint confidence regions"><div className="space-y-3 text-sm">
     <p>Coverage: {[...result.probs].sort((a, b) => a - b).map(coveragePercent).join(', ')}</p>
     <dl className="grid grid-cols-2 gap-3 rounded-lg border border-[var(--color-border-md)] p-3">
       <div><dt className="text-xs text-[var(--color-text-muted)]">Estimated mean (μ)</dt><dd className="font-mono break-all mt-1">{formatInferenceNumber(result.mu_hat, precision)}</dd></div>
@@ -48,16 +43,12 @@ function RegionSummary({ result, precision, showCiBox }: { result: ConfidenceReg
       <summary className="cursor-pointer font-semibold">Method details</summary>
       <p className="mt-2 text-[var(--color-text-muted)]">Joint relative likelihood, χ² calibrated with 2 degrees of freedom. The cross marks maximum likelihood estimates. Grid: {result.z_matrix.length} × {result.z_matrix[0]?.length ?? 0} points.</p>
     </details>
-  </section>
+  </div></Section>
 }
 export default function InferenceNotebook({ state }: { state: InferenceState }) {
   const hasResult = !!(state.ciResult || state.piResult || state.regionResult)
   return <div className="analysis-panel p-4">
-    <h2 className="text-lg font-bold mb-3">Statistical inference</h2>
-    <InferenceResultStatus state={state} />
-    {!hasResult && !state.isComputing && !state.error && (state.hasData
-      ? <EmptyState loaded hasData compact />
-      : <EmptyState loaded={!!state.sessionId} hasData={false} compact />)}
+    {!hasResult && !state.isComputing && !state.error && <EmptyState loaded={!!state.sessionId} hasData={state.hasData} compact />}
     {state.ciResult && <IntervalCards title="Confidence intervals" result={state.ciResult} precision={state.precision} />}
     {state.piResult && <IntervalCards title="Prediction intervals" result={state.piResult} precision={state.precision} />}
     {state.regionResult && <RegionSummary result={state.regionResult} precision={state.precision} showCiBox={state.appliedConfig?.add_ci_box ?? true} />}

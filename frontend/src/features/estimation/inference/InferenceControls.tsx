@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { Accordion, AnalysisActions, SelectField, VariableSection, SwitchField, TextField } from '../../../components/ControlPrimitives'
+import { Accordion, AnalysisActions, RadioGroup, SelectField, VariableSection, SwitchField, TextField } from '../../../components/ControlPrimitives'
 import CheckboxTree from '../../../components/CheckboxTree'
 import DualInput from '../../../components/DualInput'
 import { LABELS, confidenceReadout, estimatorOptions } from '../../../labels'
@@ -31,18 +31,17 @@ export default function InferenceControls({ state }: { state: InferenceState }) 
   const alphaInput = <DualInput label={LABELS.alpha} value={clamp(alpha, ALPHA.min, ALPHA.max, 0.05)} min={ALPHA.min} max={ALPHA.max} step={ALPHA.step} decimals={ALPHA.decimals}
     onChange={value => setDraft({ alphaStr: value.toFixed(ALPHA.decimals) })}
     textValue={draft.alphaStr} onTextChange={alphaStr => setDraft({ alphaStr })} resetSignal={resetGeneration}
-    hint={validAlpha ? `${confidenceReadout(alpha)}${isRegions ? ' for the marginal intervals.' : '. Each interval has its own coverage; no correction across rows.'}` : 'Enter a value between 0 and 1.'}
+    hint={validAlpha ? `${confidenceReadout(alpha)}${isRegions ? ' for the marginal intervals' : ''}` : 'Enter a value between 0 and 1.'}
     error={fieldErrors.alphaStr} />
 
   return <form ref={formRef} onSubmit={event => { event.preventDefault(); void state.handleRun() }} noValidate className="analysis-panel flex flex-col gap-1 pb-4">
     <VariableSection value={draft.column} onChange={column => setDraft({ column })} options={state.numericCols}
       error={fieldErrors.column} loaded={!!state.sessionId} />
-    <SelectField label="Estimate" value={draft.estimationType} onChange={value => setDraft({ estimationType: value as InferenceDraft['estimationType'] })} options={['Confidence and Prediction Intervals', 'Confidence Regions']} />
-    <p className="mb-3 text-sm text-[var(--color-text-muted)]">A confidence interval describes uncertainty about a population quantity. A prediction interval gives a range for one future observation.</p>
+    <RadioGroup<InferenceDraft['estimationType']> label="Estimate" value={draft.estimationType} onChange={estimationType => setDraft({ estimationType })}
+      options={[{ value: 'Confidence and Prediction Intervals', label: 'Intervals' }, { value: 'Confidence Regions', label: 'Confidence regions' }]} />
     {!isRegions && alphaInput}
     {isRegions ? <>
       {textField('crProbs', 'Region coverage levels', 'Use proportions: 0.5, 0.95 means 50%, 95%. These levels control the contours.')}
-      <p className="mb-3 text-xs text-[var(--color-text-muted)]">Regions use the sample mean and the standard deviation with one degree of freedom, assuming normality.</p>
       <SwitchField label="Show marginal confidence interval box" checked={draft.addCiBox} onChange={addCiBox => setDraft({ addCiBox })} />
       {draft.addCiBox && <div className="ml-3 pl-3 mb-2 border-l border-[var(--color-border-md)]">{alphaInput}</div>}
     </> : <>
@@ -58,7 +57,6 @@ export default function InferenceControls({ state }: { state: InferenceState }) 
         <SelectField label={LABELS.sigmaEstimator} value={draft.sigmaEst} onChange={sigmaEst => setDraft({ sigmaEst })}
           options={estimatorOptions([...new Set([draft.sigmaEst, ...state.deviationEstimators])])}
           hint="Scale used by the methods that assume normality." />
-        {state.estimatorError && <p role="status" className="mb-2 text-xs text-amber-300">{state.estimatorError}</p>}
       </>}
       {info.anyBootstrap && <DualInput label={LABELS.bootstrapSamples} value={clamp(Number(draft.samplesStr), BOOTSTRAP.min, BOOTSTRAP.max, 1000)}
         min={BOOTSTRAP.min} max={BOOTSTRAP.max} step={BOOTSTRAP.step} decimals={BOOTSTRAP.decimals}

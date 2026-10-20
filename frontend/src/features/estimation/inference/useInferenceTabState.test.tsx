@@ -218,13 +218,12 @@ describe('Inference student workflow', () => {
     expect(state.partialResult).toBe(true)
     expect(failed === 'CI' ? state.ciResult : state.piResult).toBeNull()
     expect(failed === 'CI' ? state.piResult : state.ciResult).not.toBeNull()
-    for (const panel of ['observation', 'notebook'] as const) {
-      expect(panelText(panel)).toContain('Couldn’t update results')
-      expect(panelText(panel)).toContain('Partial result — only successful intervals are shown.')
-      expect(panelText(panel)).toContain(failed === 'CI' ? 'Confidence intervals failed' : 'Prediction intervals failed')
-    }
+    expect(panelText('observation')).toContain('Couldn’t update results')
+    expect(panelText('observation')).toContain('Partial result — only successful intervals are shown.')
+    expect(panelText('observation')).toContain(failed === 'CI' ? 'Confidence intervals failed' : 'Prediction intervals failed')
+    expect(panelText('notebook')).not.toContain('Couldn’t update results')
     await act(async () => state.setDraft({ alphaStr: '0.1' }))
-    const retry = [...container.querySelectorAll<HTMLButtonElement>('[data-panel="notebook"] button')].find(button => button.textContent === 'Retry')!
+    const retry = [...container.querySelectorAll<HTMLButtonElement>('[data-panel="observation"] button')].find(button => button.textContent === 'Retry')!
     await act(async () => retry.click())
     expect(state.error).toBeNull()
     expect(state.partialResult).toBe(false)
@@ -241,16 +240,15 @@ describe('Inference student workflow', () => {
     vi.mocked(inferenceApi.computeCI).mockReturnValueOnce(ci.promise)
     vi.mocked(inferenceApi.computePI).mockReturnValueOnce(pi.promise)
     await startRun()
-    for (const panel of ['observation', 'notebook'] as const) expect(panelText(panel)).toContain('Computing results…')
+    expect(panelText('observation')).toContain('Computing results…')
     await act(async () => { ci.reject(new Error('CI unavailable')); pi.reject(new Error('PI unavailable')) })
     expect(state.partialResult).toBe(false)
     expect(state.isComputing).toBe(false)
-    for (const panel of ['observation', 'notebook'] as const) {
-      expect(panelText(panel)).toContain('Couldn’t update results')
-      expect(panelText(panel)).toContain('Confidence intervals failed: CI unavailable')
-      expect(panelText(panel)).toContain('Prediction intervals failed: PI unavailable')
-      expect(panelText(panel)).not.toContain('Choose settings, then select Update')
-    }
+    expect(panelText('observation')).toContain('Couldn’t update results')
+    expect(panelText('observation')).toContain('Confidence intervals failed: CI unavailable')
+    expect(panelText('observation')).toContain('Prediction intervals failed: PI unavailable')
+    expect(panelText('observation')).not.toContain('Choose settings, then select Update')
+    expect(panelText('notebook')).not.toContain('Couldn’t update results')
   })
 
   it('keeps UI and confidence-region fields out of CI/PI payloads', () => {
@@ -377,5 +375,46 @@ describe('Inference student workflow', () => {
     await pause()
     expect(traces().some(trace => trace.name === 'Separate marginal intervals')).toBe(true)
     expect(panelText('notebook')).toContain('The dashed box combines separate marginal intervals')
+  })
+})
+
+describe('Inference follows the interaction contract', () => {
+  it('Estimate is a radio group', () => {
+    const radios = [...container.querySelectorAll<HTMLInputElement>('form input[type="radio"]')]
+    expect(radios.map(radio => radio.value)).toEqual(['Confidence and Prediction Intervals', 'Confidence Regions'])
+  })
+
+  it('has no explanatory prose in the panels', async () => {
+    await startRun()
+    expect(container.querySelector('form')!.textContent).not.toContain('A confidence interval describes')
+    expect(container.querySelector('form')!.textContent).not.toContain('no correction across rows')
+    expect(panelText('observation')).not.toContain('Lines show interval bounds')
+    expect(panelText('notebook')).not.toContain('Uncertainty about each population quantity')
+    expect(panelText('notebook')).not.toContain('Statistical inference')
+  })
+
+  it('reports status only in the center panel', async () => {
+    vi.mocked(inferenceApi.computeCI).mockRejectedValueOnce(new Error('Service unavailable'))
+    await act(async () => state.setDraft({ alphaStr: '0.1' }))
+    await startRun()
+    expect(panelText('observation')).toContain('Couldn’t update results')
+    expect(panelText('notebook')).not.toContain('Couldn’t update results')
+  })
+
+  it('an estimator load failure is a warning above the results, not in the controls', async () => {
+    await act(async () => root.unmount())
+    root = createRoot(container)
+    vi.mocked(inferenceApi.getEstimators).mockRejectedValue(new Error('offline'))
+    await render()
+    await startRun()
+    expect(container.querySelector('[data-panel="observation"] [aria-label="Warnings"]')?.textContent).toContain('Estimator options could not be loaded')
+    expect(container.querySelector('form')!.textContent).not.toContain('Estimator options could not be loaded')
+  })
+
+  it('the zoom note is a muted section note', async () => {
+    await act(async () => state.setDraft({ zoomCI: true }))
+    await startRun()
+    const note = [...container.querySelectorAll('[data-panel="observation"] p')].find(p => p.textContent?.startsWith('Zoomed'))!
+    expect(note.className).not.toContain('amber')
   })
 })

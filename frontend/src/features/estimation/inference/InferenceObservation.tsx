@@ -5,6 +5,7 @@ import type { InferenceState } from './useInferenceTabState'
 import InferenceResultStatus from './InferenceResultStatus'
 import { coveragePercent, intervalRange, parseIntervalRows, pointEstimate, quantityLabel, rowLabel, type IntervalRow } from './inferencePresentation'
 import { PLOT_AXIS, PLOT_COLORS, PLOT_CONFIG, baseLayout } from '../../../plot/theme'
+import ResultSection from '../../../components/ResultSection'
 import ResultToolbar from '../../../components/ResultToolbar'
 import { EmptyState } from '../../../components/StatusBanner'
 import { useChartRegistry } from '../../../hooks/useChartRegistry'
@@ -85,16 +86,14 @@ export default function InferenceObservation({ state }: { state: InferenceState 
       x: [region.mu_ci[0], region.mu_ci[1], region.mu_ci[1], region.mu_ci[0], region.mu_ci[0]], y: [region.sigma_ci[0], region.sigma_ci[0], region.sigma_ci[1], region.sigma_ci[1], region.sigma_ci[0]],
       mode: 'lines', type: 'scatter', name: 'Separate marginal intervals', showlegend: true, line: { color: PLOT_COLORS.outlier, dash: 'dash', width: 2 }, hoverinfo: 'skip',
     })
-    content = <section>
-      <h3 className="font-semibold text-base px-2">Joint confidence regions</h3>
-      <p className="text-sm text-[var(--color-text-muted)] px-2 mt-2">Contours show uncertainty about mean and deviation together. The cross marks their estimates; the dashed box, when shown, combines separate marginal intervals.</p>
+    content = <ResultSection title="Joint confidence regions">
       <div role="img" aria-label={'Joint confidence regions for ' + variable + '. Estimates and coverage levels are available in the results panel.'}>
         <ReactPlotly data={data} layout={{ ...BASE_LAYOUT, height: 470, margin: { l: 62, r: 80, b: 130, t: 20 }, xaxis: { ...AXIS, title: { text: 'Mean (μ)', standoff: 8 } }, yaxis: { ...AXIS, title: { text: 'Deviation (σ)', standoff: 8 } }, showlegend: true, legend: { x: 0, y: -0.25, orientation: 'h', font: { size: 11 } } }} useResizeHandler style={{ width: '100%', height: 470 }} config={CONFIG}
           onInitialized={registry.register('region', 'Joint confidence regions')}
           onUpdate={registry.register('region', 'Joint confidence regions')}
           onPurge={registry.unregister('region')} />
       </div>
-    </section>
+    </ResultSection>
   } else if (result) {
     const edges = result.histogram?.binEdges ?? []
     const centers = edges.slice(0, -1).map((lower, index) => (lower + edges[index + 1]) / 2)
@@ -102,36 +101,27 @@ export default function InferenceObservation({ state }: { state: InferenceState 
     const deviationRows = ciRows.filter(row => quantityLabel(row.Statistic) === 'Deviation')
     const commonRange = intervalRange([...edges, ...locationRows.flatMap(row => [row.Lower, row.Upper]), ...piRows.flatMap(row => [row.Lower, row.Upper])])
     const ciRange = intervalRange(locationRows.flatMap(row => [row.Lower, row.Upper]))
-    content = <div className="space-y-5">
-      <p className="text-sm text-[var(--color-text-muted)] px-2">Lines show interval bounds; diamonds show sample estimates where applicable. Exact bounds and methods are in the results panel.</p>
-      {centers.length > 0 && <section>
-        <h3 className="text-base font-semibold px-2">Observed values</h3>
+    content = <div>
+      {centers.length > 0 && <ResultSection title="Observed values">
         <ReactPlotly data={[{ x: centers, y: result.histogram.counts, type: 'bar', marker: { color: PLOT_COLORS.dataSoft }, width: edges[1] - edges[0], hovertemplate: 'Count %{y}<extra></extra>' }]} layout={{ ...BASE_LAYOUT, height: 220, margin: { l: 90, r: 24, b: 48, t: 12 }, xaxis: { ...AXIS, range: commonRange, title: { text: variable, standoff: 8 } }, yaxis: { ...AXIS, title: { text: 'Count' } } }} useResizeHandler style={{ width: '100%', height: 220 }} config={CONFIG}
           onInitialized={registry.register('observed', 'Observed values')}
           onUpdate={registry.register('observed', 'Observed values')}
           onPurge={registry.unregister('observed')} />
-      </section>}
-      {piRows.length > 0 && <section>
-        <h3 className="text-base font-semibold px-2">Prediction intervals</h3>
-        <p className="text-xs text-[var(--color-text-muted)] px-2 mt-1">One future observation · same x-axis scale as observed values</p>
+      </ResultSection>}
+      {piRows.length > 0 && <ResultSection title="Prediction intervals" note="One future observation · same x-axis scale as observed values">
         <IntervalPlot rows={piRows} result={state.piResult!} range={commonRange} colorOf={() => PLOT_COLORS.pi} variable={variable} precision={state.precision}
           onReady={registry.register('prediction', 'Prediction intervals')} onPurge={registry.unregister('prediction')} />
-      </section>}
-      {locationRows.length > 0 && <section>
-        <div className="flex items-center justify-between gap-3 flex-wrap px-2">
-          <h3 className="text-base font-semibold">Mean and median confidence intervals</h3>
-          <button type="button" aria-pressed={state.draft.zoomCI} onClick={() => state.setDraft({ zoomCI: !state.draft.zoomCI })} className="px-3 py-2 rounded-md border border-[var(--color-border-md)] text-xs">{state.draft.zoomCI ? 'Use common scale' : 'Zoom to intervals'}</button>
-        </div>
-        <p role="status" className={'text-xs px-2 mt-2 ' + (state.draft.zoomCI ? 'text-amber-300' : 'text-[var(--color-text-muted)]')}>{state.draft.zoomCI ? 'Zoomed to confidence intervals — different x-axis scale from observed values and predictions.' : 'Same x-axis scale as observed values and prediction intervals.'}</p>
+      </ResultSection>}
+      {locationRows.length > 0 && <ResultSection title="Mean and median confidence intervals"
+        note={state.draft.zoomCI ? 'Zoomed to confidence intervals — different x-axis scale from observed values and predictions.' : 'Same x-axis scale as observed values and prediction intervals.'}
+        actions={<button type="button" aria-pressed={state.draft.zoomCI} onClick={() => state.setDraft({ zoomCI: !state.draft.zoomCI })} className="px-3 py-2 rounded-md border border-[var(--color-border-md)] text-xs">{state.draft.zoomCI ? 'Use common scale' : 'Zoom to intervals'}</button>}>
         <IntervalPlot rows={locationRows} result={state.ciResult!} range={state.draft.zoomCI ? ciRange : commonRange} colorOf={colorOfRow} variable={variable} precision={state.precision}
           onReady={registry.register('location', 'Mean and median confidence intervals')} onPurge={registry.unregister('location')} />
-      </section>}
-      {deviationRows.length > 0 && <section>
-        <h3 className="text-base font-semibold px-2">Deviation confidence intervals</h3>
-        <p className="text-xs text-[var(--color-text-muted)] px-2 mt-1">Spread of the data · separate deviation axis</p>
+      </ResultSection>}
+      {deviationRows.length > 0 && <ResultSection title="Deviation confidence intervals" note="Spread of the data · separate deviation axis">
         <IntervalPlot rows={deviationRows} result={state.ciResult!} colorOf={colorOfRow} variable={'Deviation of ' + variable + ' (data units)'} precision={state.precision}
           onReady={registry.register('deviation', 'Deviation confidence intervals')} onPurge={registry.unregister('deviation')} />
-      </section>}
+      </ResultSection>}
     </div>
   }
   const baseName = `inference-${variable || 'analysis'}`
@@ -185,9 +175,7 @@ export default function InferenceObservation({ state }: { state: InferenceState 
     <ResultToolbar title={`Inference — ${variable || 'results'}`}
       exports={exportReady ? { png: exportPNG, csv: exportCSV, pdf: exportPDF } : undefined}
       ready={exportReady} disabledReason={state.isComputing ? 'Waiting for the applied result.' : 'Charts are still loading.'} />
-    {!hasResult && !state.isComputing && !state.error && (state.hasData
-      ? <p className="text-sm text-[var(--color-text-muted)] p-6">Choose a variable to see interval plots.</p>
-      : <EmptyState loaded={!!state.sessionId} hasData={false} />)}
+    {!hasResult && !state.isComputing && !state.error && <EmptyState loaded={!!state.sessionId} hasData={state.hasData} />}
     {content}
   </div>
 }
