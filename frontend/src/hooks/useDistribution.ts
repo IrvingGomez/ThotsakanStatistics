@@ -106,8 +106,8 @@ export const DISTRIBUTIONS: DistDef[] = [
     name: 'Beta',
     type: 'continuous',
     params: [
-      { key: 'alpha', label: 'Shape α', min: 0.1, max: 10, step: 0.1, default: 2, decimals: 2 },
-      { key: 'beta', label: 'Shape β', min: 0.1, max: 10, step: 0.1, default: 5, decimals: 2 },
+      { key: 'alpha', label: 'Shape (α)', min: 0.1, max: 10, step: 0.1, default: 2, decimals: 2 },
+      { key: 'beta', label: 'Shape (β)', min: 0.1, max: 10, step: 0.1, default: 5, decimals: 2 },
     ],
   },
   {
