@@ -9,7 +9,7 @@ import type { DescriptiveState } from './useDescriptiveTabState'
 
 export function DescriptiveStatus({ state }: { state: DescriptiveState }) {
   return <StatusBanner isComputing={state.isComputing} error={state.error} hasResult={!!state.result}
-    onRetry={state.handleRetry} summary={state.summary} warnings={state.warnings} />
+    onRetry={state.handleRetry} warnings={state.warnings} />
 }
 
 export function ControlsSlot({ state }: { state: DescriptiveState }) {
@@ -28,7 +28,7 @@ export function ObservationSlot({ state }: { state: DescriptiveState }) {
 
 export function NotebookSlot({ state }: { state: DescriptiveState }) {
   return (
-    <DescriptiveNotebook result={state.result} config={state.config} filteredN={state.filteredN}
-      rawN={state.rawN} precision={state.precision} hasData={state.hasData} loaded={state.loaded} />
+    <DescriptiveNotebook result={state.result} config={state.config} precision={state.precision}
+      hasData={state.hasData} loaded={state.loaded} />
   )
 }

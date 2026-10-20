@@ -1,7 +1,7 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import StatusBanner, { EmptyState, summaryLine } from './StatusBanner'
+import StatusBanner, { EmptyState } from './StatusBanner'
 import { ResultCard, Row, Section } from './notebook/NotebookParts'
 
 let root: Root
@@ -36,22 +36,9 @@ describe('StatusBanner', () => {
     expect(container.querySelector('[aria-label="Warnings"]')?.textContent).toBe('n is small')
   })
 
-  it('shows the summary line only when a result exists', () => {
-    act(() => root.render(<StatusBanner isComputing={false} error={null} hasResult summary="data.csv · x · n = 10" />))
-    expect(container.textContent).toContain('data.csv · x · n = 10')
-    act(() => root.render(<StatusBanner isComputing={false} error={null} hasResult={false} summary="data.csv · x · n = 10" />))
-    expect(container.textContent).not.toContain('data.csv')
-  })
-
   it('has no settings-changed message', () => {
-    act(() => root.render(<StatusBanner isComputing={false} error={null} hasResult summary="s" warnings={['w']} resultNotice="r" onRetry={() => {}} />))
+    act(() => root.render(<StatusBanner isComputing={false} error={null} hasResult warnings={['w']} resultNotice="r" onRetry={() => {}} />))
     expect(container.textContent).not.toContain('Settings changed')
-  })
-})
-
-describe('summaryLine', () => {
-  it('drops empty parts', () => {
-    expect(summaryLine(['a.csv', null, 'x', false, 'n = 3'])).toBe('a.csv · x · n = 3')
   })
 })
 

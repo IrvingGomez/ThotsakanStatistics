@@ -1,5 +1,5 @@
 // features/estimation/descriptive/DescriptiveNotebook.tsx
-// Right panel: what the result was computed from, the normal corrections (bias and consistency) and the formulas.
+// Right panel: the formulas and the normal corrections (bias and consistency) and the formulas.
 
 import type { DescriptiveResult } from '../../../api/descriptive'
 import type { DescriptiveConfig } from './useDescriptiveTabState'
@@ -33,14 +33,12 @@ const FORMULAS = [
 interface DescriptiveNotebookProps {
   result: DescriptiveResult | null
   config: DescriptiveConfig | null
-  filteredN: number
-  rawN: number
   precision: number
   hasData: boolean
   loaded: boolean
 }
 
-export default function DescriptiveNotebook({ result, config, filteredN, rawN, precision, hasData, loaded }: DescriptiveNotebookProps) {
+export default function DescriptiveNotebook({ result, config, precision, hasData, loaded }: DescriptiveNotebookProps) {
   if (!result || !config) return <EmptyState loaded={loaded} hasData={hasData} compact />
 
   const { summary } = result
@@ -53,14 +51,6 @@ export default function DescriptiveNotebook({ result, config, filteredN, rawN, p
 
   return (
     <div>
-      <Section title="Sample">
-        <Row label="Variable" value={config.column} />
-        {config.weightsCol && <Row label="Weights" value={config.weightsCol} />}
-        <Row label="Rows (filtered / all)" value={`${filteredN} / ${rawN}`} />
-        <Row label="Observations used (n)" value={summary.n} />
-        <Row label="Missing removed" value={filteredN - summary.n} />
-      </Section>
-
       <Section title="Formulas">
         {FORMULAS.map((item) => <Formula key={item.label} label={item.label}><MathFormula tex={item.tex} /></Formula>)}
         {config.trimAlpha != null && (

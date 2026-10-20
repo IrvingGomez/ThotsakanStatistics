@@ -14,7 +14,7 @@ export function ControlsSlot({ state }: SlotProps) {
 function Status({ state, warnings = false }: SlotProps & { warnings?: boolean }) {
   return (
     <StatusBanner isComputing={state.isComputing} error={state.error} hasResult={!!state.result} onRetry={state.retry}
-      warnings={warnings ? state.warnings : undefined} summary={state.appliedContext} />
+      warnings={warnings ? state.warnings : undefined} />
   )
 }
 
@@ -33,7 +33,7 @@ export function NotebookSlot({ state }: SlotProps) {
   return (
     <div className="analysis-panel">
       <Status state={state} />
-      {(state.result || (!state.error && !state.isComputing)) && <GraphicalNotebook result={state.result} column={state.column} graphType={state.graphType}
+      {(state.result || (!state.error && !state.isComputing)) && <GraphicalNotebook result={state.result} graphType={state.graphType}
         precision={state.precision} />}
     </div>
   )

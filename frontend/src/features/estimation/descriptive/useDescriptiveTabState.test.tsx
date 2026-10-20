@@ -200,10 +200,10 @@ describe('descriptive status', () => {
     expect(list?.textContent).toBe('Mean: Few observations.')
   })
 
-  it('summarizes what the result was computed from', async () => {
+  it('shows no file · variable · n line above the result', async () => {
     vi.mocked(computeDescriptiveStats).mockResolvedValue(result(1))
     mount()
     await settle()
-    expect(container.textContent).toContain('sample.csv · a · n = 1')
+    expect(container.textContent).not.toContain('sample.csv')
   })
 })

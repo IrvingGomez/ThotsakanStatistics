@@ -25,7 +25,7 @@ beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
   container = document.createElement('div')
   root = createRoot(container)
-  act(() => root.render(<DescriptiveNotebook result={result} config={config} filteredN={10} rawN={12} precision={2} hasData loaded />))
+  act(() => root.render(<DescriptiveNotebook result={result} config={config} precision={2} hasData loaded />))
 })
 afterEach(() => act(() => root.unmount()))
 
@@ -53,7 +53,7 @@ describe('Descriptive notebook', () => {
 
   it('puts the corrections after the general formulas', () => {
     const titles = [...container.querySelectorAll('h3')].map((h) => h.textContent)
-    expect(titles).toEqual(['Sample', 'Formulas', 'Bias correction', 'Consistency correction'])
+    expect(titles).toEqual(['Formulas', 'Bias correction', 'Consistency correction'])
   })
 
   it('typesets the formulas', () => {

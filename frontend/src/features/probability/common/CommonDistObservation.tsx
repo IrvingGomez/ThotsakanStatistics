@@ -5,7 +5,7 @@ import type { DistResult, DistParams, QueryOp } from '../../../hooks/useDistribu
 import { DISTRIBUTIONS } from '../../../hooks/useDistribution'
 import ResultToolbar from '../../../components/ResultToolbar'
 import ResultSection from '../../../components/ResultSection'
-import StatusBanner, { summaryLine } from '../../../components/StatusBanner'
+import StatusBanner from '../../../components/StatusBanner'
 import { PLOT_AXIS, PLOT_COLORS, PLOT_CONFIG, baseLayout } from '../../../plot/theme'
 import { downloadChartsPNG } from '../../../utils/exportPNG'
 import { downloadCSV } from '../../../utils/exportCSV'
@@ -203,8 +203,7 @@ export default function CommonDistObservation({ distParams, appliedParams, resul
       : buildContinuousChart(result, queryOp, queryK, precision)
   }, [dist, result, queryOp, queryK, precision])
 
-  const summary = summaryLine([distName, ...(dist?.params ?? []).map((param) => `${param.label} = ${paramValues[param.key] ?? param.default}`)])
-  const status = <StatusBanner isComputing={false} error={error} hasResult={!!result} onRetry={onRetry} summary={summary} />
+  const status = <StatusBanner isComputing={false} error={error} hasResult={!!result} onRetry={onRetry} />
 
   if (!result) return status
 

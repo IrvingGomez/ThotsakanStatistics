@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useData } from '../../../context/DataContext'
 import { computeDescriptiveStats, type DescriptiveResult } from '../../../api/descriptive'
-import { summaryLine } from '../../../components/StatusBanner'
 import { DEFAULT_SELECTED, isRowVisible, parseQuantiles, visibleStatIds } from './descriptiveOptions'
 
 const DEBOUNCE_MS = 250
@@ -98,10 +97,6 @@ function withSelection(draft: DescriptiveDraft, next: string[]): DescriptiveDraf
 interface AppliedDescriptive {
   result: DescriptiveResult
   config: DescriptiveConfig
-  filename: string
-  filteredN: number
-  rawN: number
-  filterCount: number
 }
 
 /**
@@ -114,7 +109,7 @@ function requestKey(cfg: DescriptiveConfig, sessionId: string, filters: unknown)
 }
 
 export function useDescriptiveTabState() {
-  const { state: dataState, filteredRows } = useData()
+  const { state: dataState } = useData()
   const [draft, updateDraft] = useState(() => initialDescriptiveDraft(dataState.numericCols[0]))
   const [applied, setApplied] = useState<AppliedDescriptive | null>(null)
   const [isComputing, setIsComputing] = useState(false)
@@ -160,12 +155,6 @@ export function useDescriptiveTabState() {
     cancel()
     currentKey.current = key
     const request = generation.current
-    const context = {
-      filename: dataState.filename,
-      filteredN: filteredRows.length,
-      rawN: dataState.dataset?.rows.length ?? 0,
-      filterCount: Object.keys(filters).length,
-    }
     setError(null)
     setIsComputing(true)
     timerRef.current = setTimeout(() => {
@@ -181,7 +170,7 @@ export function useDescriptiveTabState() {
         filters: Object.keys(filters).length > 0 ? filters : null,
       }, controller.signal).then((result) => {
         if (request !== generation.current || controller.signal.aborted) return
-        setApplied({ result, config: latestConfig.current ?? cfg, ...context })
+        setApplied({ result, config: latestConfig.current ?? cfg })
       }).catch((cause: unknown) => {
         if (request !== generation.current || controller.signal.aborted) return
         currentKey.current = null // a failed request must be retried when the same settings come back
@@ -190,7 +179,7 @@ export function useDescriptiveTabState() {
         if (request === generation.current && !controller.signal.aborted) setIsComputing(false)
       })
     }, DEBOUNCE_MS)
-  }, [cancel, dataState.sessionId, dataState.filters, dataState.filename, dataState.dataset, filteredRows.length])
+  }, [cancel, dataState.sessionId, dataState.filters])
 
   // The panel is usable before any data arrives; pick the first variable once there is one.
   useEffect(() => {
@@ -229,11 +218,6 @@ export function useDescriptiveTabState() {
   const visibleRows = useMemo(() => !applied ? []
     : applied.result.rows.filter((row) => isRowVisible(row, applied.config.selectedStats)), [applied])
   const warnings = useMemo(() => visibleRows.flatMap((row) => row.warning ? [`${row.measure}: ${row.warning}`] : []), [visibleRows])
-  const summary = applied && summaryLine([
-    applied.filename, applied.config.column, 'n = ' + applied.result.summary.n,
-    applied.config.weightsCol && 'weights: ' + applied.config.weightsCol,
-    applied.filterCount > 0 && applied.filterCount + ' filter' + (applied.filterCount === 1 ? '' : 's'),
-  ])
 
   return {
     draft,
@@ -250,11 +234,7 @@ export function useDescriptiveTabState() {
     loaded: !!dataState.sessionId,
     numericCols: dataState.numericCols,
     precision: dataState.displayPrecision,
-    summary,
     warnings,
-    filename: applied?.filename ?? dataState.filename,
-    filteredN: applied?.filteredN ?? filteredRows.length,
-    rawN: applied?.rawN ?? dataState.dataset?.rows.length ?? 0,
   }
 }
 

@@ -231,7 +231,7 @@ describe('Graphical: result ownership', () => {
     expect(state.cfg.addNormal).toBe(false)
   })
 
-  it('shows shared failure/retry status and retains the previous result with its applied context', async () => {
+  it('shows shared failure/retry status and retains the previous result', async () => {
     await advance()
     vi.mocked(graphicalApi.computeGraph).mockRejectedValueOnce(new Error('Service unavailable'))
     await act(async () => state.updateConfig('addNormal', true))
@@ -239,7 +239,7 @@ describe('Graphical: result ownership', () => {
     for (const section of panels()) {
       expect(section.textContent).toContain('Couldn’t update results')
       expect(section.textContent).toContain('Previous result — update failed.')
-      expect(section.textContent).toContain('sample.csv · Age')
+      expect(section.textContent).not.toContain('sample.csv')
       expect(section.querySelector('button')?.textContent).toBe('Retry')
     }
     await act(async () => state.retry())
@@ -269,10 +269,10 @@ describe('Graphical: warnings and notebook', () => {
     expect(panel('Notebook').textContent).not.toContain('Overlay estimates')
   })
 
-  it('shows technical details: sample numbers and the definition of what is plotted', async () => {
+  it('shows the definition of what is plotted, with no sample section', async () => {
     await advance()
     const text = panel('Notebook').textContent!
-    expect(text).toContain('Unique values')
+    expect(text).not.toContain('Unique values')
     expect(text).toContain('density = count / (n × bin width)')
   })
 })

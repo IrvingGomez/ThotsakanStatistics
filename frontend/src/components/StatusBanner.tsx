@@ -1,23 +1,19 @@
 /**
- * The one place a tab reports its result state (doc/interaction_contract.md, rules 7 and 16): a one-line
- * summary of what the result was computed from, computing, error with Retry, and warnings that apply to
- * the result on screen. Results update automatically, so there is no "settings changed" state.
+ * The one place a tab reports its result state (doc/interaction_contract.md, rules 7 and 16): computing,
+ * error with Retry, and warnings that apply to the result on screen. Results update automatically, so there is no "settings changed" state.
  * Warnings must only be passed for the plot or result currently shown (contract rule 10).
  */
-export default function StatusBanner({ isComputing, error, hasResult, onRetry, resultNotice, summary, warnings = [] }: {
+export default function StatusBanner({ isComputing, error, hasResult, onRetry, resultNotice, warnings = [] }: {
   isComputing: boolean
   error: string | null
   hasResult: boolean
   onRetry?: () => void
   /** Replaces "Previous result — update failed." when an error leaves an older result on screen. */
   resultNotice?: string
-  /** One line, built with summaryLine(): file · variable · n · key settings. */
-  summary?: string | null
   warnings?: readonly string[]
 }) {
   return (
     <div className="analysis-status">
-      {hasResult && summary && <p className="analysis-context text-[var(--color-text-muted)]">{summary}</p>}
       <div role="status" aria-live="polite" aria-atomic="true">
         {isComputing ? (
           <p className="text-[var(--color-text-muted)]">{hasResult ? 'Updating… Previous result shown below.' : 'Computing results…'}</p>
@@ -37,11 +33,6 @@ export default function StatusBanner({ isComputing, error, hasResult, onRetry, r
       )}
     </div>
   )
-}
-
-/** Joins the parts that are set with " · ", e.g. ['data.csv', 'height', 'n = 30']. */
-export function summaryLine(parts: readonly (string | number | null | undefined | false)[]): string {
-  return parts.filter((part) => part !== null && part !== undefined && part !== false && part !== '').join(' · ')
 }
 
 /**

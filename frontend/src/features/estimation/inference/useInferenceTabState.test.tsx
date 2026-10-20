@@ -98,7 +98,7 @@ describe('Inference student workflow', () => {
     expect(state.draft.ciOpen).toBe(true)
     expect(state.draft.selected).toContain('ci.mean.boot')
     expect(inferenceApi.computeCI).toHaveBeenCalledTimes(1)
-    expect(panelText('notebook')).toContain('95% confidence · α = 0.05')
+    expect(panelText('notebook')).not.toContain('ApneaCMKL.csv')
     expect(panelText('notebook')).not.toContain('Update')
   })
 
@@ -115,7 +115,7 @@ describe('Inference student workflow', () => {
     expect(vi.mocked(inferenceApi.computeCI).mock.lastCall![0]).toMatchObject({ alpha: 0.1 })
     expect(state.isDirty).toBe(false)
     expect(state.appliedConfig?.alpha).toBe(0.1)
-    expect(panelText('observation')).toContain('90% confidence · α = 0.1')
+    expect(panelText('observation')).not.toContain('ApneaCMKL.csv')
     expect(panelText('observation')).not.toContain('Settings changed')
   })
 

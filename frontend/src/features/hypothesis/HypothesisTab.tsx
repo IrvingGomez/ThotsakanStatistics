@@ -1,13 +1,11 @@
-import StatusBanner, { EmptyState, summaryLine } from '../../components/StatusBanner';
+import StatusBanner, { EmptyState } from '../../components/StatusBanner';
 import HypothesisControls from './HypothesisControls';
 import HypothesisObservation from './HypothesisObservation';
 import HypothesisNotebook from './HypothesisNotebook';
 import type { HypothesisTabState } from './useHypothesisTabState';
 
 function ResultStatus({ state }: { state: HypothesisTabState }) {
-  const config = state.applied?.config;
   return <StatusBanner isComputing={state.isComputing} error={state.error} hasResult={!!state.result} onRetry={state.handleRetry}
-    summary={config && summaryLine([state.applied?.filename, config.column, config.testType, 'n = ' + state.applied?.filteredN, 'α = ' + config.alpha])}
     warnings={state.result?.warnings} />;
 }
 

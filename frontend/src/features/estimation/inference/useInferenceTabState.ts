@@ -101,7 +101,6 @@ export function useInferenceTabState() {
   const [regionResult, setRegionResult] = useState<ConfidenceRegionsResponse | null>(null)
   const [appliedDraft, setAppliedDraft] = useState<InferenceDraft | null>(null)
   const [appliedConfig, setAppliedConfig] = useState<InferenceConfig | null>(null)
-  const [appliedContext, setAppliedContext] = useState<{ filename: string; n: number; filterCount: number } | null>(null)
   const [isComputing, setIsComputing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof InferenceDraft, string>>>({})
@@ -125,7 +124,7 @@ export function useInferenceTabState() {
     generation.current += 1
     cancelAutoRun()
     setCiResult(null); setPiResult(null); setRegionResult(null)
-    setAppliedDraft(null); setAppliedConfig(null); setAppliedContext(null)
+    setAppliedDraft(null); setAppliedConfig(null)
     setIsComputing(false); setError(null); setPartialResult(false)
     lastSubmitted.current = null
   }, [cancelAutoRun])
@@ -140,7 +139,6 @@ export function useInferenceTabState() {
     const cfg = configFromDraft(submitted)
     lastSubmitted.current = { ...submitted }
     setAppliedDraft({ ...submitted }); setAppliedConfig(cfg)
-    setAppliedContext({ filename: dataState.filename, n: getNumericData(cfg.column).length, filterCount: Object.keys(dataState.filters).length })
     setError(null); setPartialResult(false); setIsComputing(true)
     setCiResult(null); setPiResult(null); setRegionResult(null)
     const params: InferenceParams = {
@@ -234,7 +232,7 @@ export function useInferenceTabState() {
   const activate = useCallback(() => setActivated(true), [])
   const isDirty = !!appliedDraft && JSON.stringify(computationDraft(draft)) !== JSON.stringify(computationDraft(appliedDraft))
   return {
-    draft, setDraft, appliedConfig, appliedContext, ciResult, piResult, regionResult,
+    draft, setDraft, appliedConfig, ciResult, piResult, regionResult,
     isComputing, error, isDirty, partialResult, fieldErrors, deviationEstimators, estimatorError,
     handleRun, handleRetry, handleReset, activate, hasData, resetGeneration,
     numericCols: dataState.numericCols, precision: dataState.displayPrecision,

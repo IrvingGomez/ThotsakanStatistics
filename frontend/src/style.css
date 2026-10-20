@@ -104,7 +104,6 @@ html, body, #app {
 .analysis-panel { min-width: 0; }
 .analysis-observation { min-width: 0; width: 100%; }
 .analysis-status { font-size: 14px; line-height: 1.5; margin-bottom: 16px; overflow-wrap: anywhere; }
-.analysis-context { margin-bottom: 8px; }
 .status-warning, .status-error {
   border-radius: 8px;
   border: 1px solid;

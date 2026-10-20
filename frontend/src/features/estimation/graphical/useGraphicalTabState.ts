@@ -202,9 +202,6 @@ export function useGraphicalTabState() {
 
   const currentApplied = hasData && applied?.sessionId === sessionId ? applied : null
   const result = currentApplied?.data ?? null
-  const appliedContext = currentApplied
-    ? `${currentApplied.filename} · ${currentApplied.cfg.column} · ${currentApplied.cfg.graphType} · n = ${currentApplied.data.summary.n} · ${Object.entries(currentApplied.filters).map(([key, values]) => `${key}: ${values.join(', ')}`).join('; ') || 'All rows'}`
-    : null
   const appliedSettings = currentApplied ? describeApplied(currentApplied) : null
 
   return {
@@ -214,7 +211,7 @@ export function useGraphicalTabState() {
     updateConfig, setWinsorRaw, setAutoBins, normalOn: normalApplies(cfg),
     result, warnings: result?.warnings ?? [], column: currentApplied?.cfg.column ?? cfg.column,
     graphType: currentApplied?.cfg.graphType ?? cfg.graphType,
-    isComputing, error, appliedContext, appliedSettings, resetVersion,
+    isComputing, error, appliedSettings, resetVersion,
     reset, retry, hasData, numericCols, precision: dataState.displayPrecision, sessionId,
   }
 }
