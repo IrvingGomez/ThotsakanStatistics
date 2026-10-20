@@ -20,7 +20,7 @@ import { useChartRegistry } from '../../../hooks/useChartRegistry'
 const CHART_ORDER = ['descriptive'] as const
 
 /** Where the box plot sits, in paper coordinates (the histogram fills the space below). */
-const BOX = { bottom: 0.78, low: 0.81, capLow: 0.85, middle: 0.89, capHigh: 0.93, high: 0.97 } as const
+const BOX = { histTop: 0.73, bottom: 0.78, low: 0.81, capLow: 0.85, middle: 0.89, capHigh: 0.93, high: 0.97 } as const
 
 // ─── Statistics Table ─────────────────────────────────────────────────────────
 
@@ -146,7 +146,7 @@ function DescriptiveCharts({ result, colName, precision, onReady, onPurge }: {
     dragmode: 'pan' as const,
     hovermode: 'closest' as const,
     xaxis: { ...PLOT_AXIS, title: { text: colName }, tickformat: '.4~g', nticks: 6, automargin: true },
-    yaxis: { ...PLOT_AXIS, title: { text: 'Frequency' }, domain: [0, BOX.bottom - 0.05], tickformat: 'd', automargin: true },
+    yaxis: { ...PLOT_AXIS, title: { text: 'Frequency' }, domain: [0, BOX.histTop], tickformat: 'd', automargin: true },
     // The box strip: hover points and outliers sit at y = 0, the middle of the strip.
     yaxis2: { domain: [BOX.bottom, 1], range: [-1, 1], showticklabels: false, showgrid: false, zeroline: false, fixedrange: true },
     shapes: [
@@ -157,11 +157,12 @@ function DescriptiveCharts({ result, colName, precision, onReady, onPurge }: {
         { type: 'line' as const, xref: 'x' as const, x0: x, x1: x, yref: 'paper' as const, y0: BOX.capLow, y1: BOX.capHigh, line: { color: PLOT_COLORS.data, width: 1.5 } })),
       { type: 'rect' as const, xref: 'x' as const, x0: boxData.q1, x1: boxData.q3, yref: 'paper' as const, y0: BOX.low, y1: BOX.high,
         fillcolor: PLOT_COLORS.dataBand, line: { color: PLOT_COLORS.data, width: 1.5 } },
-      // Mean and median: one line each, through the histogram and the box.
-      { type: 'line' as const, xref: 'x' as const, x0: result.summary.mean, x1: result.summary.mean, yref: 'paper' as const, y0: 0, y1: 1,
-        line: { color: PLOT_COLORS.mean, width: 2, dash: 'dash' } },
-      { type: 'line' as const, xref: 'x' as const, x0: boxData.median, x1: boxData.median, yref: 'paper' as const, y0: 0, y1: 1,
-        line: { color: PLOT_COLORS.median, width: 2, dash: 'dot' } },
+      // Mean and median: drawn over the histogram and again across the box only, leaving the gap between them blank.
+      ...[
+        { x: result.summary.mean, line: { color: PLOT_COLORS.mean, width: 2, dash: 'dash' } },
+        { x: boxData.median, line: { color: PLOT_COLORS.median, width: 2, dash: 'dot' } },
+      ].flatMap(({ x, line }) => [[0, BOX.histTop], [BOX.low, BOX.high]].map(([y0, y1]) => (
+        { type: 'line' as const, xref: 'x' as const, x0: x, x1: x, yref: 'paper' as const, y0, y1, line }))),
     ],
   })
 

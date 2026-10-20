@@ -5,7 +5,7 @@ import type { DescriptiveResult, StatRow } from '../../../api/descriptive'
 import DescriptiveObservation from './DescriptiveObservation'
 import type { DescriptiveConfig } from './useDescriptiveTabState'
 
-interface Shape { x0: number; y0: number; y1: number; line: { color: string; dash?: string } }
+interface Shape { type: string; x0: number; x1: number; y0: number; y1: number; line: { color: string; dash?: string } }
 interface Layout { annotations?: unknown[]; shapes?: Shape[] }
 const plot = vi.hoisted(() => ({ layout: null as null | Layout, data: [] as { type: string }[] }))
 vi.mock('react-plotly.js', () => ({ default: (props: { layout: Layout; data: { type: string }[] }) => { plot.layout = props.layout; plot.data = props.data; return null } }))
@@ -77,13 +77,20 @@ describe('Descriptive distribution chart', () => {
     expect(items).toEqual(['Mean 1.00', 'Median 1.50', 'Box Q1 1.11 – Q3 2.22', 'Whiskers 0.00 – 3.00', 'Outliers 2'])
   })
 
-  it('draws the mean and median as one line each, the same through the histogram and the box', () => {
+  it('draws the mean and median over the histogram and again across the box, with a blank gap between', () => {
     render(true)
     expect(plot.data.some((trace) => trace.type === 'box')).toBe(false)
-    const at = (x: number) => (plot.layout?.shapes ?? []).filter((shape) => shape.x0 === x && shape.y1 - shape.y0 > 0.9)
-    expect(at(1)).toHaveLength(1) // mean
-    expect(at(1)[0].line.dash).toBe('dash')
-    expect(at(1.5)).toHaveLength(1) // median
-    expect(at(1.5)[0].line.dash).toBe('dot')
+    const shapes = plot.layout?.shapes ?? []
+    const box = shapes.find((shape) => shape.type === 'rect')!
+    const at = (x: number) => shapes.filter((shape) => shape.x0 === x && shape.x1 === x && shape.line.dash)
+      .sort((a, b) => a.y0 - b.y0)
+    for (const [x, dash] of [[1, 'dash'], [1.5, 'dot']] as const) { // mean, median
+      const [histogram, inBox] = at(x)
+      expect(at(x)).toHaveLength(2)
+      expect([histogram.line.dash, inBox.line.dash]).toEqual([dash, dash])
+      expect(histogram.y0).toBe(0)
+      expect(histogram.y1).toBeLessThan(box.y0)
+      expect([inBox.y0, inBox.y1]).toEqual([box.y0, box.y1])
+    }
   })
 })
