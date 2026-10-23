@@ -1,10 +1,10 @@
 // features/estimation/graphical/GraphicalControls.tsx
 // Left panel: variable, graph type and overlays. Everything updates the plot automatically.
 
-import { useEffect, useId, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import type { GraphicalTabState } from './useGraphicalTabState'
 import DualInput from '../../../components/DualInput'
-import { AnalysisActions, Divider, SectionLabel, SelectField, SwitchField, TextField, VariableSection } from '../../../components/ControlPrimitives'
+import { AnalysisActions, Divider, RadioGroup, SectionLabel, SelectField, SwitchField, TextField, VariableSection } from '../../../components/ControlPrimitives'
 import type { GraphType } from '../../../api/graphical'
 import { LABELS, confidenceReadout, estimatorOptions } from '../../../labels'
 import { BOUNDS, supportedOverlays } from './graphicalState'
@@ -28,10 +28,9 @@ const GRAPH_TYPES: { value: GraphType; label: string }[] = [
 
 export default function GraphicalControls({ state }: { state: GraphicalTabState }) {
   const { cfg, winsorRaw, autoBins, sessionId, numericCols, muEstimators, deviationEstimators,
-    estimatorNotice, fieldErrors, resetVersion, updateConfig: set,
+    fieldErrors, resetVersion, updateConfig: set,
     setWinsorRaw, setAutoBins, reset } = state
   const rootRef = useRef<HTMLDivElement>(null)
-  const graphName = useId()
   const shows = supportedOverlays(cfg.graphType)
   const isEcdf = cfg.graphType === 'ECDF'
 
@@ -45,18 +44,7 @@ export default function GraphicalControls({ state }: { state: GraphicalTabState 
       <VariableSection value={cfg.column} onChange={(v) => set('column', v)} options={numericCols}
         error={fieldErrors.column} loaded={!!sessionId} />
 
-      <fieldset className="mb-3">
-        <legend className="text-xs font-semibold text-[var(--color-text-muted)] mb-2">Graph</legend>
-        <div className="flex flex-col gap-1">
-          {GRAPH_TYPES.map((graph) => (
-            <label key={graph.value} className="flex min-h-9 items-center gap-2 rounded-md border border-[var(--color-border-md)] px-3 py-2 text-sm cursor-pointer">
-              <input type="radio" name={graphName} value={graph.value} checked={cfg.graphType === graph.value}
-                onChange={() => set('graphType', graph.value)} className="accent-[var(--color-accent)]" />
-              {graph.label}
-            </label>
-          ))}
-        </div>
-      </fieldset>
+      <RadioGroup label="Graph" value={cfg.graphType} onChange={(v) => set('graphType', v)} options={GRAPH_TYPES} />
 
       {shows.bins && (
         <>
@@ -124,7 +112,6 @@ export default function GraphicalControls({ state }: { state: GraphicalTabState 
           />
           {cfg.addNormal && (
             <Nested>
-              {estimatorNotice && <p role="status" className="text-xs text-amber-300 mb-3">{estimatorNotice}</p>}
               <SelectField
                 label={LABELS.muEstimator}
                 value={cfg.muEstimator}

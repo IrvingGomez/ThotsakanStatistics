@@ -59,6 +59,20 @@ describe('Graphical observation', () => {
     expect(traces.some(trace => trace.yaxis === 'y2')).toBe(false)
   })
 
+  it('lists the histogram bins in the shared result table', async () => {
+    await draw({ ...base, histogram_data: { bins: [0, 1, 2], counts: [4, 6], densities: [0.4, 0.6] } }, 'Histogram')
+    const region = container.querySelector('[role="region"]')!
+    expect(region.className).toContain('rounded-lg')
+    expect(Array.from(region.querySelectorAll('th')).map((cell) => cell.textContent))
+      .toEqual(['Lower bound', 'Upper bound', 'Count', 'Density'])
+    expect(region.querySelectorAll('tbody tr')).toHaveLength(2)
+  })
+
+  it('shows the shared empty state when there is no result yet', async () => {
+    await act(async () => root.render(<GraphicalObservation result={null} column="Dice" graphType="Histogram" hasData loaded isComputing={false} />))
+    expect(container.textContent).toContain('Choose the settings in the left panel to see results.')
+  })
+
   it('draws data in the shared theme color', async () => {
     const { traces } = await draw({ ...base, histogram_data: { bins: [0, 1], counts: [4], densities: [1] } }, 'Histogram')
     expect(traces[0].marker.color).toBe(PLOT_COLORS.data)

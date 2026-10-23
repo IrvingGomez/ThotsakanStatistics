@@ -269,10 +269,45 @@ describe('Graphical: warnings and notebook', () => {
     expect(panel('Notebook').textContent).not.toContain('Overlay estimates')
   })
 
+  it('shows the estimator notice as a warning above the plot, not in the left panel', async () => {
+    await act(async () => root.unmount())
+    container.remove()
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+    vi.mocked(inferenceApi.getEstimators).mockRejectedValue(new Error('Unavailable'))
+    await render()
+    await advance()
+    const warnings = panel('Observation').querySelector('[aria-label="Warnings"]')
+    expect(warnings?.textContent).toContain('Estimator choices could not load')
+    expect(container.textContent!.match(/Estimator choices could not load/g)).toHaveLength(1)
+  })
+
+  it('uses the shared radio group for the graph type and keeps no applied-settings text', async () => {
+    const legend = Array.from(container.querySelectorAll('legend')).find((element) => element.textContent === 'Graph')
+    expect(legend?.className).toContain('text-sm')
+    expect(legend?.className).not.toContain('font-semibold')
+    expect('appliedSettings' in state).toBe(false)
+  })
+
   it('shows the definition of what is plotted, with no sample section', async () => {
     await advance()
     const text = panel('Notebook').textContent!
     expect(text).not.toContain('Unique values')
-    expect(text).toContain('density = count / (n × bin width)')
+    expect(text).not.toContain('density = count / (n × bin width)')
+    expect(text).toContain('Bar areas sum to 1')
+    expect(panel('Notebook').querySelectorAll('.katex').length).toBeGreaterThan(0)
+    expect(panel('Notebook').querySelector('.katex-error')).toBeNull()
+  })
+
+  it('typesets the ECDF definition and shows the DKW band formula only with the band', async () => {
+    vi.mocked(graphicalApi.computeGraph).mockResolvedValue({ summary: { n: 10, n_unique: 10 }, warnings: [],
+      ecdf_data: { x: [1, 2], y: [0.5, 1], epsilon: 0.43 } })
+    await act(async () => state.updateConfig('graphType', 'ECDF'))
+    await advance()
+    const notebook = panel('Notebook')
+    expect(notebook.textContent).toContain('Empirical CDF')
+    expect(notebook.textContent).not.toContain('DKW band')
+    expect(notebook.querySelector('.katex-error')).toBeNull()
   })
 })

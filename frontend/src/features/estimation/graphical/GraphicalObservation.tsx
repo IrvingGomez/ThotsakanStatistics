@@ -6,6 +6,7 @@ import { useCallback, useMemo } from 'react'
 import createPlotlyComponent from 'react-plotly.js/factory'
 import Plotly from 'plotly.js-basic-dist-min'
 import type { GraphicalResponse } from '../../../api/graphical'
+import ResultTable from '../../../components/ResultTable'
 import ResultToolbar from '../../../components/ResultToolbar'
 import { EmptyState } from '../../../components/StatusBanner'
 import { downloadChartsPNG } from '../../../utils/exportPNG'
@@ -25,6 +26,13 @@ const C_KDE = PLOT_COLORS.fit
 const C_BAND = PLOT_COLORS.dataBand
 const C_RUG = PLOT_COLORS.rug
 const C_NORMAL = PLOT_COLORS.reference
+
+const BIN_COLUMNS = [
+  { key: 'lower', label: 'Lower bound', align: 'right' },
+  { key: 'upper', label: 'Upper bound', align: 'right' },
+  { key: 'count', label: 'Count', align: 'right' },
+  { key: 'density', label: 'Density', align: 'right' },
+] as const
 
 const AXIS = PLOT_AXIS
 const CONFIG = PLOT_CONFIG
@@ -212,13 +220,8 @@ export default function GraphicalObservation({
     return <EmptyState loaded={loaded} hasData={false} />
   }
 
-  if (!result) {
-    return (
-      <div className="min-h-48 flex items-center justify-center text-[var(--color-text-muted)] text-sm">
-        {isComputing ? 'Computing…' : 'Select a column to draw the plot.'}
-      </div>
-    )
-  }
+  // While the first result is computing, the status banner above already says so.
+  if (!result) return isComputing ? null : <EmptyState loaded={loaded} hasData />
 
   return (
     <div className="analysis-observation flex flex-col">
@@ -244,20 +247,14 @@ export default function GraphicalObservation({
           </p>
           <details>
             <summary className="text-sm cursor-pointer py-2">View histogram data ({result.histogram_data.counts.length} bins)</summary>
-            <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Histogram bin data">
-              <table className="w-full text-xs text-right border-collapse">
-                <caption className="text-left text-[var(--color-text-muted)] py-2">Histogram bins for {column}. Bounds and counts match the exported CSV.</caption>
-                <thead><tr>{['Lower bound', 'Upper bound', 'Count', 'Density'].map((heading) => <th scope="col" key={heading} className="p-2 border-b border-[var(--color-border-md)]">{heading}</th>)}</tr></thead>
-                <tbody>{result.histogram_data.counts.map((count, index) => (
-                  <tr key={index} className="border-b border-[var(--color-border)]">
-                    <td className="p-2 font-mono">{result.histogram_data!.bins[index]}</td>
-                    <td className="p-2 font-mono">{result.histogram_data!.bins[index + 1]}</td>
-                    <td className="p-2 font-mono">{count}</td>
-                    <td className="p-2 font-mono">{result.histogram_data!.densities[index]}</td>
-                  </tr>
-                ))}</tbody>
-              </table>
-            </div>
+            <ResultTable caption={`Histogram bins for ${column}. Bounds and counts match the exported CSV.`}
+              columns={BIN_COLUMNS}
+              rows={result.histogram_data.counts.map((count, index) => ({ cells: {
+                lower: result.histogram_data!.bins[index],
+                upper: result.histogram_data!.bins[index + 1],
+                count,
+                density: result.histogram_data!.densities[index],
+              } }))} />
           </details>
         </div>
       )}
