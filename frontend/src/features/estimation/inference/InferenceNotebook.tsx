@@ -1,8 +1,8 @@
 import type { ConfidenceRegionsResponse, IntervalsResponse } from '../../../api/inference'
 import type { InferenceState } from './useInferenceTabState'
 import { coveragePercent, formatInferenceNumber, parseIntervalRows } from './inferencePresentation'
-import { intervalFormula, NOTATION } from './inferenceFormulas'
-import { Formula, Section } from '../../../components/notebook/NotebookParts'
+import { intervalFormula, NOTATION, REGION_BOX, REGION_FORMULAS } from './inferenceFormulas'
+import { Formula, Row, Section } from '../../../components/notebook/NotebookParts'
 import MathFormula from '../../../components/MathFormula'
 import { estimatorLabel } from '../../../labels'
 import { EmptyState } from '../../../components/StatusBanner'
@@ -27,23 +27,26 @@ function Notation({ sigmaEstimator }: { sigmaEstimator: string }) {
     </Formula>)}
   </Section>
 }
+/** How the regions are built, then the values they were built from. The cut-offs come from the backend. */
 function RegionSummary({ result, precision, showCiBox }: { result: ConfidenceRegionsResponse; precision: number; showCiBox: boolean }) {
-  return <Section title="Joint confidence regions"><div className="space-y-3 text-sm">
-    <p>Coverage: {[...result.probs].sort((a, b) => a - b).map(coveragePercent).join(', ')}</p>
-    <dl className="grid grid-cols-2 gap-3 rounded-lg border border-[var(--color-border-md)] p-3">
-      <div><dt className="text-xs text-[var(--color-text-muted)]">Estimated mean (μ)</dt><dd className="font-mono break-all mt-1">{formatInferenceNumber(result.mu_hat, precision)}</dd></div>
-      <div><dt className="text-xs text-[var(--color-text-muted)]">Estimated deviation (σ)</dt><dd className="font-mono break-all mt-1">{formatInferenceNumber(result.sigma_hat, precision)}</dd></div>
-    </dl>
-    {showCiBox && result.mu_ci && result.sigma_ci && <div className="rounded-lg border border-[var(--color-border-md)] p-3 space-y-2">
-      <p>The dashed box combines separate marginal intervals; it is not the joint region.</p>
-      <p className="break-words">Location interval: <span className="font-mono break-all">{result.mu_ci.map(value => formatInferenceNumber(value, precision)).join(' to ')}</span></p>
-      <p className="break-words">Deviation interval: <span className="font-mono break-all">{result.sigma_ci.map(value => formatInferenceNumber(value, precision)).join(' to ')}</span></p>
-    </div>}
-    <details className="rounded-lg border border-[var(--color-border-md)] p-3">
-      <summary className="cursor-pointer font-semibold">Method details</summary>
-      <p className="mt-2 text-[var(--color-text-muted)]">Joint relative likelihood, χ² calibrated with 2 degrees of freedom. The cross marks maximum likelihood estimates. Grid: {result.z_matrix.length} × {result.z_matrix[0]?.length ?? 0} points.</p>
-    </details>
-  </div></Section>
+  const fmt = (value: number) => formatInferenceNumber(value, precision)
+  const cutoffs = result.probs.map((p, index) => ({ p, level: result.levels[index] })).sort((a, b) => a.p - b.p)
+  const box = showCiBox && result.mu_ci && result.sigma_ci
+  return <>
+    <Section title="How the regions are built">
+      {REGION_FORMULAS.map((item) => <Formula key={item.label} label={item.label}><MathFormula tex={item.tex} /></Formula>)}
+      {box && <Formula label={REGION_BOX.label}><MathFormula tex={REGION_BOX.tex} /></Formula>}
+    </Section>
+    <Section title="Values">
+      <Row label={<MathFormula inline tex={String.raw`\hat{\mu}`} />} value={fmt(result.mu_hat)} />
+      <Row label={<MathFormula inline tex={String.raw`\hat{\sigma}`} />} value={fmt(result.sigma_hat)} />
+      {cutoffs.map(({ p, level }) => <Row key={p} label={`Cut-off for ${coveragePercent(p)} coverage`} value={fmt(level)} />)}
+      {box && <>
+        <Row label="Mean interval (box)" value={result.mu_ci!.map(fmt).join(' to ')} />
+        <Row label="Deviation interval (box)" value={result.sigma_ci!.map(fmt).join(' to ')} />
+      </>}
+    </Section>
+  </>
 }
 export default function InferenceNotebook({ state }: { state: InferenceState }) {
   const hasResult = !!(state.ciResult || state.piResult || state.regionResult)

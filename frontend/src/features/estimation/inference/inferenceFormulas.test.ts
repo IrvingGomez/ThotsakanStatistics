@@ -1,6 +1,6 @@
 import katex from 'katex'
 import { describe, expect, it } from 'vitest'
-import { intervalFormula } from './inferenceFormulas'
+import { intervalFormula, REGION_BOX, REGION_FORMULAS } from './inferenceFormulas'
 
 const row = (Statistic: string, Method: string) => ({ Statistic, Method, Lower: 0, Upper: 1 })
 const DEVIATION_ESTIMATORS = ['Deviation (1 ddof)', 'Range (bias corrected)', 'IQR (bias corrected)', 'MAD (bias corrected)', 'AAD (bias corrected)']
@@ -60,6 +60,7 @@ describe('interval formulas follow the method the backend used', () => {
       ['prediction', row('Bootstrap', 'Bootstrap quantiles (B=500)')] as const,
     ]
     const cases = [
+      ...REGION_FORMULAS, REGION_BOX,
       ...rows.map(([kind, interval]) => intervalFormula(kind, interval, 'Deviation (1 ddof)')),
       ...DEVIATION_ESTIMATORS.flatMap(estimator => ['Chi', 'Bootstrap (B=500)'].map(method => intervalFormula('confidence', row('Deviation', method), estimator))),
     ]

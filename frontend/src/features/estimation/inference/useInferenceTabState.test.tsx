@@ -433,13 +433,39 @@ describe('Inference student workflow', () => {
     expect(vi.mocked(inferenceApi.computeRegions).mock.lastCall![0]).toMatchObject({ probs: [0.5, 0.95], add_ci_box: false })
     const traces = () => JSON.parse(container.querySelector<HTMLElement>('[data-plot]')!.dataset.plot!) as { name: string }[]
     expect(traces().some(trace => trace.name === 'Separate marginal intervals')).toBe(false)
-    expect(panelText('notebook')).toContain('Coverage: 50%, 95%')
+    expect(panelText('notebook')).toContain('Cut-off for 50% coverage0.500')
+    expect(panelText('notebook')).toContain('Cut-off for 95% coverage0.050')
+    expect(panelText('notebook')).not.toContain('Marginal box')
     vi.useFakeTimers()
     await act(async () => state.setDraft({ addCiBox: true }))
     expect(traces().some(trace => trace.name === 'Separate marginal intervals')).toBe(false)
     await pause()
     expect(traces().some(trace => trace.name === 'Separate marginal intervals')).toBe(true)
-    expect(panelText('notebook')).toContain('The dashed box combines separate marginal intervals')
+    expect(panelText('notebook')).toContain('Marginal box (dashed, not a joint region)')
+    expect(panelText('notebook')).toContain('Mean interval (box)29.000 to 31.000')
+  })
+
+  it('explains in the right panel how the regions are built, then gives their values', async () => {
+    await act(async () => state.setDraft({ estimationType: 'Confidence Regions', addCiBox: false }))
+    await act(async () => { await vi.waitFor(() => expect(state.regionResult).not.toBeNull()) })
+    const notebook = container.querySelector('[data-panel="notebook"]')!
+    expect([...notebook.querySelectorAll('h3')].map(node => node.textContent)).toEqual(['How the regions are built', 'Values'])
+    const text = notebook.textContent!
+    for (const label of ['Normal likelihood', 'Maximum-likelihood estimates (the deviation divides by n)', 'Relative likelihood', 'Region with coverage p']) {
+      expect(text).toContain(label)
+    }
+    expect(text).not.toMatch(/[μσ]\u0302/)
+    const values = [...notebook.querySelectorAll('section')].find(node => node.querySelector('h3')?.textContent === 'Values')!
+    const [mu, sigma] = [...values.querySelectorAll(':scope > div')]
+    expect(mu.firstElementChild!.querySelector('.katex')).not.toBeNull()
+    expect(mu.textContent).toContain('30.000')
+    expect(sigma.firstElementChild!.querySelector('.katex')).not.toBeNull()
+    expect(sigma.textContent).toContain('8.000')
+    expect(text).not.toContain('Method details')
+    expect(text).not.toContain('Grid:')
+    expect(text).not.toContain('Coverage:')
+    expect(notebook.querySelectorAll('.katex').length).toBeGreaterThanOrEqual(4)
+    expect(notebook.querySelector('.katex-error')).toBeNull()
   })
 })
 

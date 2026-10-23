@@ -46,14 +46,15 @@ describe('Descriptive notebook', () => {
     const titles = [...container.querySelectorAll('h3')].map((h) => h.textContent)
     expect(titles).toContain('Bias correction')
     expect(titles).toContain('Consistency correction')
-    const bias = [...container.querySelectorAll('section')].find((s) => s.querySelector('h3')?.textContent === 'Bias correction')!
-    expect(bias.textContent).toContain('c₄')
-    expect(bias.textContent).not.toContain('MAD')
+    const section = (title: string) => [...container.querySelectorAll('section')].find((s) => s.querySelector('h3')?.textContent === title)!
+    expect(section('Bias correction').textContent).not.toContain('MAD')
+    expect(section('Bias correction').textContent).not.toContain('c₄(n =')
+    expect(section('Values').textContent).toContain('c₄(n =')
   })
 
-  it('puts the corrections after the general formulas', () => {
+  it('puts formulas first and the values last', () => {
     const titles = [...container.querySelectorAll('h3')].map((h) => h.textContent)
-    expect(titles).toEqual(['Formulas', 'Bias correction', 'Consistency correction'])
+    expect(titles).toEqual(['Formulas', 'Bias correction', 'Consistency correction', 'Values'])
   })
 
   it('typesets the formulas', () => {

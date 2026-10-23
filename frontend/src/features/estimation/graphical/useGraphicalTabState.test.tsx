@@ -290,6 +290,26 @@ describe('Graphical: warnings and notebook', () => {
     expect('appliedSettings' in state).toBe(false)
   })
 
+  it('typesets the normal-overlay estimates instead of combining-hat characters', async () => {
+    vi.mocked(graphicalApi.computeGraph).mockResolvedValue({ ...response(), point_estimates: { mu: 1, sigma: 2 } })
+    await act(async () => state.updateConfig('addNormal', true))
+    await advance()
+    const notebook = panel('Notebook')
+    expect(notebook.textContent).not.toMatch(/[μσ]\u0302/)
+    const values = [...notebook.querySelectorAll('section')].find(node => node.querySelector('h3')?.textContent === 'Values')!
+    expect(values.querySelectorAll(':scope > div > span:first-child .katex')).toHaveLength(2)
+  })
+
+  it('puts the definition and formulas first and the values last', async () => {
+    vi.mocked(graphicalApi.computeGraph).mockResolvedValue({ ...response(), point_estimates: { mu: 1, sigma: 2 } })
+    await act(async () => state.updateConfig('addNormal', true))
+    await advance()
+    const notebook = panel('Notebook')
+    expect([...notebook.querySelectorAll('h3')].map(node => node.textContent)).toEqual(['Definition', 'Normal overlay', 'Values'])
+    const overlay = [...notebook.querySelectorAll('section')].find(node => node.querySelector('h3')?.textContent === 'Normal overlay')!
+    expect(overlay.textContent).not.toContain('1.000')
+  })
+
   it('shows the definition of what is plotted, with no sample section', async () => {
     await advance()
     const text = panel('Notebook').textContent!

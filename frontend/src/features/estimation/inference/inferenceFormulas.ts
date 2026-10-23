@@ -67,6 +67,24 @@ export function intervalFormula(kind: 'confidence' | 'prediction', row: Pick<Int
     : DEVIATION_NORMAL[sigmaEstimator] ?? { label: 'Deviation', tex: String.raw`\hat{\sigma}` }
 }
 
+/**
+ * How the joint confidence regions are built, from likelihood.py and confidence_regions.py: the normal
+ * likelihood, its maximum (σ̂ divides by n), the relative likelihood as the backend computes it, and the
+ * χ²(2) cut-off for each coverage p.
+ */
+export const REGION_FORMULAS: readonly IntervalFormula[] = [
+  { label: 'Normal likelihood', tex: String.raw`L(\mu, \sigma) = \prod_{i=1}^{n} \frac{1}{\sigma\sqrt{2\pi}} \exp\!\left( -\frac{(x_i - \mu)^{2}}{2\sigma^{2}} \right)` },
+  { label: 'Maximum-likelihood estimates (the deviation divides by n)', tex: String.raw`\hat{\mu} = \bar{x}, \qquad \hat{\sigma} = \sqrt{\frac{1}{n} \sum_{i=1}^{n} (x_i - \bar{x})^{2}}` },
+  { label: 'Relative likelihood', tex: String.raw`\begin{gathered} R(\mu, \sigma) = \frac{L(\mu, \sigma)}{L(\hat{\mu}, \hat{\sigma})} \\ = \left( \frac{\hat{\sigma}}{\sigma} \right)^{n} \exp\!\left\{ \frac{n}{2} \left[ 1 - \frac{\hat{\sigma}^{2} + (\bar{x} - \mu)^{2}}{\sigma^{2}} \right] \right\} \end{gathered}` },
+  { label: 'Region with coverage p', tex: String.raw`\left\{ (\mu, \sigma) : R(\mu, \sigma) \ge e^{-\chi^{2}_{2,\,p} / 2} \right\}` },
+]
+
+/** The dashed box: the t interval for the mean and the χ² interval for σ, always with s (ddof = 1). */
+export const REGION_BOX: IntervalFormula = {
+  label: 'Marginal box (dashed, not a joint region)',
+  tex: String.raw`\left[ \bar{x} \pm ${T}\, \frac{s}{\sqrt{n}} \right] \times \left[ \frac{s\sqrt{n-1}}{\sqrt{\chi^{2}_{n-1,\,1-\alpha/2}}},\; \frac{s\sqrt{n-1}}{\sqrt{\chi^{2}_{n-1,\,\alpha/2}}} \right]`,
+}
+
 /** The symbols the formulas use, in the order a reader meets them. */
 export const NOTATION: readonly { tex: string; text: string; namesEstimator?: boolean }[] = [
   { tex: String.raw`\bar{x},\ \tilde{x},\ s`, text: 'sample mean, sample median, standard deviation (ddof = 1)' },

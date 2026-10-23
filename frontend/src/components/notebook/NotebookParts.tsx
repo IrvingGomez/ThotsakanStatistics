@@ -13,7 +13,7 @@ export function Section({ title, children }: { title: string; children: ReactNod
   )
 }
 
-export function Row({ label, value }: { label: string; value: ReactNode }) {
+export function Row({ label, value }: { label: ReactNode; value: ReactNode }) {
   return (
     <div className="flex items-baseline justify-between gap-3 border-b border-[var(--color-border)] py-1 text-xs">
       <span className="text-[var(--color-text-muted)]">{label}</span>

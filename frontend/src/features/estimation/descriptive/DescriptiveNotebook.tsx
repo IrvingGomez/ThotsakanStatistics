@@ -68,18 +68,19 @@ export default function DescriptiveNotebook({ result, config, precision, hasData
       {config.showConsistencyCorr && (
         <>
           <Section title="Bias correction">
-            {c4n && stdRow?.value != null && stdRow.consistencyCorr != null && (
-              <div className="mb-2">
-                <Row label={`c₄(n = ${summary.n})`} value={c4n} />
-                <Row label="Std dev (ddof = 1)" value={fmt(stdRow.value)} />
-                <Row label="Normal-corrected" value={fmt(stdRow.consistencyCorr)} />
-              </div>
-            )}
             {BIAS_CORRECTIONS.map((item) => <Formula key={item.label} label={item.label}><MathFormula tex={item.tex} /></Formula>)}
           </Section>
           <Section title="Consistency correction">
             {CONSISTENCY_CORRECTIONS.map((item) => <Formula key={item.label} label={item.label}><MathFormula tex={item.tex} /></Formula>)}
           </Section>
+          {/* Formulas first, the values they use last (the same order in every tab). */}
+          {c4n && stdRow?.value != null && stdRow.consistencyCorr != null && (
+            <Section title="Values">
+              <Row label={`c₄(n = ${summary.n})`} value={c4n} />
+              <Row label="Std dev (ddof = 1)" value={fmt(stdRow.value)} />
+              <Row label="Normal-corrected" value={fmt(stdRow.consistencyCorr)} />
+            </Section>
+          )}
         </>
       )}
     </div>

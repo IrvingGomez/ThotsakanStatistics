@@ -45,29 +45,38 @@ export default function GraphicalNotebook({ result, graphType, precision }: Grap
   const { point_estimates: pe, ecdf_data, alpha } = result
   const definition = DEFINITIONS[graphType]
   const band = !!ecdf_data && alpha != null
+  const normal = pe?.mu != null || pe?.sigma != null
 
+  // Formulas and definitions first, the values they use last (the same order in every tab).
   return (
     <div className="flex flex-col">
-
-      {(pe?.mu != null || pe?.sigma != null) && (
-        <Section title="Normal overlay">
-          <Row label="μ̂" value={fmt(pe?.mu)} />
-          <Row label="σ̂" value={fmt(pe?.sigma)} />
-          <div className="mt-2">
-            <Formula label={graphType === 'ECDF' ? 'Normal CDF' : 'Normal density'}>
-              <MathFormula tex={graphType === 'ECDF' ? NORMAL_CDF : NORMAL_DENSITY} />
-            </Formula>
-          </div>
-        </Section>
-      )}
 
       {definition && (
         <Section title="Definition">
           <Formula label={definition.label}><MathFormula tex={definition.tex} /></Formula>
           <p className="mb-2 text-xs text-[var(--color-text-muted)] leading-relaxed">{definition.note}</p>
+          {band && <Formula label="DKW band"><MathFormula tex={DKW_BAND} /></Formula>}
+        </Section>
+      )}
+
+      {normal && (
+        <Section title="Normal overlay">
+          <Formula label={graphType === 'ECDF' ? 'Normal CDF' : 'Normal density'}>
+            <MathFormula tex={graphType === 'ECDF' ? NORMAL_CDF : NORMAL_DENSITY} />
+          </Formula>
+        </Section>
+      )}
+
+      {(normal || band) && (
+        <Section title="Values">
+          {normal && (
+            <>
+              <Row label={<MathFormula inline tex={String.raw`\hat{\mu}`} />} value={fmt(pe?.mu)} />
+              <Row label={<MathFormula inline tex={String.raw`\hat{\sigma}`} />} value={fmt(pe?.sigma)} />
+            </>
+          )}
           {band && (
             <>
-              <Formula label="DKW band"><MathFormula tex={DKW_BAND} /></Formula>
               <Row label="α" value={fmt(alpha)} />
               <Row label="ε" value={fmt(ecdf_data!.epsilon)} />
             </>
