@@ -27,13 +27,32 @@ describe('ResultTable', () => {
     expect([...container.querySelectorAll('th')].map((th) => th.textContent)).toEqual(['Measure', 'Value'])
   })
 
-  it('prints a group label once per run', () => {
+  it('prints a group label once per run, in one cell spanning the run, tinted like its rows', () => {
     act(() => root.render(<ResultTable caption="Statistics" columns={columns} rows={[
       { group: 'Shape', cells: { measure: 'Skewness', value: '0.10' } },
       { group: 'Shape', cells: { measure: 'Kurtosis', value: '3.00' } },
     ]} />))
-    const firstCells = [...container.querySelectorAll('tbody tr')].map((row) => row.firstElementChild?.textContent)
-    expect(firstCells).toEqual(['Shape', ''])
+    const rows = [...container.querySelectorAll('tbody tr')]
+    const label = rows[0].firstElementChild as HTMLTableCellElement
+    expect(label.textContent).toBe('Shape')
+    expect(label.rowSpan).toBe(2)
+    expect(label.className).toContain('text-amber-400')
+    expect(rows[1].children).toHaveLength(2)
+  })
+
+  it('names the group column when asked', () => {
+    act(() => root.render(<ResultTable caption="Intervals" groupLabel="Interval" columns={columns} rows={[
+      { group: 'Confidence', tint: 'Mean', cells: { measure: 'Mean', value: '1.00' } },
+      { group: 'Confidence', tint: 'Deviation', cells: { measure: 'Deviation', value: '2.00' } },
+    ]} />))
+    expect(container.querySelector('th')?.textContent).toBe('Interval')
+    const rows = [...container.querySelectorAll('tbody tr')] as HTMLElement[]
+    const label = rows[0].firstElementChild as HTMLTableCellElement
+    expect(label.textContent).toBe('Confidence')
+    expect(label.rowSpan).toBe(2)
+    expect(label.className).not.toMatch(/text-(blue|amber)-400/)
+    expect(rows[0].className).toContain('bg-blue-950/50')
+    expect(rows[1].className).toContain('bg-amber-950/50')
   })
 
   it('rows without a group have no tint and no group column', () => {

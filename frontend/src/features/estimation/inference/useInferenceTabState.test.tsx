@@ -324,7 +324,29 @@ describe('Inference student workflow', () => {
     await startRun()
     const titles = [...container.querySelectorAll('[data-panel="notebook"] article h4')].map(node => node.textContent)
     expect(titles.slice(0, 2)).toEqual(['Mean', 'Mean – bootstrap'])
-    expect(panelText('observation')).toContain('Mean – bootstrap:')
+    expect(container.querySelector('[data-panel="observation"] tbody')!.textContent).toContain('Bootstrap (B=500)')
+    expect(panelText('observation')).not.toContain('Mean – bootstrap:')
+  })
+
+  it('shows the intervals table at the top, grouped and tinted like the plots', async () => {
+    await startRun()
+    const observation = container.querySelector('[data-panel="observation"]')!
+    const table = observation.querySelector('table')!
+    const firstPlot = observation.querySelector('[data-plot]')!
+    expect(table.compareDocumentPosition(firstPlot) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect([...table.querySelectorAll('th')].map(cell => cell.textContent))
+      .toEqual(['Interval', 'Statistic', 'Method', 'Estimate', 'Lower', 'Upper'])
+    const rows = [...table.querySelectorAll('tbody tr')] as HTMLElement[]
+    const labels = [...table.querySelectorAll<HTMLTableCellElement>('tbody td[rowspan]')]
+    expect(labels.map(cell => [cell.textContent, cell.rowSpan])).toEqual([['Prediction', 1], ['Confidence', 2]])
+    expect(rows.map(row => row.querySelector('td:not([rowspan])')!.textContent)).toEqual(['Based on the mean', 'Mean', 'Deviation'])
+    expect(rows[0].className).toContain('bg-rose-950/50')
+    expect(rows[1].className).toContain('bg-blue-950/50')
+    expect(rows[2].className).toContain('bg-amber-950/50')
+    expect(rows[1].children[2].textContent).toBe('t (df=4)')
+    expect(rows[1].textContent).toContain('29.000')
+    expect(rows[1].textContent).toContain('31.000')
+    expect(observation.textContent).toContain('95% coverage')
   })
 
   it('shares the observed/CI/PI location scale until zoom is explicitly selected', async () => {

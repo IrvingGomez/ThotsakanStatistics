@@ -1,8 +1,9 @@
 import type { ReactNode } from 'react'
 
 /**
- * Row tints for tables whose rows have a statistic type (Descriptive Statistics). Tables whose rows have
- * no type share the same frame, header and fonts but stay uncolored.
+ * Row tints for tables whose rows have a type: statistic types in Descriptive Statistics, interval kinds in
+ * Statistical Inference (same hues as the interval colors in plot/theme.ts). Tables whose rows have no type
+ * share the same frame, header and fonts but stay uncolored.
  */
 export const TABLE_GROUP_TINTS: Readonly<Record<string, { row: string; text: string; label: string }>> = {
   'Extremes': { row: 'bg-rose-950/50', text: 'text-rose-300', label: 'text-rose-400' },
@@ -10,6 +11,10 @@ export const TABLE_GROUP_TINTS: Readonly<Record<string, { row: string; text: str
   'Central Tendency': { row: 'bg-blue-950/50', text: 'text-blue-300', label: 'text-blue-400' },
   'Dispersion': { row: 'bg-emerald-950/50', text: 'text-emerald-300', label: 'text-emerald-400' },
   'Shape': { row: 'bg-amber-950/50', text: 'text-amber-300', label: 'text-amber-400' },
+  'Prediction': { row: 'bg-rose-950/50', text: 'text-rose-300', label: 'text-rose-400' },
+  'Mean': { row: 'bg-blue-950/50', text: 'text-blue-300', label: 'text-blue-400' },
+  'Median': { row: 'bg-emerald-950/50', text: 'text-emerald-300', label: 'text-emerald-400' },
+  'Deviation': { row: 'bg-amber-950/50', text: 'text-amber-300', label: 'text-amber-400' },
 }
 
 /** Small labels beside a statistic's name, e.g. Robust. One color per meaning, in every table. */
@@ -27,11 +32,12 @@ export function TableTagLabel({ tag, title, dataTag }: { tag: TableTag; title: s
 }
 
 export interface ResultColumn { key: string; label: string; align?: 'left' | 'right' }
-export interface ResultRow { group?: string; cells: Record<string, ReactNode> }
+/** `tint` picks the row color when it differs from the group, e.g. Confidence rows tinted by their quantity. */
+export interface ResultRow { group?: string; tint?: string; cells: Record<string, ReactNode> }
 
 /** The one table look for results. A `group` column is added only when rows carry a group. */
-export default function ResultTable({ caption, columns, rows }: {
-  caption: string; columns: readonly ResultColumn[]; rows: readonly ResultRow[]
+export default function ResultTable({ caption, columns, rows, groupLabel = 'Category' }: {
+  caption: string; columns: readonly ResultColumn[]; rows: readonly ResultRow[]; groupLabel?: string
 }) {
   const grouped = rows.some((row) => row.group)
   const cellAlign = (column: ResultColumn) => column.align === 'right' ? 'text-right font-mono tabular-nums' : 'text-left'
@@ -41,7 +47,7 @@ export default function ResultTable({ caption, columns, rows }: {
         <caption className="sr-only">{caption}</caption>
         <thead className="bg-[var(--color-bg-input)]">
           <tr className="border-b border-[var(--color-border-md)]">
-            {grouped && <th scope="col" className="w-36 px-3 py-2 text-left font-normal text-[var(--color-text-muted)]">Category</th>}
+            {grouped && <th scope="col" className="w-36 px-3 py-2 text-left font-normal text-[var(--color-text-muted)]">{groupLabel}</th>}
             {columns.map((column) => (
               <th key={column.key} scope="col" className={`px-3 py-2 font-normal text-[var(--color-text-muted)] ${column.align === 'right' ? 'text-right' : 'text-left'}`}>{column.label}</th>
             ))}
@@ -49,11 +55,23 @@ export default function ResultTable({ caption, columns, rows }: {
         </thead>
         <tbody>
           {rows.map((row, index) => {
-            const tint = row.group ? TABLE_GROUP_TINTS[row.group] : undefined
-            const firstOfRun = row.group !== undefined && rows[index - 1]?.group !== row.group
+            const tintKey = row.tint ?? row.group
+            const tint = tintKey ? TABLE_GROUP_TINTS[tintKey] : undefined
+            const firstOfRun = row.group === undefined || rows[index - 1]?.group !== row.group
+            // The group label is one cell spanning its run. It takes the run's tint when all its rows share one,
+            // and stays neutral when they differ (e.g. Confidence rows tinted by mean, median and deviation).
+            let labelCell = null
+            if (grouped && firstOfRun) {
+              let span = 1
+              while (row.group !== undefined && rows[index + span]?.group === row.group) span += 1
+              const run = rows.slice(index, index + span)
+              const shared = run.every((other) => (other.tint ?? other.group) === tintKey)
+              const look = shared ? `${tint?.row ?? ''} ${tint?.label ?? 'text-[var(--color-text-muted)]'}` : 'bg-[var(--color-bg-input)] text-[var(--color-text)]'
+              labelCell = <td rowSpan={span} className={`border-r border-[var(--color-border)] px-3 py-1.5 align-middle font-medium ${look}`}>{row.group ?? ''}</td>
+            }
             return (
               <tr key={index} className={`border-b border-[var(--color-border)] last:border-0 ${tint?.row ?? ''}`}>
-                {grouped && <td className={`px-3 py-1.5 font-medium ${tint?.label ?? 'text-[var(--color-text-muted)]'}`}>{firstOfRun ? row.group : ''}</td>}
+                {labelCell}
                 {columns.map((column) => (
                   <td key={column.key} className={`px-3 py-1.5 ${cellAlign(column)} ${tint?.text ?? 'text-[var(--color-text)]'}`}>{row.cells[column.key]}</td>
                 ))}

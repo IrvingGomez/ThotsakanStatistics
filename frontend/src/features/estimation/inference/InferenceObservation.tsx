@@ -3,9 +3,10 @@ import type { IntervalsResponse } from '../../../api/inference'
 import { useMemo } from 'react'
 import type { InferenceState } from './useInferenceTabState'
 import InferenceResultStatus from './InferenceResultStatus'
-import { coveragePercent, intervalRange, parseIntervalRows, pointEstimate, quantityLabel, rowLabel, type IntervalRow } from './inferencePresentation'
+import { coveragePercent, formatInferenceNumber, intervalRange, parseIntervalRows, pointEstimate, quantityLabel, rowLabel, type IntervalRow } from './inferencePresentation'
 import { PLOT_AXIS, PLOT_COLORS, PLOT_CONFIG, baseLayout } from '../../../plot/theme'
 import ResultSection from '../../../components/ResultSection'
+import ResultTable from '../../../components/ResultTable'
 import ResultToolbar from '../../../components/ResultToolbar'
 import { EmptyState } from '../../../components/StatusBanner'
 import { useChartRegistry } from '../../../hooks/useChartRegistry'
@@ -46,11 +47,43 @@ function IntervalPlot({ rows, result, range, colorOf, variable, precision, onRea
       yaxis: { ...AXIS, tickvals: rows.map((_, index) => index), ticktext: rows.map(row => rowLabel(row)), range: [rows.length - 0.4, -0.6] },
     }} useResizeHandler style={{ width: '100%', height }} config={CONFIG}
       onInitialized={onReady} onUpdate={onReady} onPurge={onPurge} />
-    <ul className="text-xs text-[var(--color-text-muted)] px-2 space-y-1 mb-3">
-      {rows.map((row, index) => <li key={row.Statistic + row.Method + index} className="break-words"><strong>{rowLabel(row)}:</strong> {row.Method}</li>)}
-    </ul>
   </>
 }
+const INTERVAL_COLUMNS = [
+  { key: 'statistic', label: 'Statistic' },
+  { key: 'method', label: 'Method' },
+  { key: 'estimate', label: 'Estimate', align: 'right' },
+  { key: 'lower', label: 'Lower', align: 'right' },
+  { key: 'upper', label: 'Upper', align: 'right' },
+] as const
+const CI_GROUPS = ['Mean', 'Median', 'Deviation'] as const
+
+/** What a prediction interval is based on, in the left panel's words. */
+function predictionBasis(interval: IntervalRow): string {
+  const basis = quantityLabel(interval.Statistic)
+  return basis === 'Bootstrap' ? 'Using bootstrap' : 'Based on the ' + (basis === 'IQR' ? 'IQR' : basis.toLowerCase())
+}
+
+/**
+ * One row per interval, in the order of the plots below: prediction, then mean, median and deviation.
+ * Confidence rows are tinted by their quantity, with the same hues as the interval plots.
+ */
+function intervalTableRows(ciRows: IntervalRow[], piRows: IntervalRow[], state: InferenceState) {
+  const row = (group: string, tint: string, statistic: string, interval: IntervalRow, source: IntervalsResponse) => ({ group, tint, cells: {
+    statistic,
+    method: interval.Method,
+    estimate: pointEstimate(interval.Statistic, source.point_estimates) == null ? '—'
+      : formatInferenceNumber(pointEstimate(interval.Statistic, source.point_estimates), state.precision),
+    lower: formatInferenceNumber(interval.Lower, state.precision),
+    upper: formatInferenceNumber(interval.Upper, state.precision),
+  } })
+  return [
+    ...piRows.map(interval => row('Prediction', 'Prediction', predictionBasis(interval), interval, state.piResult!)),
+    ...CI_GROUPS.flatMap(quantity => ciRows.filter(interval => quantityLabel(interval.Statistic) === quantity)
+      .map(interval => row('Confidence', quantity, quantity, interval, state.ciResult!))),
+  ]
+}
+
 export default function InferenceObservation({ state }: { state: InferenceState }) {
   const ciRows = parseIntervalRows(state.ciResult)
   const piRows = parseIntervalRows(state.piResult)
@@ -101,7 +134,13 @@ export default function InferenceObservation({ state }: { state: InferenceState 
     const deviationRows = ciRows.filter(row => quantityLabel(row.Statistic) === 'Deviation')
     const commonRange = intervalRange([...edges, ...locationRows.flatMap(row => [row.Lower, row.Upper]), ...piRows.flatMap(row => [row.Lower, row.Upper])])
     const ciRange = intervalRange(locationRows.flatMap(row => [row.Lower, row.Upper]))
+    const tableRows = intervalTableRows(ciRows, piRows, state)
+    const alpha = state.appliedConfig?.alpha
     content = <div>
+      {tableRows.length > 0 && <ResultSection title="Intervals" note={alpha != null ? coveragePercent(1 - alpha) + ' coverage' : undefined}>
+        <ResultTable caption={'Confidence and prediction intervals for ' + variable} groupLabel="Interval"
+          columns={INTERVAL_COLUMNS} rows={tableRows} />
+      </ResultSection>}
       {centers.length > 0 && <ResultSection title="Observed values">
         <ReactPlotly data={[{ x: centers, y: result.histogram.counts, type: 'bar', marker: { color: PLOT_COLORS.dataSoft }, width: edges[1] - edges[0], hovertemplate: 'Count %{y}<extra></extra>' }]} layout={{ ...BASE_LAYOUT, height: 220, margin: { l: 90, r: 24, b: 48, t: 12 }, xaxis: { ...AXIS, range: commonRange, title: { text: variable, standoff: 8 } }, yaxis: { ...AXIS, title: { text: 'Count' } } }} useResizeHandler style={{ width: '100%', height: 220 }} config={CONFIG}
           onInitialized={registry.register('observed', 'Observed values')}
