@@ -3,6 +3,7 @@
 
 import { useRef, useCallback, useState } from 'react'
 import { useData } from '../../context/DataContext'
+import ExampleDatasets from './ExampleDatasets'
 
 // ─── Drop Zone ────────────────────────────────────────────────────────────────
 
@@ -386,14 +387,17 @@ export default function DataTab() {
         <div>
           <h2 className="text-base font-semibold text-[var(--color-text)]">Dataset</h2>
           <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
-            Upload a CSV file to use across all analysis tabs.
+            Upload a CSV file, or pick an example dataset, to use across all analysis tabs.
             {hasData && ` · ${state.filename}`}
           </p>
         </div>
 
         {/* Upload zone — always visible but compact when data loaded */}
         {!hasData
-          ? <DropZone />
+          ? <>
+              <DropZone />
+              <ExampleDatasets />
+            </>
           : (
             <div>
               {/* Summary chips */}
