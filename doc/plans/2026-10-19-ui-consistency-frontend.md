@@ -154,3 +154,5 @@ Every tab task ends with the same three checks: (1) no hex/rgba literal and no `
 - [ ] **Step 4: Run** the full suite (rerun timeouts with `--maxWorkers=1`) and build → PASS.
 
 **Final checkpoint:** user walks all five tabs; commit; then write the backend plan (items 19–21) and the docs plan (item 22).
+
+**Continued in [`2026-10-23-v1-release.md`](2026-10-23-v1-release.md)** (Tasks 1–7 done; remaining work, v1 scope and backlog).
