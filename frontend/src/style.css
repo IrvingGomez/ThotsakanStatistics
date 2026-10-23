@@ -1,5 +1,12 @@
 @import "tailwindcss";
 
+/* Smallest text in the app: hints, explanations, notebook rows and tables. The same size as the
+   left-panel labels so every explanation stays readable. */
+@theme {
+  --text-xs: 0.875rem;
+  --text-xs--line-height: 1.5;
+}
+
 :root {
   --color-bg-base:    #0b1020;
   --color-bg-panel:   #111827;
@@ -95,7 +102,7 @@ html, body, #app {
 .panel-collapse {
   display: block;
   margin: 0 0 12px auto;
-  font-size: 12px;
+  font-size: 14px;
   color: var(--color-text-muted);
   text-decoration: underline;
   text-underline-offset: 3px;
@@ -122,7 +129,6 @@ html, body, #app {
   background: var(--color-bg-panel);
 }
 .lab-bench :is(select, input) { max-width: 100%; min-width: 0; }
-.lab-bench [class*="text-[10px]"], .lab-bench [class*="text-[11px]"] { font-size: 12px; }
 :where(button, input, select, summary, a, [tabindex]):focus-visible {
   outline: 2px solid #a5b4fc;
   outline-offset: 3px;

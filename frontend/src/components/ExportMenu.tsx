@@ -71,7 +71,7 @@ export default function ExportMenu({ handlers, ready = true, disabledReason }: E
           disabled:cursor-not-allowed disabled:opacity-40`}>
         <span aria-hidden="true">↓</span>
         <span>{busy ? `Exporting ${busy.toUpperCase()}…` : 'Export'}</span>
-        <span aria-hidden="true" className="text-[10px] opacity-70">{open ? '▲' : '▼'}</span>
+        <span aria-hidden="true" className="text-xs opacity-70">{open ? '▲' : '▼'}</span>
       </button>
 
       {open && <div id={disclosureId} aria-label="Export formats"
@@ -80,7 +80,7 @@ export default function ExportMenu({ handlers, ready = true, disabledReason }: E
           type="button" onClick={() => void run(item.key)}
           className="flex w-full flex-col gap-0.5 px-4 py-2.5 text-left hover:bg-white/5 focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-[var(--color-accent)]">
           <span className="text-xs text-[var(--color-text)]">{item.label}</span>
-          <span className="text-[10px] text-[var(--color-text-muted)]">{item.description}</span>
+          <span className="text-xs text-[var(--color-text-muted)]">{item.description}</span>
         </button>)}
       </div>}
       {error && <p role="alert" className="absolute right-0 top-full z-40 mt-2 w-64 rounded border border-red-500/40 bg-red-950 px-3 py-2 text-xs text-red-200">{error}</p>}
