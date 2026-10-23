@@ -39,7 +39,7 @@ function DropZone() {
       <input
         ref={inputRef}
         type="file"
-        accept=".csv,.tsv,.txt"
+        accept=".csv"
         className="hidden"
         onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f) }}
       />
@@ -49,7 +49,7 @@ function DropZone() {
           Drop a CSV file here, or click to browse
         </p>
         <p className="text-xs text-[var(--color-text-muted)] mt-1">
-          .csv, .tsv, .txt · First row must be headers
+          .csv, comma-separated · First row must be headers
         </p>
       </div>
       {state.status === 'loading' && (

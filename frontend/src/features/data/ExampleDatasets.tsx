@@ -51,7 +51,7 @@ export default function ExampleDatasets() {
     <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-panel)]">
       <button type="button" aria-expanded={open} onClick={() => setOpen((value) => !value)}
         className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left text-sm font-semibold text-[var(--color-text)]">
-        <span>Example datasets <span className="font-normal text-[var(--color-text-muted)]">· no file needed</span></span>
+        <span>Example datasets</span>
         <span aria-hidden="true" className="text-[var(--color-text-muted)]">{open ? '▲' : '▼'}</span>
       </button>
       {open && (

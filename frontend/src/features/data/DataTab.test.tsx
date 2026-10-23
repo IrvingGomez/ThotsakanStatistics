@@ -13,6 +13,8 @@ it('offers the example datasets beside the upload area while no dataset is loade
   const root = createRoot(container)
   await act(async () => root.render(<DataTab />))
   expect(container.textContent).toContain('Drop a CSV file here')
+  expect(container.textContent).not.toMatch(/tsv|txt/)
+  expect(container.querySelector('input[type="file"]')?.getAttribute('accept')).toBe('.csv')
   expect(container.textContent).toContain('Example datasets')
   await act(async () => root.unmount())
 })
