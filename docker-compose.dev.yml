@@ -38,6 +38,7 @@ services:
       - frontend-node-modules:/app/node_modules
     environment:
       VITE_PROXY_TARGET: http://backend:8000
+      VITE_USE_POLLING: "true"
     command: sh dev-start.sh
     ports:
       - "5173:5173"
