@@ -222,6 +222,8 @@ describe('Inference student workflow', () => {
     expect(panelText('observation')).toContain('Partial result — only successful intervals are shown.')
     expect(panelText('observation')).toContain(failed === 'CI' ? 'Confidence intervals failed' : 'Prediction intervals failed')
     expect(panelText('notebook')).not.toContain('Couldn’t update results')
+    // Freeze the clock so the automatic update for the edit cannot fire before the checks on a slow run.
+    vi.useFakeTimers()
     await act(async () => state.setDraft({ alphaStr: '0.1' }))
     const retry = [...container.querySelectorAll<HTMLButtonElement>('[data-panel="observation"] button')].find(button => button.textContent === 'Retry')!
     await act(async () => retry.click())
@@ -322,8 +324,9 @@ describe('Inference student workflow', () => {
     })
     await act(async () => state.setDraft({ selected: withBootstrap('ci.mean.boot') }))
     await startRun()
-    const titles = [...container.querySelectorAll('[data-panel="notebook"] article h4')].map(node => node.textContent)
-    expect(titles.slice(0, 2)).toEqual(['Mean', 'Mean – bootstrap'])
+    const notebook = panelText('notebook')!
+    expect(notebook.indexOf('Mean · t')).toBeGreaterThanOrEqual(0)
+    expect(notebook.indexOf('Mean · bootstrap')).toBeGreaterThan(notebook.indexOf('Mean · t'))
     expect(container.querySelector('[data-panel="observation"] tbody')!.textContent).toContain('Bootstrap (B=500)')
     expect(panelText('observation')).not.toContain('Mean – bootstrap:')
   })
@@ -365,11 +368,51 @@ describe('Inference student workflow', () => {
     expect(locationRanges()[2]).not.toEqual(locationRanges()[0])
     expect(panelText('observation')).toContain('Zoomed to confidence intervals — different x-axis scale')
     expect(state.isDirty).toBe(false)
-    const cards = container.querySelectorAll('[data-panel="notebook"] article')
-    expect(cards[0].textContent).toContain('Lower bound29.000')
-    expect(cards[0].textContent).toContain('Upper bound31.000')
-    expect(cards[0].querySelector('details')?.open).toBe(false)
     expect(container.querySelector('[data-panel="notebook"] table')).toBeNull()
+  })
+
+  it('sizes the interval plots margin to their row labels so long ones are not cut', async () => {
+    await startRun()
+    const layouts = [...container.querySelectorAll<HTMLElement>('[data-layout]')].map(element => JSON.parse(element.dataset.layout!))
+    const intervalPlots = layouts.filter(layout => layout.yaxis.ticktext)
+    expect(intervalPlots.length).toBeGreaterThan(0)
+    for (const layout of intervalPlots) expect(layout.yaxis.automargin).toBe(true)
+  })
+
+  it('sets the mean and median plot apart the same way only while it is zoomed', async () => {
+    await startRun()
+    const location = () => [...container.querySelectorAll('[data-panel="observation"] section')]
+      .find(node => node.querySelector('h3')?.textContent?.startsWith('Mean and median confidence intervals'))!
+    expect(location().className).not.toContain('border-t')
+    expect(location().querySelector('h3')!.textContent).not.toContain('Different scale')
+    const zoom = [...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'Zoom to intervals')!
+    await act(async () => zoom.click())
+    expect(location().className).toContain('border-t')
+    expect(location().querySelector('h3')!.textContent).toContain('Different scale')
+  })
+
+  it('sets the deviation plot apart: divider, a Different scale tag and a spread axis title', async () => {
+    await startRun()
+    const section = [...container.querySelectorAll('[data-panel="observation"] section')]
+      .find(node => node.querySelector('h3')?.textContent?.startsWith('Deviation confidence intervals'))!
+    expect(section.className).toContain('border-t')
+    expect(section.querySelector('h3')!.textContent).toContain('Different scale')
+    const layout = JSON.parse(section.querySelector<HTMLElement>('[data-layout]')!.dataset.layout!)
+    expect(layout.xaxis.title.text).toBe('Deviation σ of Breath (spread, in data units)')
+    expect(layout.xaxis.range).toBeUndefined()
+  })
+
+  it('shows in the right panel the formula of each interval shown, not its numbers', async () => {
+    await startRun()
+    const notebook = container.querySelector('[data-panel="notebook"]')!
+    const text = notebook.textContent!
+    const headings = [...notebook.querySelectorAll('h3')].map(node => node.textContent)
+    expect(headings).toEqual(['Confidence intervals', 'Prediction intervals', 'Notation'])
+    for (const label of ['Mean · t', 'Deviation · χ²', 'Based on the mean · t']) expect(text).toContain(label)
+    expect(text).not.toContain('Lower bound')
+    expect(notebook.querySelector('article')).toBeNull()
+    expect(notebook.querySelectorAll('.katex').length).toBeGreaterThan(3)
+    expect(notebook.querySelector('.katex-error')).toBeNull()
   })
 
   it('shows alpha in regions only with the CI box, and leaves the plot window to the backend', async () => {
@@ -416,7 +459,8 @@ describe('Inference follows the interaction contract', () => {
   })
 
   it('reports status only in the center panel', async () => {
-    vi.mocked(inferenceApi.computeCI).mockRejectedValueOnce(new Error('Service unavailable'))
+    // Every CI call fails, so an automatic update that starts before the explicit run cannot use up the failure.
+    vi.mocked(inferenceApi.computeCI).mockRejectedValue(new Error('Service unavailable'))
     await act(async () => state.setDraft({ alphaStr: '0.1' }))
     await startRun()
     expect(panelText('observation')).toContain('Couldn’t update results')

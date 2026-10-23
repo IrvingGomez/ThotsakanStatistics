@@ -1,30 +1,30 @@
-﻿import type { ConfidenceRegionsResponse, IntervalsResponse } from '../../../api/inference'
+import type { ConfidenceRegionsResponse, IntervalsResponse } from '../../../api/inference'
 import type { InferenceState } from './useInferenceTabState'
-import { coveragePercent, formatInferenceNumber, parseIntervalRows, pointEstimate, quantityLabel, rowLabel } from './inferencePresentation'
-import { ResultCard, Section } from '../../../components/notebook/NotebookParts'
+import { coveragePercent, formatInferenceNumber, parseIntervalRows } from './inferencePresentation'
+import { intervalFormula, NOTATION } from './inferenceFormulas'
+import { Formula, Section } from '../../../components/notebook/NotebookParts'
+import MathFormula from '../../../components/MathFormula'
+import { estimatorLabel } from '../../../labels'
 import { EmptyState } from '../../../components/StatusBanner'
 
-function IntervalCards({ title, result, precision }: { title: string; result: IntervalsResponse; precision: number }) {
+/** The formula of each interval the table shows, in the order of the table. */
+function IntervalFormulas({ title, kind, result, sigmaEstimator }: {
+  title: string; kind: 'confidence' | 'prediction'; result: IntervalsResponse; sigmaEstimator: string
+}) {
   const rows = parseIntervalRows(result)
+  if (!rows.length) return null
   return <Section title={title}>
-    {!rows.length && <p role="status" className="text-sm">No interval rows were returned for this result.</p>}
-    <div className="grid gap-3">
-      {rows.map((row, index) => {
-        const estimate = pointEstimate(row.Statistic, result.point_estimates)
-        return <ResultCard key={row.Statistic + '-' + row.Method + '-' + index} title={rowLabel(row) + (title === 'Prediction intervals' ? ' method' : '')}>
-          <dl className="grid grid-cols-2 gap-3 mt-3 text-sm">
-            <div className="min-w-0"><dt className="text-xs text-[var(--color-text-muted)]">Lower bound</dt><dd className="font-mono break-all mt-1">{formatInferenceNumber(row.Lower, precision)}</dd></div>
-            <div className="min-w-0"><dt className="text-xs text-[var(--color-text-muted)]">Upper bound</dt><dd className="font-mono break-all mt-1">{formatInferenceNumber(row.Upper, precision)}</dd></div>
-          </dl>
-          <p className="text-xs text-[var(--color-text-muted)] break-words mt-3">Method: {row.Method}</p>
-          <details className="text-xs text-[var(--color-text-muted)] mt-3">
-            <summary className="cursor-pointer">Interval details</summary>
-            <p className="mt-2 break-words">{row.Statistic} · {row['Interval Type'] ?? title}</p>
-            {estimate !== null && <p className="mt-1">Sample {quantityLabel(row.Statistic).toLowerCase()}: <span className="font-mono break-all">{formatInferenceNumber(estimate, precision)}</span></p>}
-          </details>
-        </ResultCard>
-      })}
-    </div>
+    {rows.map((row, index) => {
+      const formula = intervalFormula(kind, row, sigmaEstimator)
+      return <Formula key={formula.label + index} label={formula.label}><MathFormula tex={formula.tex} /></Formula>
+    })}
+  </Section>
+}
+function Notation({ sigmaEstimator }: { sigmaEstimator: string }) {
+  return <Section title="Notation">
+    {NOTATION.map((item) => <Formula key={item.tex} label={item.namesEstimator ? `${item.text} (${estimatorLabel(sigmaEstimator)})` : item.text}>
+      <MathFormula tex={item.tex} />
+    </Formula>)}
   </Section>
 }
 function RegionSummary({ result, precision, showCiBox }: { result: ConfidenceRegionsResponse; precision: number; showCiBox: boolean }) {
@@ -47,10 +47,12 @@ function RegionSummary({ result, precision, showCiBox }: { result: ConfidenceReg
 }
 export default function InferenceNotebook({ state }: { state: InferenceState }) {
   const hasResult = !!(state.ciResult || state.piResult || state.regionResult)
+  const sigmaEstimator = state.appliedConfig?.sigma_estimator ?? 'Deviation (1 ddof)'
   return <div className="analysis-panel p-4">
     {!hasResult && !state.isComputing && !state.error && <EmptyState loaded={!!state.sessionId} hasData={state.hasData} compact />}
-    {state.ciResult && <IntervalCards title="Confidence intervals" result={state.ciResult} precision={state.precision} />}
-    {state.piResult && <IntervalCards title="Prediction intervals" result={state.piResult} precision={state.precision} />}
+    {state.ciResult && <IntervalFormulas title="Confidence intervals" kind="confidence" result={state.ciResult} sigmaEstimator={sigmaEstimator} />}
+    {state.piResult && <IntervalFormulas title="Prediction intervals" kind="prediction" result={state.piResult} sigmaEstimator={sigmaEstimator} />}
+    {(state.ciResult || state.piResult) && <Notation sigmaEstimator={sigmaEstimator} />}
     {state.regionResult && <RegionSummary result={state.regionResult} precision={state.precision} showCiBox={state.appliedConfig?.add_ci_box ?? true} />}
   </div>
 }

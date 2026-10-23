@@ -44,7 +44,8 @@ function IntervalPlot({ rows, result, range, colorOf, variable, precision, onRea
     <ReactPlotly data={bracketTraces(rows, result.point_estimates, colorOf, precision)} layout={{
       ...BASE_LAYOUT, height, margin: { l: 90, r: 24, b: 48, t: 10 },
       xaxis: { ...AXIS, range, title: { text: variable, standoff: 8 } },
-      yaxis: { ...AXIS, tickvals: rows.map((_, index) => index), ticktext: rows.map(row => rowLabel(row)), range: [rows.length - 0.4, -0.6] },
+      // automargin widens the left margin to fit long labels such as "Mean – bootstrap".
+      yaxis: { ...AXIS, automargin: true, tickvals: rows.map((_, index) => index), ticktext: rows.map(row => rowLabel(row)), range: [rows.length - 0.4, -0.6] },
     }} useResizeHandler style={{ width: '100%', height }} config={CONFIG}
       onInitialized={onReady} onUpdate={onReady} onPurge={onPurge} />
   </>
@@ -57,6 +58,9 @@ const INTERVAL_COLUMNS = [
   { key: 'upper', label: 'Upper', align: 'right' },
 ] as const
 const CI_GROUPS = ['Mean', 'Median', 'Deviation'] as const
+
+/** Marks a plot whose x-axis is not the data axis shared by the plots above it. */
+const DIFFERENT_SCALE = <span className="rounded border border-amber-400/40 bg-amber-500/20 px-1.5 py-0.5 text-xs font-semibold text-amber-300">Different scale</span>
 
 /** What a prediction interval is based on, in the left panel's words. */
 function predictionBasis(interval: IntervalRow): string {
@@ -152,13 +156,15 @@ export default function InferenceObservation({ state }: { state: InferenceState 
           onReady={registry.register('prediction', 'Prediction intervals')} onPurge={registry.unregister('prediction')} />
       </ResultSection>}
       {locationRows.length > 0 && <ResultSection title="Mean and median confidence intervals"
+        divided={state.draft.zoomCI} tag={state.draft.zoomCI ? DIFFERENT_SCALE : undefined}
         note={state.draft.zoomCI ? 'Zoomed to confidence intervals — different x-axis scale from observed values and predictions.' : 'Same x-axis scale as observed values and prediction intervals.'}
         actions={<button type="button" aria-pressed={state.draft.zoomCI} onClick={() => state.setDraft({ zoomCI: !state.draft.zoomCI })} className="px-3 py-2 rounded-md border border-[var(--color-border-md)] text-xs">{state.draft.zoomCI ? 'Use common scale' : 'Zoom to intervals'}</button>}>
         <IntervalPlot rows={locationRows} result={state.ciResult!} range={state.draft.zoomCI ? ciRange : commonRange} colorOf={colorOfRow} variable={variable} precision={state.precision}
           onReady={registry.register('location', 'Mean and median confidence intervals')} onPurge={registry.unregister('location')} />
       </ResultSection>}
-      {deviationRows.length > 0 && <ResultSection title="Deviation confidence intervals" note="Spread of the data · separate deviation axis">
-        <IntervalPlot rows={deviationRows} result={state.ciResult!} colorOf={colorOfRow} variable={'Deviation of ' + variable + ' (data units)'} precision={state.precision}
+      {deviationRows.length > 0 && <ResultSection title="Deviation confidence intervals" divided tag={DIFFERENT_SCALE}
+        note="Measures the spread of the data, not its position; this axis is not the one above.">
+        <IntervalPlot rows={deviationRows} result={state.ciResult!} colorOf={colorOfRow} variable={'Deviation σ of ' + variable + ' (spread, in data units)'} precision={state.precision}
           onReady={registry.register('deviation', 'Deviation confidence intervals')} onPurge={registry.unregister('deviation')} />
       </ResultSection>}
     </div>
