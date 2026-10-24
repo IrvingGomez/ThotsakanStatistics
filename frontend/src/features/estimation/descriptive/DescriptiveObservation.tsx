@@ -10,7 +10,7 @@ import ResultToolbar from '../../../components/ResultToolbar'
 import ResultSection from '../../../components/ResultSection'
 import ResultTable, { TableTagLabel } from '../../../components/ResultTable'
 import { EmptyState } from '../../../components/StatusBanner'
-import { PLOT_AXIS, PLOT_COLORS, PLOT_CONFIG, baseLayout } from '../../../plot/theme'
+import { HISTOGRAM_MARKER, PLOT_AXIS, PLOT_COLORS, PLOT_CONFIG, baseLayout } from '../../../plot/theme'
 import { downloadCSV } from '../../../utils/exportCSV'
 import { downloadChartsPNG } from '../../../utils/exportPNG'
 import { downloadPDF } from '../../../utils/exportPDF'
@@ -107,7 +107,7 @@ function DescriptiveCharts({ result, colName, precision, onReady, onPurge }: {
       x: histX,
       y: histogram.counts,
       width: histWidth,
-      marker: { color: PLOT_COLORS.data, opacity: 0.85 },
+      marker: HISTOGRAM_MARKER,
       // Pass bin edges so the hover template can show the range instead of the center
       customdata: histogram.binEdges.slice(0, -1).map((lo, i) => [
         parseFloat(lo.toPrecision(4)),

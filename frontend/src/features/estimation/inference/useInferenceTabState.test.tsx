@@ -7,7 +7,7 @@ import InferenceNotebook from './InferenceNotebook'
 import InferenceObservation from './InferenceObservation'
 import { useInferenceTabState, type InferenceState } from './useInferenceTabState'
 import { DEFAULT_SELECTED } from './inferenceOptions'
-import { PLOT_COLORS, regionLineColor } from '../../../plot/theme'
+import { HISTOGRAM_MARKER, PLOT_COLORS, regionLineColor } from '../../../plot/theme'
 
 function dataFixture() {
   return {
@@ -330,6 +330,12 @@ describe('Inference student workflow', () => {
     expect(notebook.indexOf('Mean · bootstrap')).toBeGreaterThan(notebook.indexOf('Mean · t'))
     expect(container.querySelector('[data-panel="observation"] tbody')!.textContent).toContain('Bootstrap (B=500)')
     expect(panelText('observation')).not.toContain('Mean – bootstrap:')
+  })
+
+  it('draws the observed values in the soft histogram look shared by every Statistics tab', async () => {
+    await startRun()
+    const observed = container.querySelector<HTMLElement>('[data-panel="observation"] [data-plot]')!
+    expect(JSON.parse(observed.dataset.plot!)[0].marker).toEqual(HISTOGRAM_MARKER)
   })
 
   it('shows the intervals table at the top, grouped and tinted like the plots', async () => {

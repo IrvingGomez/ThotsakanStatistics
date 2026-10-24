@@ -2,7 +2,7 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { GraphicalResponse } from '../../../api/graphical'
-import { PLOT_COLORS } from '../../../plot/theme'
+import { HISTOGRAM_MARKER, PLOT_COLORS } from '../../../plot/theme'
 import GraphicalObservation from './GraphicalObservation'
 
 vi.mock('plotly.js-basic-dist-min', () => ({ default: {} }))
@@ -73,14 +73,21 @@ describe('Graphical observation', () => {
     expect(container.textContent).toContain('Choose the settings in the left panel to see results.')
   })
 
-  it('draws data in the shared theme color', async () => {
+  it('draws the histogram in the soft look shared by every Statistics tab', async () => {
     const { traces } = await draw({ ...base, histogram_data: { bins: [0, 1], counts: [4], densities: [1] } }, 'Histogram')
-    expect(traces[0].marker.color).toBe(PLOT_COLORS.data)
+    expect(traces[0].marker).toEqual(HISTOGRAM_MARKER)
+  })
+
+  it('draws the KDE in purple, near the data, and the normal density in orange, the model compared against', async () => {
+    const { traces } = await draw({ ...base, histogram_data: { bins: [0, 1], counts: [4], densities: [1] },
+      kde_curve: { x: [0, 1], y: [0.5, 0.5] }, normal_curve: { x: [0, 1], y: [0.4, 0.4], mu: 0.5, sigma: 1 } }, 'Histogram')
+    expect(traces.find(trace => trace.name === 'KDE')!.line.color).toBe(PLOT_COLORS.fit)
+    expect(traces.find(trace => trace.name === 'Normal density')!.line).toEqual({ color: PLOT_COLORS.normal, width: 2.5, dash: 'longdash' })
   })
 
   it('draws the ECDF as a step line with its band and keeps the 0–1 axis', async () => {
     const { traces, layout } = await draw({ ...base, ecdf_data: { x: [1, 2], y: [0.5, 1], epsilon: 0.2, lower: [0.3, 0.8], upper: [0.7, 1] } }, 'ECDF')
-    expect(traces.at(-1)).toMatchObject({ name: 'ECDF', line: { shape: 'hv' } })
+    expect(traces.at(-1)).toMatchObject({ name: 'ECDF', mode: 'lines', line: { shape: 'hv', width: 1.5 } })
     expect(traces.some(trace => trace.name === 'DKW band')).toBe(true)
     expect(layout.yaxis.range).toEqual([0, 1.05])
   })

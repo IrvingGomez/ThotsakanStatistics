@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { TABLE_TINTS } from './theme'
+import { PLOT_COLORS, TABLE_TINTS } from './theme'
 
 const hue = (group: keyof typeof TABLE_TINTS) => TABLE_TINTS[group].row.match(/^bg-(\w+)-950/)![1]
 
@@ -19,5 +19,12 @@ describe('table tints', () => {
       const name = hue(group as keyof typeof TABLE_TINTS)
       expect(tint, group).toEqual({ row: `bg-${name}-950/50`, text: `text-${name}-300`, label: `text-${name}-400` })
     }
+  })
+})
+
+describe('plot colors', () => {
+  it('draw the normal model in orange and the KDE in purple', () => {
+    expect(PLOT_COLORS.normal).toBe('#fb923c')
+    expect(PLOT_COLORS.fit).toBe('#c084fc')
   })
 })

@@ -15,7 +15,7 @@ import { downloadCSV } from '../../../utils/exportCSV'
 import { downloadPDF } from '../../../utils/exportPDF'
 import { exportFilename } from '../../../utils/exportFilename'
 import { useChartRegistry } from '../../../hooks/useChartRegistry'
-import { PLOT_AXIS, PLOT_COLORS, PLOT_CONFIG, barWidth, baseLayout } from '../../../plot/theme'
+import { HISTOGRAM_MARKER, PLOT_AXIS, PLOT_COLORS, PLOT_CONFIG, barWidth, baseLayout } from '../../../plot/theme'
 
 const Plot = createPlotlyComponent(Plotly)
 
@@ -26,7 +26,7 @@ const C_MAIN = PLOT_COLORS.data
 const C_KDE = PLOT_COLORS.fit
 const C_BAND = PLOT_COLORS.dataBand
 const C_RUG = PLOT_COLORS.rug
-const C_NORMAL = PLOT_COLORS.reference
+const C_NORMAL = PLOT_COLORS.normal
 
 const BIN_COLUMNS = [
   { key: 'lower', label: 'Lower bound', align: 'right' },
@@ -73,7 +73,7 @@ export default function GraphicalObservation({
       const { x, width } = barsFromEdges(bins, densities)
       out.push({
         type: 'bar', x, y: densities, width,
-        marker: { color: C_MAIN, opacity: 0.5, line: { color: C_MAIN, width: 1 } },
+        marker: HISTOGRAM_MARKER,
         name: 'Density',
         customdata: counts.map((count, index) => [bins[index], bins[index + 1], count]),
         hovertemplate: 'Bin: %{customdata[0]:.4g} to %{customdata[1]:.4g}<br>Count: %{customdata[2]}<br>Density: %{y:.4g}<extra></extra>',
@@ -105,9 +105,8 @@ export default function GraphicalObservation({
         })
       }
       out.push({
-        type: 'scatter', mode: 'lines+markers', x, y,
-        line: { shape: 'hv', color: C_MAIN, width: 2 },
-        marker: { color: C_MAIN, size: 4 }, name: 'ECDF',
+        type: 'scatter', mode: 'lines', x, y,
+        line: { shape: 'hv', color: C_MAIN, width: 1.5 }, name: 'ECDF',
         hovertemplate: '%{x:.4g}<br>F(x) = %{y:.4g}<extra></extra>',
       })
     }
@@ -134,7 +133,7 @@ export default function GraphicalObservation({
       out.push({
         type: 'scatter', mode: 'lines',
         x: result.normal_curve.x, y: result.normal_curve.y,
-        line: { color: C_NORMAL, width: 2, dash: 'dash' },
+        line: { color: C_NORMAL, width: 2.5, dash: 'longdash' },
         name: graphType === 'ECDF' ? 'Normal CDF' : 'Normal density',
         hovertemplate: '%{x:.4g}<br>%{y:.4g}<extra></extra>',
       })

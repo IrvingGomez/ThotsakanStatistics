@@ -4,7 +4,7 @@ import { useMemo } from 'react'
 import type { InferenceState } from './useInferenceTabState'
 import InferenceResultStatus from './InferenceResultStatus'
 import { coveragePercent, formatInferenceNumber, intervalRange, parseIntervalRows, pointEstimate, quantityLabel, rowLabel, type IntervalRow } from './inferencePresentation'
-import { PLOT_AXIS, PLOT_COLORS, PLOT_CONFIG, baseLayout, regionLineColor } from '../../../plot/theme'
+import { HISTOGRAM_MARKER, PLOT_AXIS, PLOT_COLORS, PLOT_CONFIG, baseLayout, regionLineColor } from '../../../plot/theme'
 import ResultSection from '../../../components/ResultSection'
 import ResultTable from '../../../components/ResultTable'
 import ResultToolbar from '../../../components/ResultToolbar'
@@ -158,7 +158,7 @@ export default function InferenceObservation({ state }: { state: InferenceState 
           columns={INTERVAL_COLUMNS} rows={tableRows} />
       </ResultSection>}
       {centers.length > 0 && <ResultSection title="Observed values">
-        <ReactPlotly data={[{ x: centers, y: result.histogram.counts, type: 'bar', marker: { color: PLOT_COLORS.dataSoft }, width: edges[1] - edges[0], hovertemplate: 'Count %{y}<extra></extra>' }]} layout={{ ...BASE_LAYOUT, height: 220, margin: { l: 90, r: 24, b: 48, t: 12 }, xaxis: { ...AXIS, range: commonRange, title: { text: variable, standoff: 8 } }, yaxis: { ...AXIS, title: { text: 'Count' } } }} useResizeHandler style={{ width: '100%', height: 220 }} config={CONFIG}
+        <ReactPlotly data={[{ x: centers, y: result.histogram.counts, type: 'bar', marker: HISTOGRAM_MARKER, width: edges[1] - edges[0], hovertemplate: 'Count %{y}<extra></extra>' }]} layout={{ ...BASE_LAYOUT, height: 220, margin: { l: 90, r: 24, b: 48, t: 12 }, xaxis: { ...AXIS, range: commonRange, title: { text: variable, standoff: 8 } }, yaxis: { ...AXIS, title: { text: 'Count' } } }} useResizeHandler style={{ width: '100%', height: 220 }} config={CONFIG}
           onInitialized={registry.register('observed', 'Observed values')}
           onUpdate={registry.register('observed', 'Observed values')}
           onPurge={registry.unregister('observed')} />

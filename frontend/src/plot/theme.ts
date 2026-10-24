@@ -6,7 +6,8 @@
  * Color rule (Irving Gomez, 2026-10-24): within one tab a color has one meaning; each tab assigns the
  * palette where it reads best, so a hue may mean different things in different tabs (rose is Extremes in
  * Descriptive, prediction in Inference). In every plot the mean is blue, the median green, the deviation
- * amber and prediction rose. Plots and tables take their colors from this file only.
+ * amber and prediction rose, and the normal model each sample is compared against is orange. Plots and
+ * tables take their colors from this file only.
  */
 export const PLOT_COLORS = {
   /** Observed data: histogram bars, ECDF, empirical PMF, box plot. */
@@ -14,8 +15,10 @@ export const PLOT_COLORS = {
   dataSoft: 'rgba(129,140,248,0.45)',
   /** Translucent fill behind data, e.g. the ECDF confidence band. */
   dataBand: 'rgba(129,140,248,0.25)',
-  /** Smoothed/fitted overlays: KDE. */
-  fit: '#c4b5fd',
+  /** KDE: purple, close to the data color, because it is another estimate of the same distribution. */
+  fit: '#c084fc',
+  /** The normal model the data are compared against (normal density / CDF); kept for goodness-of-fit. */
+  normal: '#fb923c',
   /** Reference curves: normal density / CDF, null distribution. */
   reference: '#e5e7eb',
   referenceMuted: '#9ca3af',
@@ -78,7 +81,10 @@ export const TABLE_TINTS = {
   'Deviation': { row: 'bg-amber-950/50', text: 'text-amber-300', label: 'text-amber-400' },
 } as const satisfies Record<string, { row: string; text: string; label: string }>
 
-export const PLOT_FONT ={ color: PLOT_COLORS.text, size: 12 } as const
+/** Histogram bars of observed data, the same soft look in every Statistics tab so lines drawn over them stand out. */
+export const HISTOGRAM_MARKER = { color: PLOT_COLORS.dataSoft } as const
+
+export const PLOT_FONT = { color: PLOT_COLORS.text, size: 12 } as const
 
 export const PLOT_AXIS = {
   gridcolor: PLOT_COLORS.grid,

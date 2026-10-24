@@ -3,11 +3,12 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DescriptiveResult, StatRow } from '../../../api/descriptive'
 import DescriptiveObservation from './DescriptiveObservation'
+import { HISTOGRAM_MARKER } from '../../../plot/theme'
 import type { DescriptiveConfig } from './useDescriptiveTabState'
 
 interface Shape { type: string; x0: number; x1: number; y0: number; y1: number; line: { color: string; dash?: string } }
 interface Layout { annotations?: unknown[]; shapes?: Shape[] }
-const plot = vi.hoisted(() => ({ layout: null as null | Layout, data: [] as { type: string }[] }))
+const plot = vi.hoisted(() => ({ layout: null as null | Layout, data: [] as { type: string; marker?: unknown }[] }))
 vi.mock('react-plotly.js', () => ({ default: (props: { layout: Layout; data: { type: string }[] }) => { plot.layout = props.layout; plot.data = props.data; return null } }))
 vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} })
 
@@ -75,6 +76,11 @@ describe('Descriptive distribution chart', () => {
     const legend = container.querySelector('[aria-label="Plot legend"]')!
     const items = [...legend.querySelectorAll('li')].map((li) => li.textContent)
     expect(items).toEqual(['Mean 1.00', 'Median 1.50', 'Box Q1 1.11 – Q3 2.22', 'Whiskers 0.00 – 3.00', 'Outliers 2'])
+  })
+
+  it('draws the histogram soft, so the mean and median lines stand out', () => {
+    render(true)
+    expect(plot.data.find((trace) => trace.type === 'bar')!.marker).toEqual(HISTOGRAM_MARKER)
   })
 
   it('draws the mean and median over the histogram and again across the box, with a blank gap between', () => {
