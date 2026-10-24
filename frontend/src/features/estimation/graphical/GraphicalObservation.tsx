@@ -1,5 +1,5 @@
 // features/estimation/graphical/GraphicalObservation.tsx
-// Centre panel: the plot itself. Histogram / empirical PMF / ECDF with the
+// Centre panel: the plot itself. Histogram / ECDF with the
 // requested overlays.
 
 import { useCallback, useMemo } from 'react'
@@ -7,7 +7,6 @@ import createPlotlyComponent from 'react-plotly.js/factory'
 import Plotly from 'plotly.js-basic-dist-min'
 import type { GraphicalResponse } from '../../../api/graphical'
 import ResultSection from '../../../components/ResultSection'
-import ResultTable from '../../../components/ResultTable'
 import ResultToolbar from '../../../components/ResultToolbar'
 import { EmptyState } from '../../../components/StatusBanner'
 import { downloadChartsPNG } from '../../../utils/exportPNG'
@@ -15,7 +14,7 @@ import { downloadCSV } from '../../../utils/exportCSV'
 import { downloadPDF } from '../../../utils/exportPDF'
 import { exportFilename } from '../../../utils/exportFilename'
 import { useChartRegistry } from '../../../hooks/useChartRegistry'
-import { HISTOGRAM_MARKER, PLOT_AXIS, PLOT_COLORS, PLOT_CONFIG, barWidth, baseLayout } from '../../../plot/theme'
+import { HISTOGRAM_MARKER, PLOT_AXIS, PLOT_COLORS, PLOT_CONFIG, baseLayout } from '../../../plot/theme'
 
 const Plot = createPlotlyComponent(Plotly)
 
@@ -25,15 +24,7 @@ const CHART_ORDER = ['graphical'] as const
 const C_MAIN = PLOT_COLORS.data
 const C_KDE = PLOT_COLORS.fit
 const C_BAND = PLOT_COLORS.dataBand
-const C_RUG = PLOT_COLORS.rug
 const C_NORMAL = PLOT_COLORS.normal
-
-const BIN_COLUMNS = [
-  { key: 'lower', label: 'Lower bound', align: 'right' },
-  { key: 'upper', label: 'Upper bound', align: 'right' },
-  { key: 'count', label: 'Count', align: 'right' },
-  { key: 'density', label: 'Density', align: 'right' },
-] as const
 
 const AXIS = PLOT_AXIS
 const CONFIG = PLOT_CONFIG
@@ -80,18 +71,6 @@ export default function GraphicalObservation({
       })
     }
 
-    if (result.pmf_data) {
-      const { values, probs } = result.pmf_data
-      // One bar per observed value, as in the Common Distributions tab. Observed values can be uneven
-      // or non-integer, so the width follows the smallest gap between them.
-      const width = barWidth(values)
-      out.push({
-        type: 'bar', x: values, y: probs, ...(width ? { width } : {}),
-        marker: { color: C_MAIN }, name: 'Probability',
-        hovertemplate: '%{x:.4g}<br>P = %{y:.4g}<extra></extra>',
-      })
-    }
-
     if (result.ecdf_data) {
       const { x, y, lower, upper } = result.ecdf_data
       if (lower && upper) {
@@ -119,16 +98,6 @@ export default function GraphicalObservation({
       })
     }
 
-    if (result.rug_data) {
-      out.push({
-        type: 'scatter', mode: 'markers',
-        x: result.rug_data.x, y: result.rug_data.x.map(() => 0),
-        marker: { color: C_RUG, size: 10, symbol: 'line-ns-open', line: { width: 1 } },
-        name: 'Observations',
-        hovertemplate: '%{x:.4g}<extra></extra>',
-      })
-    }
-
     if (result.normal_curve) {
       out.push({
         type: 'scatter', mode: 'lines',
@@ -143,19 +112,17 @@ export default function GraphicalObservation({
   }, [result, graphType])
 
   const title =
-    graphType === 'ECDF' ? 'Empirical Cumulative Distribution Function'
-      : graphType === 'PMF' ? `Empirical PMF of ${column}`
-        : `Distribution of ${column}`
+    graphType === 'ECDF' ? 'Empirical Cumulative Distribution Function' : `Distribution of ${column}`
 
   const layout = useMemo(() => {
     const yTitle =
-      graphType === 'ECDF' ? 'ECDF' : graphType === 'PMF' ? 'Probability' : 'Density'
+      graphType === 'ECDF' ? 'ECDF' : 'Density'
 
     return baseLayout({
       autosize: true,
       margin: { l: 56, r: 20, t: 12, b: 44 },
-      // Touching histogram bars; separated bars for discrete values.
-      bargap: graphType === 'PMF' ? 0.15 : 0.02,
+      // Touching histogram bars.
+      bargap: 0.02,
       xaxis: { ...AXIS, title: column },
       yaxis: {
         ...AXIS,
@@ -179,12 +146,6 @@ export default function GraphicalObservation({
       rows.push(['bin_low', 'bin_high', 'count', 'density'])
       const { bins, counts, densities } = result.histogram_data
       counts.forEach((c, i) => rows.push([bins[i], bins[i + 1], c, densities[i]]))
-    } else if (result.pmf_data) {
-      rows.push(['value', 'count', 'probability'])
-      result.pmf_data.values.forEach((v, i) => {
-        const probability = result.pmf_data!.probs[i]
-        rows.push([v, Number.isFinite(probability) ? Math.round(probability * result.summary.n) : '', probability])
-      })
     } else if (result.ecdf_data) {
       const { x, y, lower, upper } = result.ecdf_data
       rows.push(['x', 'cumulative_probability', 'lower_band', 'upper_band'])
@@ -245,17 +206,6 @@ export default function GraphicalObservation({
           <p className="text-sm text-[var(--color-text-muted)] leading-relaxed mb-3">
             Bar area represents proportion; height shows density. Hover a bar for its bin bounds and observation count.
           </p>
-          <details>
-            <summary className="text-sm cursor-pointer py-2">View histogram data ({result.histogram_data.counts.length} bins)</summary>
-            <ResultTable caption={`Histogram bins for ${column}. Bounds and counts match the exported CSV.`}
-              columns={BIN_COLUMNS}
-              rows={result.histogram_data.counts.map((count, index) => ({ cells: {
-                lower: result.histogram_data!.bins[index],
-                upper: result.histogram_data!.bins[index + 1],
-                count,
-                density: result.histogram_data!.densities[index],
-              } }))} />
-          </details>
         </div>
       )}
     </div>

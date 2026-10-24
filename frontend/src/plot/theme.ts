@@ -19,11 +19,9 @@ export const PLOT_COLORS = {
   fit: '#c084fc',
   /** The normal model the data are compared against (normal density / CDF); kept for goodness-of-fit. */
   normal: '#fb923c',
-  /** Reference curves: normal density / CDF, null distribution. */
+  /** Reference curves: the null distribution (Hypothesis), query marks (Probability). */
   reference: '#e5e7eb',
   referenceMuted: '#9ca3af',
-  /** Individual observations (rug). */
-  rug: '#94a3b8',
   /** Interval roles; the same role has the same color in every tab. */
   ciMean: '#60a5fa',
   ciMedian: '#34d399',
@@ -106,14 +104,4 @@ export function baseLayout(overrides: Record<string, unknown> = {}): Record<stri
     hoverlabel: { bgcolor: PLOT_COLORS.hoverBg, bordercolor: PLOT_COLORS.hoverBorder, font: { color: PLOT_COLORS.text, size: 12 } },
     ...overrides,
   }
-}
-
-/** Bar width for a discrete variable whose values may be uneven or non-integer (empirical PMF). */
-export function barWidth(sortedValues: readonly number[], fill = 0.8): number | undefined {
-  let minGap = Infinity
-  for (let i = 1; i < sortedValues.length; i += 1) {
-    const gap = sortedValues[i] - sortedValues[i - 1]
-    if (gap > 0 && gap < minGap) minGap = gap
-  }
-  return Number.isFinite(minGap) ? minGap * fill : undefined
 }

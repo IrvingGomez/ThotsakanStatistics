@@ -1,17 +1,20 @@
 from pydantic import BaseModel, Field
 from typing import Dict, List, Literal, Optional
 
-GraphType = Literal["Histogram", "PMF", "ECDF"]
+GraphType = Literal["Histogram", "ECDF"]
 
 
 class GraphicalParams(BaseModel):
     column: str
-    graph_type: GraphType = Field("Histogram", description="Wire vocabulary: 'Histogram', 'PMF', 'ECDF'")
+    graph_type: GraphType = Field("Histogram", description="Wire vocabulary: 'Histogram', 'ECDF'")
 
-    # Histogram / PMF display options
-    bins: Optional[int] = Field(None, ge=2, le=200, description="Histogram bin count; None means numpy 'auto'")
+    # Histogram display options
+    bins: Optional[int] = Field(
+        None, ge=2, le=200,
+        description="Histogram bin count; None means automatic (width 1 for whole numbers, else numpy 'auto')",
+    )
     add_kde: bool = True
-    add_data: bool = False
+    kde_bandwidth: Optional[float] = Field(None, gt=0.0, description="KDE bandwidth h; None means Scott's rule")
 
     # ECDF band: significance level alpha, same convention as every other tab
     add_conf_band: bool = True
@@ -32,11 +35,7 @@ class HistogramData(BaseModel):
     bins: List[float]
     counts: List[int]
     densities: List[float]
-
-
-class PMFData(BaseModel):
-    values: List[float]
-    probs: List[float]
+    unit_width: bool = False  # automatic bins of width 1, one per whole number
 
 
 class ECDFData(BaseModel):
@@ -52,15 +51,14 @@ class Curve(BaseModel):
     y: List[float]
 
 
+class KDECurve(Curve):
+    bandwidth: float
+    default_bandwidth: float  # Scott's rule, for the slider's range and its reset
+
+
 class NormalCurve(Curve):
     mu: float
     sigma: float
-
-
-class RugData(BaseModel):
-    x: List[float]
-    n_shown: int
-    n_total: int
 
 
 class Summary(BaseModel):
@@ -76,11 +74,9 @@ class PointEstimates(BaseModel):
 class GraphicalResponse(BaseModel):
     summary: Summary
     histogram_data: Optional[HistogramData] = None
-    pmf_data: Optional[PMFData] = None
     ecdf_data: Optional[ECDFData] = None
-    kde_curve: Optional[Curve] = None
+    kde_curve: Optional[KDECurve] = None
     normal_curve: Optional[NormalCurve] = None
-    rug_data: Optional[RugData] = None
     point_estimates: Optional[PointEstimates] = None
     alpha: Optional[float] = None  # set only when an ECDF band was drawn
     warnings: List[str] = []

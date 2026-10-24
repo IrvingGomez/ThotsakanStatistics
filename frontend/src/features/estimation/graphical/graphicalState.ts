@@ -22,10 +22,11 @@ export interface GraphicalConfig {
   column: string
   graphType: GraphType
 
-  // Histogram / PMF display
+  // Histogram display
   bins: number | null
   addKde: boolean
-  addData: boolean
+  /** KDE bandwidth h; null is the default rule (Scott's), whose value comes back with the result. */
+  kdeBandwidth: number | null
 
   // ECDF band (significance level, like every other tab)
   addConfBand: boolean
@@ -48,7 +49,7 @@ export const DEFAULT_CONFIG: Omit<GraphicalConfig, 'column'> = {
   graphType: 'Histogram',
   bins: null,
   addKde: true,
-  addData: false,
+  kdeBandwidth: null,
   addConfBand: true,
   alpha: 0.05,
   addNormal: false,
@@ -89,6 +90,8 @@ export function updateGraphicalConfig<K extends keyof GraphicalConfig>(
   cfg: GraphicalConfig, key: K, value: GraphicalConfig[K],
 ): GraphicalConfig {
   const next = { ...cfg, [key]: value }
+  // A bandwidth is in the units of its variable, so a new variable starts from its own default.
+  if (key === 'column' && value !== cfg.column) next.kdeBandwidth = null
   if (next.muEstimator === 'Trimmed Mean' && next.trimParam === null) next.trimParam = 0.1
   return clearWeightsIfUnused(next)
 }
@@ -97,9 +100,7 @@ export function updateGraphicalConfig<K extends keyof GraphicalConfig>(
 export function supportedOverlays(graphType: GraphType) {
   return {
     kde: graphType === 'Histogram',
-    rug: graphType !== 'ECDF',
-    // A density on a probability axis is not comparable, so the PMF has no normal curve.
-    normal: graphType !== 'PMF',
+    normal: true,
     confBand: graphType === 'ECDF',
     bins: graphType === 'Histogram',
   }
@@ -137,7 +138,7 @@ export function toParams(
     graph_type: cfg.graphType,
     bins: shows.bins ? cfg.bins : null,
     add_kde: shows.kde && cfg.addKde,
-    add_data: shows.rug && cfg.addData,
+    kde_bandwidth: shows.kde && cfg.addKde ? cfg.kdeBandwidth : null,
     add_conf_band: band,
     alpha: band ? cfg.alpha : DEFAULT_CONFIG.alpha,
     add_normal: normal,

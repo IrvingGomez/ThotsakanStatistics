@@ -292,6 +292,43 @@ describe('Graphical: warnings and notebook', () => {
     expect(container.textContent!.match(/Estimator choices could not load/g)).toHaveLength(1)
   })
 
+  it('offers the histogram and the ECDF named in full, a KDE named in full, and no rug or PMF', async () => {
+    const radios = [...container.querySelectorAll<HTMLInputElement>('input[type="radio"]')]
+    expect(radios.map(radio => radio.closest('label')!.textContent)).toEqual(['Histogram', 'ECDF (empirical cumulative distribution function)'])
+    expect(container.textContent).toContain('KDE (kernel density estimator)')
+    expect(container.textContent).not.toMatch(/Show data|rug|PMF/)
+  })
+
+  it('sets the KDE bandwidth with a slider under the KDE, from a fifth to five times the default', async () => {
+    vi.mocked(graphicalApi.computeGraph).mockResolvedValue({ ...response(), kde_curve: { x: [0, 1], y: [1, 1], bandwidth: 2, default_bandwidth: 2 } })
+    await advance()
+    const slider = container.querySelector<HTMLInputElement>('input[type="range"]')!
+    expect(slider.closest('div')!.parentElement!.textContent).toContain('Bandwidth h')
+    expect([Number(slider.min), Number(slider.max), Number(slider.value)]).toEqual([0.4, 10, 2])
+    await act(async () => state.updateConfig('kdeBandwidth', 3))
+    await advance()
+    expect(lastParams()).toMatchObject({ add_kde: true, kde_bandwidth: 3 })
+    await act(async () => state.updateConfig('addKde', false))
+    expect(container.querySelector('input[type="range"]')).toBeNull()
+  })
+
+  it('shows the KDE formula and the bandwidth in use, with its default rule', async () => {
+    vi.mocked(graphicalApi.computeGraph).mockResolvedValue({ ...response(), kde_curve: { x: [0, 1], y: [1, 1], bandwidth: 1.5, default_bandwidth: 2 } })
+    await advance()
+    const notebook = panel('Notebook')
+    expect([...notebook.querySelectorAll('h3')].map(node => node.textContent)).toEqual(['Definition', 'KDE (kernel density estimator)', 'Values'])
+    expect(notebook.textContent).toContain('Scott')
+    expect(notebook.textContent).toContain('1.500')
+    expect(notebook.textContent).toContain('2.000')
+    expect(notebook.querySelector('.katex-error')).toBeNull()
+  })
+
+  it('says when whole numbers were given one bar each', async () => {
+    vi.mocked(graphicalApi.computeGraph).mockResolvedValue({ ...response(), histogram_data: { bins: [0.5, 1.5, 2.5], counts: [4, 6], densities: [0.4, 0.6], unit_width: true } })
+    await advance()
+    expect(panel('Notebook').textContent).toContain('one bar of width 1 per whole number')
+  })
+
   it('uses the shared radio group for the graph type and keeps no applied-settings text', async () => {
     const legend = Array.from(container.querySelectorAll('legend')).find((element) => element.textContent === 'Graph')
     expect(legend?.className).toContain('text-sm')

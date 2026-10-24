@@ -194,6 +194,8 @@ export function useGraphicalTabState() {
     muEstimators: [...meanEstimators.slice(0, 1), SAMPLE_MEDIAN, ...meanEstimators.slice(1)], deviationEstimators,
     updateConfig, setWinsorRaw, setAutoBins, normalOn: normalApplies(cfg),
     result, warnings, column: currentApplied?.cfg.column ?? cfg.column,
+    // The default KDE bandwidth for the variable on screen, which sets the slider's range.
+    kdeDefault: currentApplied?.cfg.column === cfg.column ? result?.kde_curve?.default_bandwidth ?? null : null,
     graphType: currentApplied?.cfg.graphType ?? cfg.graphType,
     isComputing, error, resetVersion,
     reset, retry, hasData, numericCols, precision: dataState.displayPrecision, sessionId,

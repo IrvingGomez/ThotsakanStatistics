@@ -35,20 +35,9 @@ async function draw(result: GraphicalResponse, graphType: string) {
 }
 
 describe('Graphical observation', () => {
-  it('draws the empirical PMF as bars, like the Common Distributions tab, not lollipops', async () => {
-    const { traces, layout } = await draw({ ...base, pmf_data: { values: [1, 2, 3, 4], probs: [0.1, 0.2, 0.3, 0.4] } }, 'PMF')
-    expect(traces).toHaveLength(1)
-    expect(traces[0]).toMatchObject({ type: 'bar', x: [1, 2, 3, 4], y: [0.1, 0.2, 0.3, 0.4], name: 'Probability' })
-    expect(traces[0].width).toBeCloseTo(0.8)
-    expect(layout.bargap).toBe(0.15)
-    expect(traces.some(trace => trace.type === 'scatter' && trace.mode === 'markers' && trace.name === 'Probability')).toBe(false)
-  })
-
-  it('sizes PMF bars from the gaps between uneven values, and copes with a single value', async () => {
-    const uneven = await draw({ ...base, pmf_data: { values: [0, 0.5, 2], probs: [0.2, 0.3, 0.5] } }, 'PMF')
-    expect(uneven.traces[0].width).toBeCloseTo(0.4)
-    const single = await draw({ ...base, pmf_data: { values: [7], probs: [1] } }, 'PMF')
-    expect(single.traces[0].width).toBeUndefined()
+  it('draws no rug, even if an old response carries one', async () => {
+    const { traces } = await draw({ ...base, histogram_data: { bins: [0, 1], counts: [4], densities: [1] }, rug_data: { x: [0.5], n_shown: 1, n_total: 1 } } as GraphicalResponse, 'Histogram')
+    expect(traces.some(trace => trace.name === 'Observations')).toBe(false)
   })
 
   it('draws the histogram with touching bars and no interval strip', async () => {
@@ -59,13 +48,13 @@ describe('Graphical observation', () => {
     expect(traces.some(trace => trace.yaxis === 'y2')).toBe(false)
   })
 
-  it('lists the histogram bins in the shared result table', async () => {
-    await draw({ ...base, histogram_data: { bins: [0, 1, 2], counts: [4, 6], densities: [0.4, 0.6] } }, 'Histogram')
-    const region = container.querySelector('[role="region"]')!
-    expect(region.className).toContain('rounded-lg')
-    expect(Array.from(region.querySelectorAll('th')).map((cell) => cell.textContent))
-      .toEqual(['Lower bound', 'Upper bound', 'Count', 'Density'])
-    expect(region.querySelectorAll('tbody tr')).toHaveLength(2)
+  it('offers no histogram data table, for whole-number or continuous variables alike', async () => {
+    // Until variables are classified as discrete or continuous, a table that only sometimes appears would read as a bug.
+    for (const unit_width of [true, false]) {
+      await draw({ ...base, histogram_data: { bins: [0.5, 1.5, 2.5], counts: [4, 6], densities: [0.4, 0.6], unit_width } }, 'Histogram')
+      expect(container.textContent).not.toContain('View histogram data')
+      expect(container.querySelector('[role="region"]')).toBeNull()
+    }
   })
 
   it('shows the shared empty state when there is no result yet', async () => {
@@ -80,7 +69,7 @@ describe('Graphical observation', () => {
 
   it('draws the KDE in purple, near the data, and the normal density in orange, the model compared against', async () => {
     const { traces } = await draw({ ...base, histogram_data: { bins: [0, 1], counts: [4], densities: [1] },
-      kde_curve: { x: [0, 1], y: [0.5, 0.5] }, normal_curve: { x: [0, 1], y: [0.4, 0.4], mu: 0.5, sigma: 1 } }, 'Histogram')
+      kde_curve: { x: [0, 1], y: [0.5, 0.5], bandwidth: 1, default_bandwidth: 1 }, normal_curve: { x: [0, 1], y: [0.4, 0.4], mu: 0.5, sigma: 1 } }, 'Histogram')
     expect(traces.find(trace => trace.name === 'KDE')!.line.color).toBe(PLOT_COLORS.fit)
     expect(traces.find(trace => trace.name === 'Normal density')!.line).toEqual({ color: PLOT_COLORS.normal, width: 2.5, dash: 'longdash' })
   })

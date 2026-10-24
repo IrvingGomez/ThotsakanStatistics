@@ -18,7 +18,8 @@ from scipy.stats import norm
 
 NORMAL_GRID_POINTS = 200
 KDE_GRID_POINTS = 500
-MAX_RUG_POINTS = 5000
+# Automatic bins of width 1 are used only when they fit the schema's bin-count limit.
+MAX_UNIT_BINS = 200
 
 # Below this spread the sample is treated as constant: a Gaussian KDE degenerates
 # to a spike of ~1e14 on a zero-width axis, which erases every other trace.
@@ -35,26 +36,42 @@ def has_spread(data: np.ndarray) -> bool:
     return arr.size >= 2 and float(np.ptp(arr)) > MIN_SPREAD
 
 
+def looks_discrete(data: np.ndarray) -> bool:
+    """
+    Whole numbers with repeats: every value is an integer and at most half the
+    observations are distinct. Until variables are classified (continuous,
+    discrete, ordinal, ...), this is how a count-like variable is recognised.
+    """
+    arr = np.asarray(data, dtype=float)
+    return arr.size > 0 and bool(np.all(arr == np.round(arr))) and np.unique(arr).size <= 0.5 * arr.size
+
+
 def compute_histogram_data(data: np.ndarray, bins=None) -> dict:
-    """Histogram counts + densities. *bins* is a bin count; None means 'auto'."""
+    """
+    Histogram counts + densities. *bins* is a bin count; None means automatic:
+    bars of width 1 centred on each whole number for discrete-looking data,
+    otherwise numpy's 'auto'.
+    """
     data = np.asarray(data, dtype=float)
     if data.size < 1:
         raise DegenerateDataError("A histogram needs at least one observation.")
 
-    bin_spec = "auto" if bins is None else int(bins)
+    unit_width = False
+    if bins is not None:
+        bin_spec = int(bins)
+    elif looks_discrete(data) and data.max() - data.min() + 1 <= MAX_UNIT_BINS:
+        unit_width = True
+        bin_spec = np.arange(data.min() - 0.5, data.max() + 1.0, 1.0)
+    else:
+        bin_spec = "auto"
     counts, bin_edges = np.histogram(data, bins=bin_spec)
     densities, _ = np.histogram(data, bins=bin_edges, density=True)
     return {
         "bins": bin_edges.tolist(),
         "counts": counts.tolist(),
         "densities": densities.tolist(),
+        "unit_width": unit_width,
     }
-
-
-def compute_pmf_data(data: np.ndarray) -> dict:
-    values, counts = np.unique(np.asarray(data, dtype=float), return_counts=True)
-    probs = counts / counts.sum()
-    return {"values": values.tolist(), "probs": probs.tolist()}
 
 
 def compute_ecdf_data(data: np.ndarray, *, alpha: float = 0.05, add_conf_band: bool = True) -> dict:
@@ -85,9 +102,10 @@ def compute_ecdf_data(data: np.ndarray, *, alpha: float = 0.05, add_conf_band: b
     return out
 
 
-def compute_kde_data(data: np.ndarray) -> dict:
+def compute_kde_data(data: np.ndarray, *, bandwidth: Optional[float] = None) -> dict:
     """
-    Gaussian KDE on the observed range.
+    Gaussian KDE on the observed range, with bandwidth h. By default h follows
+    Scott's rule, scipy's default: h = s * n^(-1/5), s the sample deviation (ddof=1).
 
     A constant (or single-point) sample has no bandwidth: scipy either raises or
     returns a ~1e14 spike on a zero-width axis. Both are useless to plot, so the
@@ -103,12 +121,16 @@ def compute_kde_data(data: np.ndarray) -> dict:
             "Every observation has the same value, so there is no density to estimate."
         )
 
-    kde = gaussian_kde(data)
+    s = float(np.std(data, ddof=1))
+    default_h = s * data.size ** (-1.0 / 5.0)
+    h = default_h if bandwidth is None else float(bandwidth)
+    # scipy scales its bandwidth factor by s, so the factor for a given h is h / s.
+    kde = gaussian_kde(data, bw_method=h / s)
     x_grid = np.linspace(data.min(), data.max(), KDE_GRID_POINTS)
     y_grid = kde.evaluate(x_grid)
     if not np.all(np.isfinite(y_grid)):
         raise DegenerateDataError("The density estimate did not converge for this sample.")
-    return {"x": x_grid.tolist(), "y": y_grid.tolist()}
+    return {"x": x_grid.tolist(), "y": y_grid.tolist(), "bandwidth": h, "default_bandwidth": default_h}
 
 
 def compute_normal_density_data(
@@ -137,16 +159,6 @@ def compute_normal_density_data(
     x_grid = np.linspace(mu - 3.0 * sigma, mu + 3.0 * sigma, NORMAL_GRID_POINTS)
     y_grid = norm.cdf(x_grid, mu, sigma) if is_cdf else norm.pdf(x_grid, mu, sigma)
     return {"x": x_grid.tolist(), "y": y_grid.tolist(), "mu": mu, "sigma": sigma}
-
-
-def compute_rug_data(data: np.ndarray, *, max_points: int = MAX_RUG_POINTS) -> dict:
-    """Raw observations for the rug plot, evenly subsampled above *max_points*."""
-    values = np.sort(np.asarray(data, dtype=float))
-    n = values.size
-    if n > max_points:
-        idx = np.linspace(0, n - 1, max_points).astype(int)
-        values = values[idx]
-    return {"x": values.tolist(), "n_shown": int(values.size), "n_total": int(n)}
 
 
 def compute_summary(data: np.ndarray) -> dict:

@@ -22,13 +22,18 @@ function Nested({ children }: { children: React.ReactNode }) {
 
 const GRAPH_TYPES: { value: GraphType; label: string }[] = [
   { value: 'Histogram', label: 'Histogram' },
-  { value: 'PMF', label: 'Empirical PMF' },
-  { value: 'ECDF', label: 'ECDF (cumulative proportion)' },
+  { value: 'ECDF', label: 'ECDF (empirical cumulative distribution function)' },
 ]
+
+/** Bandwidth slider: from a fifth to five times the default h, in about a hundred steps. */
+function bandwidthRange(defaultH: number) {
+  const step = Number((defaultH / 20).toPrecision(1))
+  return { min: defaultH / 5, max: defaultH * 5, step, decimals: Math.max(0, -Math.floor(Math.log10(step))) }
+}
 
 export default function GraphicalControls({ state }: { state: GraphicalTabState }) {
   const { cfg, winsorRaw, autoBins, sessionId, numericCols, muEstimators, deviationEstimators,
-    fieldErrors, resetVersion, updateConfig: set, hasData,
+    fieldErrors, resetVersion, updateConfig: set, hasData, kdeDefault,
     setWinsorRaw, setAutoBins, reset } = state
   const rootRef = useRef<HTMLDivElement>(null)
   const shows = supportedOverlays(cfg.graphType)
@@ -71,10 +76,21 @@ export default function GraphicalControls({ state }: { state: GraphicalTabState 
       <SectionLabel>Overlays</SectionLabel>
 
       {shows.kde && (
-        <SwitchField label="KDE (smoothed density)" checked={cfg.addKde} onChange={(v) => set('addKde', v)} />
-      )}
-      {shows.rug && (
-        <SwitchField label="Show data (rug)" checked={cfg.addData} onChange={(v) => set('addData', v)} />
+        <>
+          <SwitchField label="KDE (kernel density estimator)" checked={cfg.addKde} onChange={(v) => set('addKde', v)} />
+          {cfg.addKde && kdeDefault !== null && (
+            <Nested>
+              <DualInput
+                label="Bandwidth h"
+                value={cfg.kdeBandwidth ?? kdeDefault}
+                {...bandwidthRange(kdeDefault)}
+                hint="Starts at Scott's rule. Smaller h follows the data closely; larger h smooths more."
+                resetSignal={`${resetVersion}:${cfg.column}`}
+                onChange={(v) => set('kdeBandwidth', v)}
+              />
+            </Nested>
+          )}
+        </>
       )}
 
       {shows.confBand && (
@@ -103,7 +119,7 @@ export default function GraphicalControls({ state }: { state: GraphicalTabState 
         </>
       )}
 
-      {shows.normal ? (
+      {shows.normal && (
         <>
           <SwitchField
             label={isEcdf ? 'Normal CDF' : 'Normal density'}
@@ -159,10 +175,6 @@ export default function GraphicalControls({ state }: { state: GraphicalTabState 
             </Nested>
           )}
         </>
-      ) : (
-        <p className="text-xs text-[var(--color-text-muted)] leading-snug mb-2">
-          The empirical PMF plots probability, so a density curve would not be on the same scale.
-        </p>
       )}
 
       <Divider />

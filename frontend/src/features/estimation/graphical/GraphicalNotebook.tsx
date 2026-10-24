@@ -20,11 +20,6 @@ const DEFINITIONS: Record<string, { label: string; tex: string; note: string }> 
     tex: String.raw`\hat{f}_j = \frac{n_j}{n\,h_j}, \quad n_j = \text{count in bin } j, \quad h_j = \text{bin width}`,
     note: 'Bar areas sum to 1, so shapes stay comparable across bin counts.',
   },
-  PMF: {
-    label: 'Empirical PMF',
-    tex: String.raw`\hat{p}(x) = \frac{\#\{\, i : x_i = x \,\}}{n}`,
-    note: 'One bar per distinct value; meaningful for discrete variables.',
-  },
   ECDF: {
     label: 'Empirical CDF',
     tex: String.raw`\hat{F}(x) = \frac{1}{n} \sum_{i=1}^{n} \mathbf{1}\{\, x_i \le x \,\}`,
@@ -32,6 +27,8 @@ const DEFINITIONS: Record<string, { label: string; tex: string; note: string }> 
   },
 }
 
+const KDE = String.raw`\hat{f}_h(x) = \frac{1}{n\,h} \sum_{i=1}^{n} \phi\!\left( \frac{x - x_i}{h} \right)`
+const SCOTT = String.raw`h_{\text{Scott}} = s\, n^{-1/5}`
 const DKW_BAND = String.raw`\hat{F}(x) \pm \varepsilon, \quad \varepsilon = \sqrt{\frac{\ln(2/\alpha)}{2n}}`
 const NORMAL_DENSITY = String.raw`\hat{f}(x) = \frac{1}{\hat{\sigma}\sqrt{2\pi}} \exp\!\left( -\frac{(x - \hat{\mu})^{2}}{2\hat{\sigma}^{2}} \right)`
 const NORMAL_CDF = String.raw`\hat{F}(x) = \Phi\!\left( \frac{x - \hat{\mu}}{\hat{\sigma}} \right)`
@@ -42,7 +39,7 @@ export default function GraphicalNotebook({ result, graphType, precision }: Grap
   const fmt = (v: number | null | undefined) =>
     v === null || v === undefined ? '—' : Number(v).toFixed(precision)
 
-  const { point_estimates: pe, ecdf_data, alpha } = result
+  const { point_estimates: pe, ecdf_data, alpha, kde_curve: kde } = result
   const definition = DEFINITIONS[graphType]
   const band = !!ecdf_data && alpha != null
   const normal = pe?.mu != null || pe?.sigma != null
@@ -55,7 +52,22 @@ export default function GraphicalNotebook({ result, graphType, precision }: Grap
         <Section title="Definition">
           <Formula label={definition.label}><MathFormula tex={definition.tex} /></Formula>
           <p className="mb-2 text-xs text-[var(--color-text-muted)] leading-relaxed">{definition.note}</p>
+          {result.histogram_data?.unit_width && (
+            <p className="mb-2 text-xs text-[var(--color-text-muted)] leading-relaxed">
+              Every value is a whole number with repeats, so the bins are automatic: one bar of width 1 per whole number.
+            </p>
+          )}
           {band && <Formula label="DKW band"><MathFormula tex={DKW_BAND} /></Formula>}
+        </Section>
+      )}
+
+      {kde && (
+        <Section title="KDE (kernel density estimator)">
+          <Formula label="Gaussian kernel, bandwidth h"><MathFormula tex={KDE} /></Formula>
+          <p className="mb-2 text-xs text-[var(--color-text-muted)] leading-relaxed">
+            <MathFormula inline tex={String.raw`\phi`} /> is the standard normal density. By default h follows Scott&apos;s rule, with s the sample deviation (ddof = 1):
+          </p>
+          <Formula label="Scott's rule"><MathFormula tex={SCOTT} /></Formula>
         </Section>
       )}
 
@@ -67,8 +79,14 @@ export default function GraphicalNotebook({ result, graphType, precision }: Grap
         </Section>
       )}
 
-      {(normal || band) && (
+      {(normal || band || kde) && (
         <Section title="Values">
+          {kde && (
+            <>
+              <Row label="h" value={fmt(kde.bandwidth)} />
+              <Row label={<MathFormula inline tex={String.raw`h_{\text{Scott}}`} />} value={fmt(kde.default_bandwidth)} />
+            </>
+          )}
           {normal && (
             <>
               <Row label={<MathFormula inline tex={String.raw`\hat{\mu}`} />} value={fmt(pe?.mu)} />
