@@ -36,7 +36,7 @@ describe('ResultTable', () => {
     const label = rows[0].firstElementChild as HTMLTableCellElement
     expect(label.textContent).toBe('Shape')
     expect(label.rowSpan).toBe(2)
-    expect(label.className).toContain('text-amber-400')
+    expect(label.className).toContain('text-stone-400')
     expect(rows[1].children).toHaveLength(2)
   })
 

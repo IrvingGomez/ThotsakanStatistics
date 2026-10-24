@@ -7,6 +7,7 @@ import InferenceNotebook from './InferenceNotebook'
 import InferenceObservation from './InferenceObservation'
 import { useInferenceTabState, type InferenceState } from './useInferenceTabState'
 import { DEFAULT_SELECTED } from './inferenceOptions'
+import { PLOT_COLORS, regionLineColor } from '../../../plot/theme'
 
 function dataFixture() {
   return {
@@ -443,6 +444,25 @@ describe('Inference student workflow', () => {
     expect(traces().some(trace => trace.name === 'Separate marginal intervals')).toBe(true)
     expect(panelText('notebook')).toContain('Marginal box (dashed, not a joint region)')
     expect(panelText('notebook')).toContain('Mean interval (box)29.000 to 31.000')
+  })
+
+  it('draws the regions as white lines labeled by coverage, with no outlier red on the plot', async () => {
+    await act(async () => state.setDraft({ estimationType: 'Confidence Regions', addCiBox: true, crProbs: '0.5, 0.95' }))
+    await act(async () => { await vi.waitFor(() => expect(container.querySelector('[data-plot]')).not.toBeNull()) })
+    const element = container.querySelector<HTMLElement>('[data-plot]')!
+    const traces = JSON.parse(element.dataset.plot!) as Record<string, any>[]
+    const layout = JSON.parse(element.dataset.layout!) as Record<string, any>
+    const contours = traces.filter(trace => trace.type === 'contour')
+    expect(contours).toHaveLength(2)
+    // 'lines' would color each line from a color scale and ignore line.color.
+    expect(contours.every(trace => trace.contours.coloring === 'none')).toBe(true)
+    expect(contours.map(trace => trace.line.color)).toEqual([regionLineColor(0, 2), regionLineColor(1, 2)])
+    expect(regionLineColor(0, 2)).not.toBe(regionLineColor(1, 2))
+    expect(layout.annotations.map((note: { text: string }) => note.text)).toEqual(['50%', '95%'])
+    expect(JSON.stringify(traces)).not.toContain(PLOT_COLORS.outlier)
+    expect(traces.find(trace => trace.name === 'Estimated mean and deviation')!.marker.color).toBe(PLOT_COLORS.regionEstimate)
+    const box = traces.find(trace => trace.name === 'Separate marginal intervals')!
+    expect(box.line).toMatchObject({ color: PLOT_COLORS.regionBox, dash: 'dash' })
   })
 
   it('explains in the right panel how the regions are built, then gives their values', async () => {

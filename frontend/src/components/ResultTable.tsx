@@ -1,21 +1,11 @@
 import type { ReactNode } from 'react'
+import { TABLE_TINTS } from '../plot/theme'
 
 /**
- * Row tints for tables whose rows have a type: statistic types in Descriptive Statistics, interval kinds in
- * Statistical Inference (same hues as the interval colors in plot/theme.ts). Tables whose rows have no type
- * share the same frame, header and fonts but stay uncolored.
+ * Rows with a type (statistic type, interval kind) take their tint from TABLE_TINTS in plot/theme.ts.
+ * Tables whose rows have no type share the same frame, header and fonts but stay uncolored.
  */
-export const TABLE_GROUP_TINTS: Readonly<Record<string, { row: string; text: string; label: string }>> = {
-  'Extremes': { row: 'bg-rose-950/50', text: 'text-rose-300', label: 'text-rose-400' },
-  'Quantiles': { row: 'bg-violet-950/50', text: 'text-violet-300', label: 'text-violet-400' },
-  'Central Tendency': { row: 'bg-blue-950/50', text: 'text-blue-300', label: 'text-blue-400' },
-  'Dispersion': { row: 'bg-emerald-950/50', text: 'text-emerald-300', label: 'text-emerald-400' },
-  'Shape': { row: 'bg-amber-950/50', text: 'text-amber-300', label: 'text-amber-400' },
-  'Prediction': { row: 'bg-rose-950/50', text: 'text-rose-300', label: 'text-rose-400' },
-  'Mean': { row: 'bg-blue-950/50', text: 'text-blue-300', label: 'text-blue-400' },
-  'Median': { row: 'bg-emerald-950/50', text: 'text-emerald-300', label: 'text-emerald-400' },
-  'Deviation': { row: 'bg-amber-950/50', text: 'text-amber-300', label: 'text-amber-400' },
-}
+const TABLE_GROUP_TINTS: Readonly<Record<string, { row: string; text: string; label: string }>> = TABLE_TINTS
 
 /** Small labels beside a statistic's name, e.g. Robust. One color per meaning, in every table. */
 export const TABLE_TAG_STYLES = {

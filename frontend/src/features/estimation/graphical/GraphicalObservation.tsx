@@ -6,6 +6,7 @@ import { useCallback, useMemo } from 'react'
 import createPlotlyComponent from 'react-plotly.js/factory'
 import Plotly from 'plotly.js-basic-dist-min'
 import type { GraphicalResponse } from '../../../api/graphical'
+import ResultSection from '../../../components/ResultSection'
 import ResultTable from '../../../components/ResultTable'
 import ResultToolbar from '../../../components/ResultToolbar'
 import { EmptyState } from '../../../components/StatusBanner'
@@ -142,18 +143,18 @@ export default function GraphicalObservation({
     return out
   }, [result, graphType])
 
+  const title =
+    graphType === 'ECDF' ? 'Empirical Cumulative Distribution Function'
+      : graphType === 'PMF' ? `Empirical PMF of ${column}`
+        : `Distribution of ${column}`
+
   const layout = useMemo(() => {
     const yTitle =
       graphType === 'ECDF' ? 'ECDF' : graphType === 'PMF' ? 'Probability' : 'Density'
-    const title =
-      graphType === 'ECDF' ? 'Empirical Cumulative Distribution Function'
-        : graphType === 'PMF' ? `Empirical PMF of ${column}`
-          : `Distribution of ${column}`
 
     return baseLayout({
       autosize: true,
-      title: { text: title, font: { color: PLOT_COLORS.axisText, size: 13 } },
-      margin: { l: 56, r: 20, t: 44, b: 44 },
+      margin: { l: 56, r: 20, t: 12, b: 44 },
       // Touching histogram bars; separated bars for discrete values.
       bargap: graphType === 'PMF' ? 0.15 : 0.02,
       xaxis: { ...AXIS, title: column },
@@ -228,7 +229,7 @@ export default function GraphicalObservation({
       <ResultToolbar title={`Graphical analysis — ${column}`}
         exports={exportReady ? { png: handleExportPNG, csv: handleExportCSV, pdf: handleExportPDF } : undefined}
         ready={exportReady} disabledReason={isComputing ? 'Waiting for the updated result.' : 'Chart is still loading.'} />
-      <div>
+      <ResultSection title={title}>
         <Plot
           data={traces}
           layout={layout}
@@ -239,7 +240,7 @@ export default function GraphicalObservation({
           onUpdate={registry.register('graphical', `${graphType} for ${column}`)}
           onPurge={registry.unregister('graphical')}
         />
-      </div>
+      </ResultSection>
       {result.histogram_data && (
         <div className="px-2 pb-3">
           <p className="text-sm text-[var(--color-text-muted)] leading-relaxed mb-3">

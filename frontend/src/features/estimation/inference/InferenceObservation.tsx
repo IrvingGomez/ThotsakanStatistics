@@ -1,10 +1,10 @@
 ﻿import ReactPlotly from 'react-plotly.js'
-import type { IntervalsResponse } from '../../../api/inference'
+import type { ConfidenceRegionsResponse, IntervalsResponse } from '../../../api/inference'
 import { useMemo } from 'react'
 import type { InferenceState } from './useInferenceTabState'
 import InferenceResultStatus from './InferenceResultStatus'
 import { coveragePercent, formatInferenceNumber, intervalRange, parseIntervalRows, pointEstimate, quantityLabel, rowLabel, type IntervalRow } from './inferencePresentation'
-import { PLOT_AXIS, PLOT_COLORS, PLOT_CONFIG, baseLayout } from '../../../plot/theme'
+import { PLOT_AXIS, PLOT_COLORS, PLOT_CONFIG, baseLayout, regionLineColor } from '../../../plot/theme'
 import ResultSection from '../../../components/ResultSection'
 import ResultTable from '../../../components/ResultTable'
 import ResultToolbar from '../../../components/ResultToolbar'
@@ -23,7 +23,14 @@ const colorOfRow = (row: IntervalRow) => {
   const label = quantityLabel(row.Statistic)
   return label === 'Mean' ? PLOT_COLORS.ciMean : label === 'Median' ? PLOT_COLORS.ciMedian : label === 'Deviation' ? PLOT_COLORS.ciDeviation : PLOT_COLORS.pi
 }
-const COLORS = ['#fb923c', '#facc15', '#4ade80', '#38bdf8', '#c084fc']
+/** Where to write a region's coverage: its top edge above the estimated mean (z rows run over σ, columns over μ). */
+function regionLabelPoint(region: ConfidenceRegionsResponse, level: number): { x: number; y: number } | null {
+  const column = region.mu_grid.reduce((best, mu, index) => Math.abs(mu - region.mu_hat) < Math.abs(region.mu_grid[best] - region.mu_hat) ? index : best, 0)
+  for (let row = region.sigma_grid.length - 1; row >= 0; row -= 1) {
+    if (region.z_matrix[row][column] >= level) return { x: region.mu_grid[column], y: region.sigma_grid[row] }
+  }
+  return null
+}
 
 function bracketTraces(rows: IntervalRow[], estimates: IntervalsResponse['point_estimates'], colorOf: (row: IntervalRow) => string, precision: number): any[] {
   return rows.flatMap((row, index) => {
@@ -115,17 +122,22 @@ export default function InferenceObservation({ state }: { state: InferenceState 
     }]
     region.levels.forEach((level, index) => data.push({
       z: region.z_matrix, x: region.mu_grid, y: region.sigma_grid, type: 'contour',
-      contours: { start: level, end: level, size: 1, coloring: 'lines' },
-      line: { color: COLORS[index % COLORS.length], width: 2 }, name: coveragePercent(region.probs[index]) + ' region', showlegend: true, showscale: false, hoverinfo: 'skip',
+      // 'none' draws the line in line.color; 'lines' would take it from a color scale instead.
+      contours: { start: level, end: level, size: 1, coloring: 'none' },
+      line: { color: regionLineColor(index, region.levels.length), width: 2 }, name: coveragePercent(region.probs[index]) + ' region', showlegend: true, showscale: false, hoverinfo: 'skip',
     }))
-    data.push({ x: [region.mu_hat], y: [region.sigma_hat], mode: 'markers', type: 'scatter', name: 'Estimated mean and deviation', showlegend: true, marker: { color: PLOT_COLORS.outlier, size: 11, symbol: 'x' }, hovertemplate: 'Mean %{x:.' + state.precision + 'f}<br>Deviation %{y:.' + state.precision + 'f}<extra></extra>' })
+    data.push({ x: [region.mu_hat], y: [region.sigma_hat], mode: 'markers', type: 'scatter', name: 'Estimated mean and deviation', showlegend: true, marker: { color: PLOT_COLORS.regionEstimate, size: 11, symbol: 'x' }, hovertemplate: 'Mean %{x:.' + state.precision + 'f}<br>Deviation %{y:.' + state.precision + 'f}<extra></extra>' })
     if (state.appliedConfig?.add_ci_box && region.mu_ci && region.sigma_ci) data.push({
       x: [region.mu_ci[0], region.mu_ci[1], region.mu_ci[1], region.mu_ci[0], region.mu_ci[0]], y: [region.sigma_ci[0], region.sigma_ci[0], region.sigma_ci[1], region.sigma_ci[1], region.sigma_ci[0]],
-      mode: 'lines', type: 'scatter', name: 'Separate marginal intervals', showlegend: true, line: { color: PLOT_COLORS.outlier, dash: 'dash', width: 2 }, hoverinfo: 'skip',
+      mode: 'lines', type: 'scatter', name: 'Separate marginal intervals', showlegend: true, line: { color: PLOT_COLORS.regionBox, dash: 'dash', width: 2 }, hoverinfo: 'skip',
+    })
+    const regionLabels = region.levels.flatMap((level, index) => {
+      const point = regionLabelPoint(region, level)
+      return point ? [{ ...point, text: coveragePercent(region.probs[index]), showarrow: false, yshift: 9, font: { color: regionLineColor(index, region.levels.length), size: 11 } }] : []
     })
     content = <ResultSection title="Joint confidence regions">
       <div role="img" aria-label={'Joint confidence regions for ' + variable + '. Estimates and coverage levels are available in the results panel.'}>
-        <ReactPlotly data={data} layout={{ ...BASE_LAYOUT, height: 470, margin: { l: 62, r: 80, b: 130, t: 20 }, xaxis: { ...AXIS, title: { text: 'Mean (μ)', standoff: 8 } }, yaxis: { ...AXIS, title: { text: 'Deviation (σ)', standoff: 8 } }, showlegend: true, legend: { x: 0, y: -0.25, orientation: 'h', font: { size: 11 } } }} useResizeHandler style={{ width: '100%', height: 470 }} config={CONFIG}
+        <ReactPlotly data={data} layout={{ ...BASE_LAYOUT, height: 470, margin: { l: 62, r: 80, b: 130, t: 20 }, xaxis: { ...AXIS, title: { text: 'Mean (μ)', standoff: 8 } }, yaxis: { ...AXIS, title: { text: 'Deviation (σ)', standoff: 8 } }, annotations: regionLabels, showlegend: true, legend: { x: 0, y: -0.25, orientation: 'h', font: { size: 11 } } }} useResizeHandler style={{ width: '100%', height: 470 }} config={CONFIG}
           onInitialized={registry.register('region', 'Joint confidence regions')}
           onUpdate={registry.register('region', 'Joint confidence regions')}
           onPurge={registry.unregister('region')} />

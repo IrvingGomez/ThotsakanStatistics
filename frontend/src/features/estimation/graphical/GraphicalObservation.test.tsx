@@ -85,3 +85,11 @@ describe('Graphical observation', () => {
     expect(layout.yaxis.range).toEqual([0, 1.05])
   })
 })
+
+describe('Graphical title', () => {
+  it('titles the plot with a section heading, as the other tabs, not inside the plot', async () => {
+    const { layout } = await draw({ ...base, histogram_data: { bins: [0, 1, 2], counts: [4, 6], densities: [0.4, 0.6] } }, 'Histogram')
+    expect(layout.title).toBeUndefined()
+    expect(container.querySelector('h3')?.textContent).toBe('Distribution of Dice')
+  })
+})
