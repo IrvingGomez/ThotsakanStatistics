@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { Accordion, AnalysisActions, RadioGroup, SelectField, VariableSection, SwitchField, TextField } from '../../../components/ControlPrimitives'
+import { Accordion, AnalysisActions, Divider, RadioGroup, SectionLabel, SelectField, VariableSection, SwitchField, TextField } from '../../../components/ControlPrimitives'
 import CheckboxTree from '../../../components/CheckboxTree'
 import DualInput from '../../../components/DualInput'
 import { LABELS, confidenceReadout, estimatorOptions } from '../../../labels'
@@ -39,7 +39,6 @@ export default function InferenceControls({ state }: { state: InferenceState }) 
       error={fieldErrors.column} loaded={!!state.sessionId} />
     <RadioGroup<InferenceDraft['estimationType']> label="Estimate" value={draft.estimationType} onChange={estimationType => setDraft({ estimationType })}
       options={[{ value: 'Confidence and Prediction Intervals', label: 'Intervals' }, { value: 'Confidence Regions', label: 'Confidence regions' }]} />
-    {!isRegions && alphaInput}
     {isRegions ? <>
       {textField('crProbs', 'Region coverage levels', 'Use proportions: 0.5, 0.95 means 50%, 95%. These levels control the contours.')}
       <SwitchField label="Show marginal confidence interval box" checked={draft.addCiBox} onChange={addCiBox => setDraft({ addCiBox })} />
@@ -53,6 +52,10 @@ export default function InferenceControls({ state }: { state: InferenceState }) 
         <CheckboxTree label="Show" nodes={piNode.children!} checked={draft.selected} onChange={selected => setDraft({ selected })} />
       </Accordion>
       {fieldErrors.selected && <p role="alert" className="mb-3 text-xs text-red-400">{fieldErrors.selected}</p>}
+      {/* What to show comes first; the settings that tune it sit together below (one section, as in every tab). */}
+      <Divider />
+      <SectionLabel>Settings</SectionLabel>
+      {alphaInput}
       {info.needsDeviationEstimator && <>
         <SelectField label={LABELS.sigmaEstimator} value={draft.sigmaEst} onChange={sigmaEst => setDraft({ sigmaEst })}
           options={estimatorOptions([...new Set([draft.sigmaEst, ...state.deviationEstimators])])}

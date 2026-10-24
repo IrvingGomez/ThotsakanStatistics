@@ -338,6 +338,23 @@ describe('Inference student workflow', () => {
     expect(JSON.parse(observed.dataset.plot!)[0].marker).toEqual(HISTOGRAM_MARKER)
   })
 
+  it('puts alpha, the sigma estimator and the bootstrap samples together in one Settings section below the menus', async () => {
+    await act(async () => state.setDraft({ selected: withBootstrap('ci.mean.boot') }))
+    const text = container.textContent!
+    const at = (label: string) => text.indexOf(label)
+    expect(at('Settings')).toBeGreaterThan(at('Prediction intervals'))
+    expect(at('Significance level α')).toBeGreaterThan(at('Settings'))
+    expect(at('σ estimator')).toBeGreaterThan(at('Significance level α'))
+    expect(at('Bootstrap samples (B)')).toBeGreaterThan(at('σ estimator'))
+  })
+
+  it('keeps alpha nested under the marginal box for confidence regions, with no Settings section', async () => {
+    await act(async () => state.setDraft({ estimationType: 'Confidence Regions', addCiBox: true }))
+    const text = container.textContent!
+    expect(text).not.toContain('Settings')
+    expect(text.indexOf('Significance level α')).toBeGreaterThan(text.indexOf('Show marginal confidence interval box'))
+  })
+
   it('shows the intervals table at the top, grouped and tinted like the plots', async () => {
     await startRun()
     const observation = container.querySelector('[data-panel="observation"]')!
