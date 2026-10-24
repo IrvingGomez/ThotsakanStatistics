@@ -166,6 +166,15 @@ describe('Graphical: every setting updates the plot on its own', () => {
     await advance()
     expect(lastParams()).toMatchObject({ add_normal: true, mu_estimator: 'Winsorized Mean', winsor_limits: '0.1, 0.2' })
   })
+
+  it('shows no variable error without a dataset, as the other tabs', async () => {
+    await act(async () => root.unmount())
+    data = { state: { ...data.state, status: 'idle', sessionId: null as unknown as string, filename: '', numericCols: [] } }
+    root = createRoot(container)
+    await render()
+    expect(container.textContent).not.toContain('Select a numeric column')
+    expect(container.querySelector('[aria-invalid="true"]')).toBeNull()
+  })
 })
 
 describe('Graphical: result ownership', () => {

@@ -28,7 +28,7 @@ const GRAPH_TYPES: { value: GraphType; label: string }[] = [
 
 export default function GraphicalControls({ state }: { state: GraphicalTabState }) {
   const { cfg, winsorRaw, autoBins, sessionId, numericCols, muEstimators, deviationEstimators,
-    fieldErrors, resetVersion, updateConfig: set,
+    fieldErrors, resetVersion, updateConfig: set, hasData,
     setWinsorRaw, setAutoBins, reset } = state
   const rootRef = useRef<HTMLDivElement>(null)
   const shows = supportedOverlays(cfg.graphType)
@@ -42,7 +42,7 @@ export default function GraphicalControls({ state }: { state: GraphicalTabState 
     <div ref={rootRef} className="flex flex-col gap-0">
 
       <VariableSection value={cfg.column} onChange={(v) => set('column', v)} options={numericCols}
-        error={fieldErrors.column} loaded={!!sessionId} />
+        error={hasData ? fieldErrors.column : undefined} loaded={!!sessionId} />
 
       <RadioGroup label="Graph" value={cfg.graphType} onChange={(v) => set('graphType', v)} options={GRAPH_TYPES} />
 
