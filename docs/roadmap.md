@@ -10,18 +10,18 @@ steps are in [`plans/2026-10-23-v1-release.md`](plans/2026-10-23-v1-release.md);
 | Feature | Status |
 |---|---|
 | Home, Data (CSV upload → backend session, three example datasets) | ✅ Complete |
-| Probability ▸ 12 common distributions (one-sided and interval queries) | ✅ Complete (provisional preview + API) |
+| Probability ▸ 12 common distributions: PMF / PDF with the area of a one-sided or interval query | ✅ Complete (provisional preview + API) |
 | Statistics ▸ Descriptive statistics | ✅ Complete |
 | Statistics ▸ Inference (CI / PI / confidence regions) | ✅ Complete |
 | Statistics ▸ Graphical analysis | ✅ Complete |
-| Hypothesis testing | ✅ Complete: one-sample t, two-sample t (Welch option), Bartlett/Levene, one-way ANOVA; α, critical values, rejection region; no verdict. Not part of the v1 consistency work |
+| Hypothesis testing | 🔧 Works (one-sample t, two-sample t with Welch option, Bartlett/Levene, one-way ANOVA; α, critical values, rejection region) but needs a deep rework, second after v1. Not part of the v1 consistency work |
 | Google sign-in, Docker images, GHCR workflow | ✅ Complete |
-| **Linear regression** | 📋 Not started. The only Gradio feature left |
+| **Linear regression** | 📋 Planned, third after v1. The only Gradio feature left |
 | Custom distributions, approximations, Thai/English i18n | 📋 Placeholders / empty stubs |
 
 ## After v1 (backlog)
 
-In order of priority where one was given.
+The first three are in the order Irving set (2026-10-27); the rest are not yet ordered.
 
 1. **Goodness-of-fit test for the normal distribution** (Irving, 2026-10-24; first item after v1). Several
    results assume the data are normal (e.g. the z / t and χ² intervals and the median under normality in
@@ -29,11 +29,12 @@ In order of priority where one was given.
    of whether assuming normality is reasonable. The normal model is already orange for this. To brainstorm with
    Irving: which test(s), which tabs show it, and what the user reads there. No normality test exists in the
    backend today.
-2. **Linear regression** (below).
-3. **Classify variables** (continuous, discrete, ordinal, nominal, text, …) instead of guessing from the values.
+2. **Hypothesis Testing: a deep rework** (Irving, 2026-10-27), to bring it in line with the other tabs and
+   the interaction contract. Known items: stop sending the unused "Reject H₀" verdict; group pre-fill could
+   skip categories with fewer than 2 values.
+3. **Linear regression** (below).
+4. **Classify variables** (continuous, discrete, ordinal, nominal, text, …) instead of guessing from the values.
    Then: width-1 bars from the classification, and the "View histogram data" table back for discrete variables.
-4. **Hypothesis Testing:** stop sending the unused "Reject H₀" verdict; any further consistency work. Open idea:
-   group pre-fill could skip categories with fewer than 2 values.
 5. **Data tab:** Excel and SPSS `.sav` upload, with the server reading every format. For large datasets: a
    searchable, scrollable column-type list with bulk reclassify; pagination or virtual scrolling in the
    preview with a sticky header; a progress bar while parsing; `1,450,239`-style numbers in the summary.

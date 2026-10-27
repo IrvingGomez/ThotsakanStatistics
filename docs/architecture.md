@@ -121,12 +121,12 @@ Tab state hooks are created in `App.tsx`, so each tab keeps its state when you s
 | `/api/auth/me` | GET | ✓ | | Current user |
 | `/api/auth/logout` | POST | | | Clear cookie |
 | `/api/data/upload` | POST | ✓ | | Upload comma-separated CSV → dataset `session_id` |
-| `/api/probability/compute` | POST | ✓ | | 12 distributions: PMF/PDF, CDF, query, moments |
+| `/api/probability/compute` | POST | ✓ | | 12 distributions: PMF/PDF, the query's probability, moments (CDF values only for the CSV export) |
 | `/api/probability/normal-pdf` | POST | ✓ | | Normal PDF + CI shading (no UI now) |
 | `/api/descriptive/compute` | POST | ✓ | ✓ | Statistics + histogram + box plot data |
 | `/api/inference/estimators` | POST | ✓ | ✓ | Valid estimators for a column |
 | `/api/inference/ci`, `/pi`, `/regions` | POST | ✓ | ✓ | Confidence / prediction intervals, confidence regions |
-| `/api/graphical/compute` | POST | ✓ | ✓ | Histogram / PMF / ECDF and overlays |
+| `/api/graphical/compute` | POST | ✓ | ✓ | Histogram / ECDF and overlays |
 | `/api/hypothesis/test` | POST | ✓ | ✓ | One of 4 tests + α, critical values, rejection region (the response still carries a verdict the UI never shows) |
 
 | Status | Meaning |

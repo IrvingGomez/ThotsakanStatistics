@@ -83,12 +83,12 @@ watch the data respond.
 \midrule
 Home & Welcome page. \\
 Data & Upload a comma-separated CSV file, or open one of three example datasets (World Happiness Report 2023 — the default, Howell, Victoria electricity demand 2014). Fix column types, filter categories, set display precision. \\
-Probability › Common Distributions & PMF/PDF and CDF of 12 distributions; probabilities such as P(X ≤ 5) or P(2 < X ≤ 5). \\
+Probability › Common Distributions & PMF/PDF of 12 distributions, with the area of a query such as P(X ≤ 5) or P(2 < X ≤ 5). \\
 Statistics › Graphical Analysis & Histogram or ECDF of a variable, with KDE, a normal model and a confidence band. \\
 Statistics › Descriptive Statistics & Quantiles, centre, spread and shape, with estimator tags (Unbiased / Consistent); histogram and box plot. \\
 Statistics › Statistical Inference & Confidence and prediction intervals (normal theory and bootstrap); confidence regions for (μ, σ). \\
-Hypothesis Testing & One- and two-sample t, Bartlett / Levene, one-way ANOVA; α, critical values, rejection region. \\
-Linear Regression & Not built yet. \\
+Hypothesis Testing & One- and two-sample t, Bartlett / Levene, one-way ANOVA; α, critical values, rejection region. Works, but needs a deep rework after v1. \\
+Linear Regression & Planned. \\
 \bottomrule
 \end{tabularx}
 \end{center}
@@ -158,7 +158,7 @@ changes the same way: ask Irving, record the decision, change the contract, then
 \item \textbf{Data.} CSV only for now. A column is numeric when at least 80\% of its filled cells are numbers;
   the other cells count as missing. Filters compare values as written in the CSV.
 \end{itemize}
-The full list (27 entries) with dates and commits is in \f{docs/decisions.md}.
+The full list (28 entries) with dates and commits is in \f{docs/decisions.md}.
 
 \subsection*{The contract in five lines}
 \begin{enumerate}
@@ -275,7 +275,7 @@ Each layer may only call the layer below it. This keeps the mathematics in one p
 \f{GET /api/health} & Is the backend alive? \\
 \f{/api/auth/…} & Sign-in configuration, Google sign-in, current user, sign-out. \\
 \f{POST /api/data/upload} & Upload a CSV; returns the dataset's session id and column types. \\
-\f{POST /api/probability/compute} & One distribution: PMF/PDF, CDF, the query's probability, mean and variance. \\
+\f{POST /api/probability/compute} & One distribution: PMF/PDF, the query's probability, mean and variance. \\
 \f{POST /api/descriptive/compute} & Descriptive statistics, histogram and box plot data. \\
 \f{POST /api/inference/estimators} & Which estimators suit a column. \\
 \f{POST /api/inference/ci}, \f{/pi}, \f{/regions} & Confidence intervals, prediction intervals, confidence regions. \\
@@ -380,13 +380,13 @@ E. Protecting the decisions & Right after the merge: \f{AGENTS.md}, tests in CI,
 \end{tabularx}
 
 \subsection{After v1}
-The backlog in \f{docs/roadmap.md}, in order:
+The backlog in \f{docs/roadmap.md}; the first three in the order Irving set:
 \begin{enumerate}
 \item A goodness-of-fit test for the normal distribution, shown at the top of the left panel wherever a result
   assumes normal data.
+\item A deep rework of Hypothesis Testing.
 \item Linear Regression.
 \item Classifying variables (continuous, discrete, ordinal, nominal, …) instead of guessing from the values.
-\item Hypothesis Testing: drop the unused verdict from the backend; further consistency work.
 \item Data tab: Excel and SPSS files; better handling of very large datasets.
 \item Backend tidy-up, small interface items, and later the custom distributions, approximations, Thai /
   English text and the guided-teaching layer.

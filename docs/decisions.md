@@ -30,6 +30,11 @@ Regression; data formats other than CSV.
 Deploy on Wednesday 4 November 2026 (moved from 28 October).
 *Why:* more inconsistencies than expected; time to fix them before the event.
 
+### Order after v1 — 2026-10-27
+First the goodness-of-fit test for the normal distribution, then a deep rework of Hypothesis Testing, then
+Linear Regression. Hypothesis Testing is marked as working but needing that rework, not as complete.
+*Where:* [`roadmap.md`](roadmap.md#after-v1-backlog).
+
 ---
 
 ## How results appear

@@ -9,7 +9,7 @@ Guidance for Claude Code and other AI coding agents working in this repository. 
 - **Frontend:** React 19 + TypeScript + Vite (`frontend/`). It handles the UI only.
 - **Backend:** FastAPI + Python (`backend/`). It is the authoritative source of all statistics (scipy, statsmodels, pingouin). The professor verifies the math by reading `backend/core/`.
 - **Branches:** work happens on `dev`; `main` holds the original Gradio app.
-- **Status:** every feature is migrated except **Linear regression**.
+- **Status:** every feature is migrated except **Linear regression**; Hypothesis Testing works but needs a deep rework. Order after v1: normality goodness-of-fit, Hypothesis Testing, Linear regression (see `docs/roadmap.md`).
 
 | Topic | Document |
 |---|---|

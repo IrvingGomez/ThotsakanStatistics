@@ -19,12 +19,12 @@ The React frontend only renders. Every number comes from a Python backend whose 
 | Module | What it does | Status |
 |---|---|---|
 | **Data** | CSV upload or one of three example datasets; preview, column-type fixes, category filters, display precision | ✅ |
-| **Probability → Common Distributions** | PMF / PDF / CDF and one-sided or interval probability queries for 12 distributions | ✅ |
+| **Probability → Common Distributions** | PMF / PDF of 12 distributions, with the area of a one-sided or interval probability query | ✅ |
 | **Statistics → Graphical Analysis** | Histogram / ECDF with KDE, normal model, DKW band | ✅ |
 | **Statistics → Descriptive Statistics** | Quantiles, centre, spread, shape (weighted / trimmed / Winsorized), estimator tags; histogram, box plot | ✅ |
 | **Statistics → Statistical Inference** | Confidence and prediction intervals (normal theory and bootstrap), confidence regions | ✅ |
-| **Hypothesis Testing** | One- and two-sample t (Welch), Bartlett / Levene, one-way ANOVA; α, critical values, rejection region | ✅ |
-| **Linear Regression** | OLS, CI/PI bands, residuals | 📋 Not started |
+| **Hypothesis Testing** | One- and two-sample t (Welch), Bartlett / Levene, one-way ANOVA; α, critical values, rejection region | 🔧 Works; deep rework planned after v1 |
+| **Linear Regression** | OLS, CI/PI bands, residuals | 📋 Planned |
 | **Custom Distribution / Approximations** | User-defined distributions; binomial → normal, CLT | 📋 Planned |
 
 ## Getting started
