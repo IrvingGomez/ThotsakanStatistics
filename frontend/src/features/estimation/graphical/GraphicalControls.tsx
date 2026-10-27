@@ -1,27 +1,15 @@
 // features/estimation/graphical/GraphicalControls.tsx
 // Left panel: variable, graph type and overlays. Everything updates the plot automatically.
 
-import { useEffect, useId, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import type { GraphicalTabState } from './useGraphicalTabState'
 import DualInput from '../../../components/DualInput'
-import { AnalysisActions, SelectField, SwitchField, TextField } from '../../../components/ControlPrimitives'
+import { AnalysisActions, Divider, RadioGroup, SectionLabel, SelectField, SwitchField, TextField, VariableSection } from '../../../components/ControlPrimitives'
 import type { GraphType } from '../../../api/graphical'
 import { LABELS, confidenceReadout, estimatorOptions } from '../../../labels'
 import { BOUNDS, supportedOverlays } from './graphicalState'
 
 // ─── Small UI pieces ──────────────────────────────────────────────────────────
-
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="text-xs font-semibold uppercase tracking-widest text-[var(--color-text-muted)] mb-2">
-      {children}
-    </p>
-  )
-}
-
-function Divider() {
-  return <div className="border-t border-[var(--color-border)] my-3" />
-}
 
 /** Indented block revealed by the switch above it. */
 function Nested({ children }: { children: React.ReactNode }) {
@@ -34,16 +22,20 @@ function Nested({ children }: { children: React.ReactNode }) {
 
 const GRAPH_TYPES: { value: GraphType; label: string }[] = [
   { value: 'Histogram', label: 'Histogram' },
-  { value: 'PMF', label: 'Empirical PMF' },
-  { value: 'ECDF', label: 'ECDF (cumulative proportion)' },
+  { value: 'ECDF', label: 'ECDF (empirical cumulative distribution function)' },
 ]
 
+/** Bandwidth slider: from a fifth to five times the default h, in about a hundred steps. */
+function bandwidthRange(defaultH: number) {
+  const step = Number((defaultH / 20).toPrecision(1))
+  return { min: defaultH / 5, max: defaultH * 5, step, decimals: Math.max(0, -Math.floor(Math.log10(step))) }
+}
+
 export default function GraphicalControls({ state }: { state: GraphicalTabState }) {
-  const { cfg, winsorRaw, autoBins, hasData, numericCols, muEstimators, deviationEstimators,
-    estimatorNotice, fieldErrors, resetVersion, updateConfig: set,
+  const { cfg, winsorRaw, autoBins, sessionId, numericCols, muEstimators, deviationEstimators,
+    fieldErrors, resetVersion, updateConfig: set, hasData, kdeDefault,
     setWinsorRaw, setAutoBins, reset } = state
   const rootRef = useRef<HTMLDivElement>(null)
-  const graphName = useId()
   const shows = supportedOverlays(cfg.graphType)
   const isEcdf = cfg.graphType === 'ECDF'
 
@@ -51,43 +43,13 @@ export default function GraphicalControls({ state }: { state: GraphicalTabState 
     if (Object.keys(fieldErrors).length) rootRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus()
   }, [fieldErrors])
 
-  if (!hasData) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full gap-3 pt-10 pb-6 text-center">
-        <p className="text-sm text-[var(--color-text-muted)]">
-          No dataset loaded. Go to the <strong className="text-[var(--color-text)]">Data</strong> tab to upload a CSV file.
-        </p>
-      </div>
-    )
-  }
-
   return (
     <div ref={rootRef} className="flex flex-col gap-0">
 
-      <SectionLabel>Variable</SectionLabel>
-      <SelectField
-        label="Numeric column"
-        value={cfg.column}
-        onChange={(v) => set('column', v)}
-        options={numericCols}
-        error={fieldErrors.column}
-        placeholder="— select column —"
-      />
+      <VariableSection value={cfg.column} onChange={(v) => set('column', v)} options={numericCols}
+        error={hasData ? fieldErrors.column : undefined} loaded={!!sessionId} />
 
-      <Divider />
-
-      <fieldset className="mb-3">
-        <legend className="text-xs font-semibold text-[var(--color-text-muted)] mb-2">Graph</legend>
-        <div className="flex flex-col gap-1">
-          {GRAPH_TYPES.map((graph) => (
-            <label key={graph.value} className="flex min-h-9 items-center gap-2 rounded-md border border-[var(--color-border-md)] px-3 py-2 text-sm cursor-pointer">
-              <input type="radio" name={graphName} value={graph.value} checked={cfg.graphType === graph.value}
-                onChange={() => set('graphType', graph.value)} className="accent-[var(--color-accent)]" />
-              {graph.label}
-            </label>
-          ))}
-        </div>
-      </fieldset>
+      <RadioGroup label="Graph" value={cfg.graphType} onChange={(v) => set('graphType', v)} options={GRAPH_TYPES} />
 
       {shows.bins && (
         <>
@@ -114,10 +76,21 @@ export default function GraphicalControls({ state }: { state: GraphicalTabState 
       <SectionLabel>Overlays</SectionLabel>
 
       {shows.kde && (
-        <SwitchField label="KDE (smoothed density)" checked={cfg.addKde} onChange={(v) => set('addKde', v)} />
-      )}
-      {shows.rug && (
-        <SwitchField label="Show data (rug)" checked={cfg.addData} onChange={(v) => set('addData', v)} />
+        <>
+          <SwitchField label="KDE (kernel density estimator)" checked={cfg.addKde} onChange={(v) => set('addKde', v)} />
+          {cfg.addKde && kdeDefault !== null && (
+            <Nested>
+              <DualInput
+                label="Bandwidth h"
+                value={cfg.kdeBandwidth ?? kdeDefault}
+                {...bandwidthRange(kdeDefault)}
+                hint="Starts at Scott's rule. Smaller h follows the data closely; larger h smooths more."
+                resetSignal={`${resetVersion}:${cfg.column}`}
+                onChange={(v) => set('kdeBandwidth', v)}
+              />
+            </Nested>
+          )}
+        </>
       )}
 
       {shows.confBand && (
@@ -146,7 +119,7 @@ export default function GraphicalControls({ state }: { state: GraphicalTabState 
         </>
       )}
 
-      {shows.normal ? (
+      {shows.normal && (
         <>
           <SwitchField
             label={isEcdf ? 'Normal CDF' : 'Normal density'}
@@ -155,7 +128,6 @@ export default function GraphicalControls({ state }: { state: GraphicalTabState 
           />
           {cfg.addNormal && (
             <Nested>
-              {estimatorNotice && <p role="status" className="text-xs text-amber-300 mb-3">{estimatorNotice}</p>}
               <SelectField
                 label={LABELS.muEstimator}
                 value={cfg.muEstimator}
@@ -203,10 +175,6 @@ export default function GraphicalControls({ state }: { state: GraphicalTabState 
             </Nested>
           )}
         </>
-      ) : (
-        <p className="text-xs text-[var(--color-text-muted)] leading-snug mb-2">
-          The empirical PMF plots probability, so a density curve would not be on the same scale.
-        </p>
       )}
 
       <Divider />

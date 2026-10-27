@@ -3,7 +3,7 @@ import { visibleChecked, type CheckboxNode } from '../../../components/CheckboxT
 /**
  * Which statistics the user wants on screen. Ids match `statId` on the rows the backend returns, so
  * showing or hiding a statistic is a filter over the result already loaded — it never asks the backend
- * again (doc/interaction_contract.md, rule 5).
+ * again (docs/interaction_contract.md, rule 5).
  */
 
 /** Basic statistics: grouped, each one individually deselectable, all ticked by default. */
@@ -17,13 +17,13 @@ export const BASIC_TREE: readonly CheckboxNode[] = [
 /** Advanced statistics: off by default; some need an extra parameter (trim, winsor, weights). */
 export const ADVANCED_GROUPS: readonly { title: string; items: readonly { id: string; label: string }[] }[] = [
   { title: 'Central tendency', items: [
-    { id: 'iqm', label: 'Interquartile mean (IQM)' }, { id: 'trimmed_mean', label: 'Trimmed mean' },
+    { id: 'iqm', label: 'Interquartile mean' }, { id: 'trimmed_mean', label: 'Trimmed mean' },
     { id: 'winsorized_mean', label: 'Winsorized mean' }, { id: 'geometric_mean', label: 'Geometric mean' },
     { id: 'harmonic_mean', label: 'Harmonic mean' }, { id: 'weighted_mean', label: 'Weighted mean' },
   ] },
   { title: 'Dispersion', items: [
     { id: 'std_dev_0', label: 'Std dev (ddof=0)' }, { id: 'variance_0', label: 'Variance (ddof=0)' },
-    { id: 'iqr', label: 'IQR' }, { id: 'range', label: 'Range' },
+    { id: 'range', label: 'Range' }, { id: 'iqr', label: 'IQR (interquartile range)' },
     { id: 'mad', label: 'MAD (median abs. deviation)' }, { id: 'aad', label: 'AAD (mean abs. deviation)' },
   ] },
   { title: 'Shape', items: [{ id: 'skewness', label: 'Skewness' }, { id: 'kurtosis', label: 'Kurtosis' }] },
@@ -52,4 +52,27 @@ export function parseQuantiles(raw: string): number[] | null {
   if (tokens.some(token => token === '')) return null
   const values = tokens.map(Number)
   return values.every(value => Number.isFinite(value) && value >= 0 && value <= 1) ? values : null
+}
+
+type EstimatorTag = 'Unbiased' | 'Consistent'
+const MOMENTS = { shown: ['Consistent'], corrected: ['Unbiased', 'Consistent'] } as const
+const SCALE_ONLY = { shown: [], corrected: ['Consistent'] } as const
+
+/**
+ * Properties of a statistic, under normality. `shown` holds for the value as computed: the variance
+ * and standard deviations already converge to σ² and σ. `corrected` holds once the normal-corrected
+ * value is shown: their constant also removes the finite-sample bias, the range divided by d₂(n) is
+ * unbiased and consistent for σ, and MAD, IQR and AAD become consistent for σ (not unbiased). The ddof = 1
+ * variance is unbiased for σ² as computed, for any distribution with finite variance.
+ */
+const ESTIMATOR_TAGS: Readonly<Record<string, { shown: readonly EstimatorTag[]; corrected: readonly EstimatorTag[] }>> = {
+  variance_0: MOMENTS, variance_1: { shown: ['Unbiased', 'Consistent'], corrected: ['Unbiased', 'Consistent'] }, std_dev_0: MOMENTS, std_dev_1: MOMENTS,
+  range: { shown: [], corrected: ['Unbiased', 'Consistent'] },
+  aad: SCALE_ONLY, iqr: SCALE_ONLY, mad: SCALE_ONLY,
+}
+
+export function estimatorTags(row: { statId?: string; consistencyCorr: number | null }, corrected: boolean): readonly EstimatorTag[] {
+  const tags = row.statId ? ESTIMATOR_TAGS[row.statId] : undefined
+  if (!tags) return []
+  return corrected && row.consistencyCorr != null ? tags.corrected : tags.shown
 }

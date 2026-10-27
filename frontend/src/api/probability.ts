@@ -1,8 +1,14 @@
 export interface DistributionRequest {
   distName: string
   params: Record<string, number>
+  /** '<=', '<', '>=', '>', '=' or 'between'. */
   queryOp: string
+  /** The value, or the lower end of a 'between' interval. */
   queryK: number
+  /** 'between' only: P(queryK lowerOp X upperOp queryUpper). */
+  queryUpper?: number
+  lowerOp?: '<' | '<='
+  upperOp?: '<' | '<='
 }
 
 export interface NormalPDFRequest {

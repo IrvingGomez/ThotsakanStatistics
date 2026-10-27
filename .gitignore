@@ -88,7 +88,7 @@ graphify-out/
 
 # Temp / scratch files
 test_data.csv
-doc/*.csv
+docs/*.csv
 
 # Personal research/work-plan documents unrelated to this project
 /local/
@@ -102,3 +102,7 @@ Try_reflex/
 
 # Extra
 .secret
+# LaTeX build files of docs/guide
+docs/guide/*.aux
+docs/guide/*.log
+docs/guide/*.out

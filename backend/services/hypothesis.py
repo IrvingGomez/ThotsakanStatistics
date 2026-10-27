@@ -8,6 +8,7 @@ significance level, critical values, and an explicit verdict.
 No numpy / scipy / matplotlib imports here — this layer only maps schemas.
 """
 
+import math
 from typing import Any, Dict, List, Optional
 
 import pandas as pd
@@ -64,6 +65,14 @@ def _materialize_group(df: pd.DataFrame, numeric_col: str, spec: Optional[GroupS
     if series.empty:
         raise ValueError("One or more groups are empty after filtering.")
     return series
+
+
+def _require_two_values(series: pd.Series, name: str) -> None:
+    """A sample variance (and so every two-group test here) needs at least two values."""
+    if series.size < 2:
+        raise ValueError(
+            f"'{name}' has {series.size} value; each group needs at least 2. Choose more categories for it."
+        )
 
 
 def _materialize_anova_frame(
@@ -144,6 +153,8 @@ def _run_two_sample(df: pd.DataFrame, params: HypothesisParams) -> Dict[str, Any
     g2 = _materialize_group(df, params.column, params.group2)
     name1 = params.group1.name or "Group 1"
     name2 = params.group2.name or "Group 2"
+    _require_two_values(g1, name1)
+    _require_two_values(g2, name2)
 
     table, _ = two_sample_ttest(
         g1.to_numpy(),
@@ -175,6 +186,8 @@ def _run_variance(df: pd.DataFrame, params: HypothesisParams) -> Dict[str, Any]:
     g2 = _materialize_group(df, params.column, params.group2)
     name1 = params.group1.name or "Group 1"
     name2 = params.group2.name or "Group 2"
+    _require_two_values(g1, name1)
+    _require_two_values(g2, name2)
 
     table, _ = variance_test(
         g1.to_numpy(),
@@ -251,6 +264,10 @@ def run_hypothesis_test(df: pd.DataFrame, params: HypothesisParams) -> Dict[str,
         raise ValueError(f"Unknown hypothesis test: {params.test_type}")
 
     outcome = run(df, params)
+    if not (math.isfinite(outcome["statistic"]) and math.isfinite(outcome["p_value"])):
+        raise ValueError(
+            "The test statistic cannot be computed for these data, for example when a group's values are all equal."
+        )
 
     # Bartlett, Levene and ANOVA reject in the upper tail whatever the
     # alternative-hypothesis radio last held; resolve_tail enforces that and the

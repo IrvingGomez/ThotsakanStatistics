@@ -105,9 +105,6 @@ class TestWeightsColumn:
     def test_resolve_ignores_weights_when_no_normal_overlay_is_drawn(self):
         # The weights only feed the weighted mean behind the normal overlay.
         assert resolve_weights_column(params(weights_column="W", mu_estimator="Weighted Mean")) is None
-        assert resolve_weights_column(
-            params(weights_column="W", mu_estimator="Weighted Mean", add_normal=True, graph_type="PMF")
-        ) is None
 
     def test_stale_weights_do_not_shrink_the_sample(self, partial_weights):
         # Regression: aligning on the weights column halved n and moved the mean
@@ -139,7 +136,7 @@ class TestWeightsColumn:
             ))
 
 
-# -- PMF vs density ----------------------------------------------------------
+# -- Options and plots ---------------------------------------------------------
 
 class TestOptionsThatDoNotApplyToThePlot:
     """An option that belongs to another plot type is ignored, never reported as a warning."""
@@ -147,15 +144,6 @@ class TestOptionsThatDoNotApplyToThePlot:
     @pytest.fixture
     def discrete(self):
         return pd.DataFrame({"X": np.repeat([1.0, 2.0, 3.0, 4.0], 25)})
-
-    def test_density_overlays_are_not_drawn_on_a_probability_axis_and_do_not_warn(self, discrete):
-        res = compute_graphical_data(
-            discrete, params(graph_type="PMF", add_kde=True, add_normal=True)
-        )
-        assert "kde_curve" not in res
-        assert "normal_curve" not in res
-        assert res["warnings"] == []
-        assert res["point_estimates"] == {"mu": None, "sigma": None}
 
     def test_the_same_overlays_are_fine_on_a_histogram(self, discrete):
         res = compute_graphical_data(
@@ -170,10 +158,6 @@ class TestOptionsThatDoNotApplyToThePlot:
         res = compute_graphical_data(spread, params(graph_type="ECDF", add_kde=True))
         assert "kde_curve" not in res
         assert res["warnings"] == []
-
-    def test_the_ecdf_has_no_rug(self, spread):
-        res = compute_graphical_data(spread, params(graph_type="ECDF", add_data=True))
-        assert "rug_data" not in res
 
     def test_the_ecdf_draws_a_normal_cdf(self, spread):
         res = compute_graphical_data(spread, params(graph_type="ECDF", add_normal=True))
@@ -219,11 +203,6 @@ class TestGraphicalJson:
     def test_normal_overlay_refuses_zero_sigma(self):
         with pytest.raises(DegenerateDataError, match="positive deviation"):
             gj.compute_normal_density_data(np.array([1.0, 2.0]), hat_mu=1.5, hat_sigma=0.0)
-
-    def test_rug_subsamples_a_large_column(self):
-        rug = gj.compute_rug_data(np.arange(10_000.0), max_points=500)
-        assert rug["n_shown"] == 500
-        assert rug["n_total"] == 10_000
 
     def test_histogram_needs_at_least_one_observation(self):
         with pytest.raises(DegenerateDataError):

@@ -35,12 +35,27 @@ describe('StatusBanner', () => {
     act(() => root.render(<StatusBanner isComputing={false} error={null} hasResult warnings={['n is small']} />))
     expect(container.querySelector('[aria-label="Warnings"]')?.textContent).toBe('n is small')
   })
+
+  it('has no settings-changed message', () => {
+    act(() => root.render(<StatusBanner isComputing={false} error={null} hasResult warnings={['w']} resultNotice="r" onRetry={() => {}} />))
+    expect(container.textContent).not.toContain('Settings changed')
+  })
 })
 
 describe('EmptyState and notebook parts', () => {
-  it('renders the empty message as a status', () => {
-    act(() => root.render(<EmptyState message="Upload a CSV in Data to begin." />))
-    expect(container.querySelector('[role="status"]')?.textContent).toBe('Upload a CSV in Data to begin.')
+  it('asks for a dataset when none is loaded', () => {
+    act(() => root.render(<EmptyState loaded={false} hasData={false} />))
+    expect(container.querySelector('[role="status"]')?.textContent).toBe('Load a dataset in the Data tab to see results.')
+  })
+
+  it('tells a dataset without numeric variables apart', () => {
+    act(() => root.render(<EmptyState loaded hasData={false} />))
+    expect(container.querySelector('[role="status"]')?.textContent).toBe('This dataset has no numeric variables. Check the column types in the Data tab.')
+  })
+
+  it('points to the left panel when data is ready but there is no result', () => {
+    act(() => root.render(<EmptyState loaded hasData />))
+    expect(container.querySelector('[role="status"]')?.textContent).toBe('Choose the settings in the left panel to see results.')
   })
 
   it('renders a section with rows and a result card', () => {

@@ -34,7 +34,7 @@ export default function CollapsedRail({ side, label, onExpand }: CollapsedRailPr
       {/* Vertical label */}
       <span
         className={`
-          sidebar-rail-text text-[10px] tracking-widest uppercase
+          sidebar-rail-text text-xs tracking-widest uppercase
           text-[var(--color-text-muted)] select-none
           ${isLeft ? 'rotate-180' : ''}
         `}

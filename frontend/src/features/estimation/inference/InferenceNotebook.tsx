@@ -1,63 +1,61 @@
-﻿import type { ConfidenceRegionsResponse, IntervalsResponse } from '../../../api/inference'
+import type { ConfidenceRegionsResponse, IntervalsResponse } from '../../../api/inference'
 import type { InferenceState } from './useInferenceTabState'
-import InferenceResultStatus from './InferenceResultStatus'
-import { coveragePercent, formatInferenceNumber, parseIntervalRows, pointEstimate, quantityLabel, rowLabel } from './inferencePresentation'
-import { ResultCard } from '../../../components/notebook/NotebookParts'
+import { coveragePercent, formatInferenceNumber, parseIntervalRows } from './inferencePresentation'
+import { intervalFormula, NOTATION, REGION_BOX, REGION_FORMULAS } from './inferenceFormulas'
+import { Formula, Row, Section } from '../../../components/notebook/NotebookParts'
+import MathFormula from '../../../components/MathFormula'
+import { estimatorLabel } from '../../../labels'
 import { EmptyState } from '../../../components/StatusBanner'
 
-function IntervalCards({ title, result, precision }: { title: string; result: IntervalsResponse; precision: number }) {
+/** The formula of each interval the table shows, in the order of the table. */
+function IntervalFormulas({ title, kind, result, sigmaEstimator }: {
+  title: string; kind: 'confidence' | 'prediction'; result: IntervalsResponse; sigmaEstimator: string
+}) {
   const rows = parseIntervalRows(result)
-  return <section className="mb-6">
-    <h3 className="text-base font-semibold mb-2">{title}</h3>
-    <p className="text-sm text-[var(--color-text-muted)] mb-3">{title === 'Confidence intervals' ? 'Uncertainty about each population quantity.' : 'Ranges for one future observation, using the listed methods.'}</p>
-    {!rows.length && <p role="status" className="text-sm">No interval rows were returned for this result.</p>}
-    <div className="grid gap-3">
-      {rows.map((row, index) => {
-        const estimate = pointEstimate(row.Statistic, result.point_estimates)
-        return <ResultCard key={row.Statistic + '-' + row.Method + '-' + index} title={rowLabel(row) + (title === 'Prediction intervals' ? ' method' : '')}>
-          <dl className="grid grid-cols-2 gap-3 mt-3 text-sm">
-            <div className="min-w-0"><dt className="text-xs text-[var(--color-text-muted)]">Lower bound</dt><dd className="font-mono break-all mt-1">{formatInferenceNumber(row.Lower, precision)}</dd></div>
-            <div className="min-w-0"><dt className="text-xs text-[var(--color-text-muted)]">Upper bound</dt><dd className="font-mono break-all mt-1">{formatInferenceNumber(row.Upper, precision)}</dd></div>
-          </dl>
-          <p className="text-xs text-[var(--color-text-muted)] break-words mt-3">Method: {row.Method}</p>
-          <details className="text-xs text-[var(--color-text-muted)] mt-3">
-            <summary className="cursor-pointer">Interval details</summary>
-            <p className="mt-2 break-words">{row.Statistic} · {row['Interval Type'] ?? title}</p>
-            {estimate !== null && <p className="mt-1">Sample {quantityLabel(row.Statistic).toLowerCase()}: <span className="font-mono break-all">{formatInferenceNumber(estimate, precision)}</span></p>}
-          </details>
-        </ResultCard>
-      })}
-    </div>
-  </section>
+  if (!rows.length) return null
+  return <Section title={title}>
+    {rows.map((row, index) => {
+      const formula = intervalFormula(kind, row, sigmaEstimator)
+      return <Formula key={formula.label + index} label={formula.label}><MathFormula tex={formula.tex} /></Formula>
+    })}
+  </Section>
 }
+function Notation({ sigmaEstimator }: { sigmaEstimator: string }) {
+  return <Section title="Notation">
+    {NOTATION.map((item) => <Formula key={item.tex} label={item.namesEstimator ? `${item.text} (${estimatorLabel(sigmaEstimator)})` : item.text}>
+      <MathFormula tex={item.tex} />
+    </Formula>)}
+  </Section>
+}
+/** How the regions are built, then the values they were built from. The cut-offs come from the backend. */
 function RegionSummary({ result, precision, showCiBox }: { result: ConfidenceRegionsResponse; precision: number; showCiBox: boolean }) {
-  return <section className="space-y-3 text-sm">
-    <h3 className="font-semibold text-base">Mean and spread together</h3>
-    <p className="text-[var(--color-text-muted)]">Contours show joint confidence regions for the population mean (μ) and deviation (σ). Larger coverage levels include a wider set of parameter pairs.</p>
-    <p>Coverage: {[...result.probs].sort((a, b) => a - b).map(coveragePercent).join(', ')}</p>
-    <dl className="grid grid-cols-2 gap-3 rounded-lg border border-[var(--color-border-md)] p-3">
-      <div><dt className="text-xs text-[var(--color-text-muted)]">Estimated mean (μ)</dt><dd className="font-mono break-all mt-1">{formatInferenceNumber(result.mu_hat, precision)}</dd></div>
-      <div><dt className="text-xs text-[var(--color-text-muted)]">Estimated deviation (σ)</dt><dd className="font-mono break-all mt-1">{formatInferenceNumber(result.sigma_hat, precision)}</dd></div>
-    </dl>
-    {showCiBox && result.mu_ci && result.sigma_ci && <div className="rounded-lg border border-[var(--color-border-md)] p-3 space-y-2">
-      <p>The dashed box combines separate marginal intervals; it is not the joint region.</p>
-      <p className="break-words">Location interval: <span className="font-mono break-all">{result.mu_ci.map(value => formatInferenceNumber(value, precision)).join(' to ')}</span></p>
-      <p className="break-words">Deviation interval: <span className="font-mono break-all">{result.sigma_ci.map(value => formatInferenceNumber(value, precision)).join(' to ')}</span></p>
-    </div>}
-    <details className="rounded-lg border border-[var(--color-border-md)] p-3">
-      <summary className="cursor-pointer font-semibold">Method details</summary>
-      <p className="mt-2 text-[var(--color-text-muted)]">Joint relative likelihood, χ² calibrated with 2 degrees of freedom. The cross marks maximum likelihood estimates. Grid: {result.z_matrix.length} × {result.z_matrix[0]?.length ?? 0} points.</p>
-    </details>
-  </section>
+  const fmt = (value: number) => formatInferenceNumber(value, precision)
+  const cutoffs = result.probs.map((p, index) => ({ p, level: result.levels[index] })).sort((a, b) => a.p - b.p)
+  const box = showCiBox && result.mu_ci && result.sigma_ci
+  return <>
+    <Section title="How the regions are built">
+      {REGION_FORMULAS.map((item) => <Formula key={item.label} label={item.label}><MathFormula tex={item.tex} /></Formula>)}
+      {box && <Formula label={REGION_BOX.label}><MathFormula tex={REGION_BOX.tex} /></Formula>}
+    </Section>
+    <Section title="Values">
+      <Row label={<MathFormula inline tex={String.raw`\hat{\mu}`} />} value={fmt(result.mu_hat)} />
+      <Row label={<MathFormula inline tex={String.raw`\hat{\sigma}`} />} value={fmt(result.sigma_hat)} />
+      {cutoffs.map(({ p, level }) => <Row key={p} label={`Cut-off for ${coveragePercent(p)} coverage`} value={fmt(level)} />)}
+      {box && <>
+        <Row label="Mean interval (box)" value={result.mu_ci!.map(fmt).join(' to ')} />
+        <Row label="Deviation interval (box)" value={result.sigma_ci!.map(fmt).join(' to ')} />
+      </>}
+    </Section>
+  </>
 }
 export default function InferenceNotebook({ state }: { state: InferenceState }) {
   const hasResult = !!(state.ciResult || state.piResult || state.regionResult)
+  const sigmaEstimator = state.appliedConfig?.sigma_estimator ?? 'Deviation (1 ddof)'
   return <div className="analysis-panel p-4">
-    <h2 className="text-lg font-bold mb-3">Statistical inference</h2>
-    <InferenceResultStatus state={state} />
-    {!hasResult && !state.isComputing && !state.error && <EmptyState message={state.hasData ? 'Choose a variable to calculate intervals.' : 'Upload a CSV in Data to begin.'} />}
-    {state.ciResult && <IntervalCards title="Confidence intervals" result={state.ciResult} precision={state.precision} />}
-    {state.piResult && <IntervalCards title="Prediction intervals" result={state.piResult} precision={state.precision} />}
+    {!hasResult && !state.isComputing && !state.error && <EmptyState loaded={!!state.sessionId} hasData={state.hasData} compact />}
+    {state.ciResult && <IntervalFormulas title="Confidence intervals" kind="confidence" result={state.ciResult} sigmaEstimator={sigmaEstimator} />}
+    {state.piResult && <IntervalFormulas title="Prediction intervals" kind="prediction" result={state.piResult} sigmaEstimator={sigmaEstimator} />}
+    {(state.ciResult || state.piResult) && <Notation sigmaEstimator={sigmaEstimator} />}
     {state.regionResult && <RegionSummary result={state.regionResult} precision={state.precision} showCiBox={state.appliedConfig?.add_ci_box ?? true} />}
   </div>
 }

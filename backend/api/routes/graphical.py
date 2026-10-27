@@ -4,7 +4,7 @@ from api.deps import apply_filters, get_session_data
 from api.schemas.graphical import GraphicalParams, GraphicalResponse
 from services.graphical import compute_graphical_data
 
-router = APIRouter(prefix="/api/graphical", tags=["graphical"])
+router = APIRouter()
 
 
 @router.post("/compute", response_model=GraphicalResponse)

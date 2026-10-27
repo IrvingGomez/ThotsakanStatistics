@@ -98,7 +98,7 @@ describe('Graphical: every setting updates the plot on its own', () => {
 
   it('offers the sample median beside the mean estimators for mu', async () => {
     await advance()
-    expect(state.muEstimators).toEqual(['Sample Mean', 'Trimmed Mean', 'Winsorized Mean', 'Weighted Mean', 'Sample Median'])
+    expect(state.muEstimators).toEqual(['Sample Mean', 'Sample Median', 'Trimmed Mean', 'Winsorized Mean', 'Weighted Mean'])
   })
 
   it('asks again for the ECDF band when alpha changes', async () => {
@@ -166,6 +166,15 @@ describe('Graphical: every setting updates the plot on its own', () => {
     await advance()
     expect(lastParams()).toMatchObject({ add_normal: true, mu_estimator: 'Winsorized Mean', winsor_limits: '0.1, 0.2' })
   })
+
+  it('shows no variable error without a dataset, as the other tabs', async () => {
+    await act(async () => root.unmount())
+    data = { state: { ...data.state, status: 'idle', sessionId: null as unknown as string, filename: '', numericCols: [] } }
+    root = createRoot(container)
+    await render()
+    expect(container.textContent).not.toContain('Select a numeric column')
+    expect(container.querySelector('[aria-invalid="true"]')).toBeNull()
+  })
 })
 
 describe('Graphical: result ownership', () => {
@@ -231,7 +240,7 @@ describe('Graphical: result ownership', () => {
     expect(state.cfg.addNormal).toBe(false)
   })
 
-  it('shows shared failure/retry status and retains the previous result with its applied context', async () => {
+  it('shows shared failure/retry status and retains the previous result', async () => {
     await advance()
     vi.mocked(graphicalApi.computeGraph).mockRejectedValueOnce(new Error('Service unavailable'))
     await act(async () => state.updateConfig('addNormal', true))
@@ -239,7 +248,7 @@ describe('Graphical: result ownership', () => {
     for (const section of panels()) {
       expect(section.textContent).toContain('Couldn’t update results')
       expect(section.textContent).toContain('Previous result — update failed.')
-      expect(section.textContent).toContain('Applied: sample.csv · Age')
+      expect(section.textContent).not.toContain('sample.csv')
       expect(section.querySelector('button')?.textContent).toBe('Retry')
     }
     await act(async () => state.retry())
@@ -269,10 +278,102 @@ describe('Graphical: warnings and notebook', () => {
     expect(panel('Notebook').textContent).not.toContain('Overlay estimates')
   })
 
-  it('shows technical details: sample numbers and the definition of what is plotted', async () => {
+  it('shows the estimator notice as a warning above the plot, not in the left panel', async () => {
+    await act(async () => root.unmount())
+    container.remove()
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+    vi.mocked(inferenceApi.getEstimators).mockRejectedValue(new Error('Unavailable'))
+    await render()
+    await advance()
+    const warnings = panel('Observation').querySelector('[aria-label="Warnings"]')
+    expect(warnings?.textContent).toContain('Estimator choices could not load')
+    expect(container.textContent!.match(/Estimator choices could not load/g)).toHaveLength(1)
+  })
+
+  it('offers the histogram and the ECDF named in full, a KDE named in full, and no rug or PMF', async () => {
+    const radios = [...container.querySelectorAll<HTMLInputElement>('input[type="radio"]')]
+    expect(radios.map(radio => radio.closest('label')!.textContent)).toEqual(['Histogram', 'ECDF (empirical cumulative distribution function)'])
+    expect(container.textContent).toContain('KDE (kernel density estimator)')
+    expect(container.textContent).not.toMatch(/Show data|rug|PMF/)
+  })
+
+  it('sets the KDE bandwidth with a slider under the KDE, from a fifth to five times the default', async () => {
+    vi.mocked(graphicalApi.computeGraph).mockResolvedValue({ ...response(), kde_curve: { x: [0, 1], y: [1, 1], bandwidth: 2, default_bandwidth: 2 } })
+    await advance()
+    const slider = container.querySelector<HTMLInputElement>('input[type="range"]')!
+    expect(slider.closest('div')!.parentElement!.textContent).toContain('Bandwidth h')
+    expect([Number(slider.min), Number(slider.max), Number(slider.value)]).toEqual([0.4, 10, 2])
+    await act(async () => state.updateConfig('kdeBandwidth', 3))
+    await advance()
+    expect(lastParams()).toMatchObject({ add_kde: true, kde_bandwidth: 3 })
+    await act(async () => state.updateConfig('addKde', false))
+    expect(container.querySelector('input[type="range"]')).toBeNull()
+  })
+
+  it('shows the KDE formula and the bandwidth in use, with its default rule', async () => {
+    vi.mocked(graphicalApi.computeGraph).mockResolvedValue({ ...response(), kde_curve: { x: [0, 1], y: [1, 1], bandwidth: 1.5, default_bandwidth: 2 } })
+    await advance()
+    const notebook = panel('Notebook')
+    expect([...notebook.querySelectorAll('h3')].map(node => node.textContent)).toEqual(['Definition', 'KDE (kernel density estimator)', 'Values'])
+    expect(notebook.textContent).toContain('Scott')
+    expect(notebook.textContent).toContain('1.500')
+    expect(notebook.textContent).toContain('2.000')
+    expect(notebook.querySelector('.katex-error')).toBeNull()
+  })
+
+  it('says when whole numbers were given one bar each', async () => {
+    vi.mocked(graphicalApi.computeGraph).mockResolvedValue({ ...response(), histogram_data: { bins: [0.5, 1.5, 2.5], counts: [4, 6], densities: [0.4, 0.6], unit_width: true } })
+    await advance()
+    expect(panel('Notebook').textContent).toContain('one bar of width 1 per whole number')
+  })
+
+  it('uses the shared radio group for the graph type and keeps no applied-settings text', async () => {
+    const legend = Array.from(container.querySelectorAll('legend')).find((element) => element.textContent === 'Graph')
+    expect(legend?.className).toContain('text-sm')
+    expect(legend?.className).not.toContain('font-semibold')
+    expect('appliedSettings' in state).toBe(false)
+  })
+
+  it('typesets the normal-overlay estimates instead of combining-hat characters', async () => {
+    vi.mocked(graphicalApi.computeGraph).mockResolvedValue({ ...response(), point_estimates: { mu: 1, sigma: 2 } })
+    await act(async () => state.updateConfig('addNormal', true))
+    await advance()
+    const notebook = panel('Notebook')
+    expect(notebook.textContent).not.toMatch(/[μσ]\u0302/)
+    const values = [...notebook.querySelectorAll('section')].find(node => node.querySelector('h3')?.textContent === 'Values')!
+    expect(values.querySelectorAll(':scope > div > span:first-child .katex')).toHaveLength(2)
+  })
+
+  it('puts the definition and formulas first and the values last', async () => {
+    vi.mocked(graphicalApi.computeGraph).mockResolvedValue({ ...response(), point_estimates: { mu: 1, sigma: 2 } })
+    await act(async () => state.updateConfig('addNormal', true))
+    await advance()
+    const notebook = panel('Notebook')
+    expect([...notebook.querySelectorAll('h3')].map(node => node.textContent)).toEqual(['Definition', 'Normal overlay', 'Values'])
+    const overlay = [...notebook.querySelectorAll('section')].find(node => node.querySelector('h3')?.textContent === 'Normal overlay')!
+    expect(overlay.textContent).not.toContain('1.000')
+  })
+
+  it('shows the definition of what is plotted, with no sample section', async () => {
     await advance()
     const text = panel('Notebook').textContent!
-    expect(text).toContain('Unique values')
-    expect(text).toContain('density = count / (n × bin width)')
+    expect(text).not.toContain('Unique values')
+    expect(text).not.toContain('density = count / (n × bin width)')
+    expect(text).toContain('Bar areas sum to 1')
+    expect(panel('Notebook').querySelectorAll('.katex').length).toBeGreaterThan(0)
+    expect(panel('Notebook').querySelector('.katex-error')).toBeNull()
+  })
+
+  it('typesets the ECDF definition and shows the DKW band formula only with the band', async () => {
+    vi.mocked(graphicalApi.computeGraph).mockResolvedValue({ summary: { n: 10, n_unique: 10 }, warnings: [],
+      ecdf_data: { x: [1, 2], y: [0.5, 1], epsilon: 0.43 } })
+    await act(async () => state.updateConfig('graphType', 'ECDF'))
+    await advance()
+    const notebook = panel('Notebook')
+    expect(notebook.textContent).toContain('Empirical CDF')
+    expect(notebook.textContent).not.toContain('DKW band')
+    expect(notebook.querySelector('.katex-error')).toBeNull()
   })
 })

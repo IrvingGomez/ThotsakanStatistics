@@ -29,14 +29,13 @@ describe('config shape', () => {
 
 describe('supportedOverlays', () => {
   it('shows each option only where it applies', () => {
-    expect(supportedOverlays('Histogram')).toEqual({ kde: true, rug: true, normal: true, confBand: false, bins: true })
-    expect(supportedOverlays('PMF')).toEqual({ kde: false, rug: true, normal: false, confBand: false, bins: false })
-    expect(supportedOverlays('ECDF')).toEqual({ kde: false, rug: false, normal: true, confBand: true, bins: false })
+    expect(supportedOverlays('Histogram')).toEqual({ kde: true, normal: true, confBand: false, bins: true })
+    expect(supportedOverlays('ECDF')).toEqual({ kde: false, normal: true, confBand: true, bins: false })
   })
 
-  it('draws a normal curve only where a density/CDF is comparable', () => {
+  it('draws a normal curve on both plots when it is switched on', () => {
     expect(normalApplies(base({ addNormal: true }))).toBe(true)
-    expect(normalApplies(base({ addNormal: true, graphType: 'PMF' }))).toBe(false)
+    expect(normalApplies(base({ addNormal: true, graphType: 'ECDF' }))).toBe(true)
     expect(normalApplies(base({ addNormal: false }))).toBe(false)
   })
 })
@@ -45,13 +44,19 @@ describe('toParams: a hidden option is never sent', () => {
   it('does not send a KDE flag from the ECDF view (the old "KDE is not drawn" warning)', () => {
     // addKde defaults to true and cannot be switched off from the ECDF view.
     expect(toParams(base({ graphType: 'ECDF' }), {}).add_kde).toBe(false)
-    expect(toParams(base({ graphType: 'PMF' }), {}).add_kde).toBe(false)
     expect(toParams(base({ graphType: 'Histogram' }), {}).add_kde).toBe(true)
   })
 
-  it('sends the rug only where it is shown', () => {
-    expect(toParams(base({ graphType: 'ECDF', addData: true }), {}).add_data).toBe(false)
-    expect(toParams(base({ graphType: 'PMF', addData: true }), {}).add_data).toBe(true)
+  it('has no rug and no PMF any more', () => {
+    expect('add_data' in toParams(base(), {})).toBe(false)
+    expect(Object.keys(base())).not.toContain('addData')
+  })
+
+  it('sends a chosen KDE bandwidth only while the KDE is drawn, and none for the default', () => {
+    expect(toParams(base(), {}).kde_bandwidth).toBeNull()
+    expect(toParams(base({ kdeBandwidth: 2 }), {}).kde_bandwidth).toBe(2)
+    expect(toParams(base({ kdeBandwidth: 2, addKde: false }), {}).kde_bandwidth).toBeNull()
+    expect(toParams(base({ kdeBandwidth: 2, graphType: 'ECDF' }), {}).kde_bandwidth).toBeNull()
   })
 
   it('sends bins only for the histogram', () => {
@@ -63,11 +68,6 @@ describe('toParams: a hidden option is never sent', () => {
     expect(toParams(base({ graphType: 'ECDF', alpha: 0.1 }), {})).toMatchObject({ add_conf_band: true, alpha: 0.1 })
     expect(toParams(base({ graphType: 'Histogram', alpha: 0.1 }), {})).toMatchObject({ add_conf_band: false, alpha: 0.05 })
     expect(toParams(base({ graphType: 'ECDF', alpha: 0.1, addConfBand: false }), {})).toMatchObject({ add_conf_band: false, alpha: 0.05 })
-  })
-
-  it('sends no normal overlay and no estimators on the PMF, even if it is ticked', () => {
-    const params = toParams(base({ graphType: 'PMF', addNormal: true, muEstimator: 'Sample Median', sigmaEstimator: 'IQR (bias corrected)' }), {})
-    expect(params).toMatchObject({ add_normal: false, mu_estimator: 'Sample Mean', sigma_estimator: 'Deviation (1 ddof)' })
   })
 
   it('sends the estimators only while the normal overlay is on', () => {
@@ -87,7 +87,7 @@ describe('toParams: a hidden option is never sent', () => {
 
   it('produces an identical request when only an irrelevant option changes (so nothing is refetched)', () => {
     const before = JSON.stringify(toParams(base({ graphType: 'ECDF' }), {}))
-    const after = JSON.stringify(toParams(base({ graphType: 'ECDF', addKde: false, bins: 40, muEstimator: 'Sample Median', addData: true }), {}))
+    const after = JSON.stringify(toParams(base({ graphType: 'ECDF', addKde: false, bins: 40, muEstimator: 'Sample Median', kdeBandwidth: 3 }), {}))
     expect(after).toBe(before)
   })
 
@@ -107,7 +107,6 @@ describe('validateGraphicalConfig', () => {
     expect(validateGraphicalConfig(cfg, '0.1,').winsorLimits).toBeTruthy()
     expect(validateGraphicalConfig(cfg, '0.1, 0.1').winsorLimits).toBeUndefined()
     expect(validateGraphicalConfig(base({ muEstimator: 'Winsorized Mean' }), '0.1,')).toEqual({})
-    expect(validateGraphicalConfig({ ...cfg, graphType: 'PMF' }, '0.1,')).toEqual({})
   })
 
   it('asks for a weights column only for a drawn weighted mean', () => {
@@ -118,6 +117,11 @@ describe('validateGraphicalConfig', () => {
 })
 
 describe('updateGraphicalConfig', () => {
+  it('goes back to the default bandwidth for a new variable, whose scale differs', () => {
+    expect(updateGraphicalConfig(base({ kdeBandwidth: 2 }), 'column', 'Weight').kdeBandwidth).toBeNull()
+    expect(updateGraphicalConfig(base({ kdeBandwidth: 2 }), 'addNormal', true).kdeBandwidth).toBe(2)
+  })
+
   it('fills a visible default trim fraction for the trimmed mean', () => {
     expect(updateGraphicalConfig(base(), 'muEstimator', 'Trimmed Mean').trimParam).toBe(0.1)
   })

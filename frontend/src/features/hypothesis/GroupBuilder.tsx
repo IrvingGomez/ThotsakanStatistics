@@ -1,5 +1,6 @@
 import { useId } from 'react';
 import { useData } from '../../context/DataContext';
+import { SelectField, TextField } from '../../components/ControlPrimitives';
 import type { GroupSpec } from '../../api/hypothesis';
 
 /**
@@ -56,24 +57,12 @@ export default function GroupBuilder({
       </div>
 
       <div className="p-2.5">
-        <div className="flex flex-col gap-1 mb-2">
-          <label htmlFor={id + '-column'} className="text-sm text-[var(--color-text-muted)]">Grouping column</label>
-          <select
-            id={id + '-column'}
-            aria-describedby={describedBy}
-            value={value.column}
-            onChange={(e) => setColumn(e.target.value)}
-            className="w-full rounded-md px-2.5 py-1.5 text-xs bg-[var(--color-bg-input)] border border-[var(--color-border-md)] text-[var(--color-text)] focus:outline-none focus:border-[var(--color-accent)] cursor-pointer"
-          >
-            <option value="">Select a column…</option>
-            {categoricalCols.map((c) => <option key={c} value={c}>{c}</option>)}
-          </select>
-        </div>
+        <SelectField label="Grouping column" value={value.column} onChange={setColumn} options={categoricalCols} placeholder="Select a column…" />
 
         {value.column && (
           <>
             <div className="flex justify-between items-center mb-1">
-              <span id={id + '-values'} className="text-sm text-[var(--color-text-muted)]">Categories</span>
+              <span id={id + '-values'} className="text-sm text-[var(--color-text)]">Categories</span>
               <div className="flex gap-2">
                 <button
                   type="button"
@@ -112,17 +101,7 @@ export default function GroupBuilder({
             </div>
 
             {showName && (
-              <div className="flex flex-col gap-1">
-                <label htmlFor={id + '-name'} className="text-sm text-[var(--color-text-muted)]">Group name</label>
-                <input
-                  id={id + '-name'}
-                  type="text"
-                  value={value.name}
-                  onChange={(e) => onChange({ ...value, name: e.target.value })}
-                  placeholder={label}
-                  className="w-full rounded-md px-2.5 py-1.5 text-xs bg-[var(--color-bg-input)] border border-[var(--color-border-md)] text-[var(--color-text)] placeholder-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-accent)]"
-                />
-              </div>
+              <TextField label="Group name" value={value.name} onChange={(name) => onChange({ ...value, name })} placeholder={label} />
             )}
           </>
         )}

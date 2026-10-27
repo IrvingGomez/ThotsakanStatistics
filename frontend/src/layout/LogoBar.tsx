@@ -1,7 +1,7 @@
 /**
  * Slim logo bar displayed above the main tab header.
  * Matches the Python app's persistent header row:
- *   [HimmapanLab] [ThotsakanStats]             [CMKL] [AICE]
+ *   [HimmapanLab] [ThotsakanStats] Thotsakan Statistics             [CMKL] [AICE]
  */
 
 const LEFT_LOGOS = [
@@ -22,8 +22,8 @@ export default function LogoBar() {
     <div className="h-14 flex items-center justify-between px-5 shrink-0
       bg-[var(--color-bg-base)] border-b border-[var(--color-border)]">
 
-      {/* Left: lab + product logos */}
-      <div className="flex items-center gap-4">
+      {/* Left: lab + product logos, then the product name */}
+      <div className="flex items-center gap-4 min-w-0">
         {LEFT_LOGOS.map((logo) => (
           <img
             key={logo.alt}
@@ -33,6 +33,9 @@ export default function LogoBar() {
             draggable={false}
           />
         ))}
+        <span className="truncate text-lg font-bold tracking-tight text-[var(--color-text)]">
+          Thotsakan Statistics
+        </span>
       </div>
 
       {/* Right: signed-in user + institutional logos */}

@@ -3,6 +3,7 @@
 
 import { useRef, useCallback, useState } from 'react'
 import { useData } from '../../context/DataContext'
+import ExampleDatasets from './ExampleDatasets'
 
 // ─── Drop Zone ────────────────────────────────────────────────────────────────
 
@@ -38,7 +39,7 @@ function DropZone() {
       <input
         ref={inputRef}
         type="file"
-        accept=".csv,.tsv,.txt"
+        accept=".csv"
         className="hidden"
         onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f) }}
       />
@@ -48,7 +49,7 @@ function DropZone() {
           Drop a CSV file here, or click to browse
         </p>
         <p className="text-xs text-[var(--color-text-muted)] mt-1">
-          .csv, .tsv, .txt · First row must be headers
+          .csv, comma-separated · First row must be headers
         </p>
       </div>
       {state.status === 'loading' && (
@@ -66,7 +67,7 @@ function DropZone() {
 function StatChip({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="rounded-lg px-4 py-3 bg-[var(--color-bg-panel)] border border-[var(--color-border)]">
-      <p className="text-[10px] uppercase tracking-widest text-[var(--color-text-muted)]">{label}</p>
+      <p className="text-xs uppercase tracking-widest text-[var(--color-text-muted)]">{label}</p>
       <p className="text-lg font-bold font-mono tabular-nums text-[var(--color-text)] mt-0.5">{value}</p>
     </div>
   )
@@ -83,10 +84,10 @@ function ColumnTypes() {
   return (
     <div id="column-types" tabIndex={-1} aria-label="Column Types" className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-panel)] overflow-hidden scroll-mt-4">
       <div className="px-4 py-2.5 border-b border-[var(--color-border)] flex items-center gap-2">
-        <span className="text-[10px] uppercase tracking-widest font-semibold text-[var(--color-text-muted)]">
+        <span className="text-xs uppercase tracking-widest font-semibold text-[var(--color-text-muted)]">
           Column Types
         </span>
-        <span className="text-[10px] text-[var(--color-text-muted)]">— click to toggle</span>
+        <span className="text-xs text-[var(--color-text-muted)]">— click to toggle</span>
       </div>
       <div className="p-3 flex flex-wrap gap-2">
         {allCols.map((col) => {
@@ -128,9 +129,9 @@ function FilterBlock({ col, vals, selected, onToggle, onRemove }: { col: string,
     <div className="border border-[var(--color-border-md)] rounded bg-black/10 p-3">
       <div className="flex items-center justify-between mb-2">
         <p className="text-xs font-semibold text-[var(--color-text)]">
-          {col} <span className="text-[10px] text-[var(--color-text-muted)] font-normal ml-1">({vals.length} unique)</span>
+          {col} <span className="text-xs text-[var(--color-text-muted)] font-normal ml-1">({vals.length} unique)</span>
         </p>
-        <button type="button" onClick={onRemove} className="text-[10px] text-[var(--color-text-muted)] hover:text-red-400 cursor-pointer">
+        <button type="button" onClick={onRemove} className="text-xs text-[var(--color-text-muted)] hover:text-red-400 cursor-pointer">
           ✕ Remove
         </button>
       </div>
@@ -164,10 +165,10 @@ function FilterBlock({ col, vals, selected, onToggle, onRemove }: { col: string,
           )
         })}
         {filteredVals.length === 0 && (
-          <p className="text-[10px] text-[var(--color-text-muted)] italic">No matches for "{search}"</p>
+          <p className="text-xs text-[var(--color-text-muted)] italic">No matches for "{search}"</p>
         )}
         {filteredVals.length > displayVals.length && (
-          <p className="text-[10px] text-[var(--color-text-muted)] italic pt-1 flex items-center w-full">
+          <p className="text-xs text-[var(--color-text-muted)] italic pt-1 flex items-center w-full">
             + {filteredVals.length - displayVals.length} more (use search)
           </p>
         )}
@@ -197,7 +198,7 @@ function CategoryFilters() {
   return (
     <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-panel)] flex flex-col max-h-[500px]">
       <div className="px-4 py-2.5 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
-        <span className="text-[10px] uppercase tracking-widest font-semibold text-[var(--color-text-muted)]">
+        <span className="text-xs uppercase tracking-widest font-semibold text-[var(--color-text-muted)]">
           Category Filters
         </span>
         <div className="flex items-center gap-3">
@@ -206,7 +207,7 @@ function CategoryFilters() {
               <button
                 type="button"
                 onClick={() => setIsAdding(!isAdding)}
-                className="text-[10px] text-[var(--color-text)] bg-[var(--color-bg-input)] border border-[var(--color-border-md)] px-2 py-1 rounded hover:border-[var(--color-accent)] transition-colors cursor-pointer shadow-sm"
+                className="text-xs text-[var(--color-text)] bg-[var(--color-bg-input)] border border-[var(--color-border-md)] px-2 py-1 rounded hover:border-[var(--color-accent)] transition-colors cursor-pointer shadow-sm"
               >
                 + Add Filter
               </button>
@@ -236,7 +237,7 @@ function CategoryFilters() {
             <button
               type="button"
               onClick={handleClearAll}
-              className="text-[10px] text-[var(--color-accent)] hover:underline cursor-pointer"
+              className="text-xs text-[var(--color-accent)] hover:underline cursor-pointer"
             >
               Clear all
             </button>
@@ -286,10 +287,10 @@ function DataPreview() {
   return (
     <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-panel)] overflow-hidden">
       <div className="px-4 py-2.5 border-b border-[var(--color-border)] flex items-center justify-between">
-        <span className="text-[10px] uppercase tracking-widest font-semibold text-[var(--color-text-muted)]">
+        <span className="text-xs uppercase tracking-widest font-semibold text-[var(--color-text-muted)]">
           Data Preview
         </span>
-        <span className="text-[10px] text-[var(--color-text-muted)]">
+        <span className="text-xs text-[var(--color-text-muted)]">
           {totalRows < rawTotal
             ? `Showing ${previewRows.length} of ${totalRows} filtered rows (${rawTotal} total)`
             : `Showing ${previewRows.length} of ${totalRows} rows`}
@@ -386,14 +387,17 @@ export default function DataTab() {
         <div>
           <h2 className="text-base font-semibold text-[var(--color-text)]">Dataset</h2>
           <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
-            Upload a CSV file to use across all analysis tabs.
+            Upload a CSV file, or pick an example dataset, to use across all analysis tabs.
             {hasData && ` · ${state.filename}`}
           </p>
         </div>
 
         {/* Upload zone — always visible but compact when data loaded */}
         {!hasData
-          ? <DropZone />
+          ? <>
+              <DropZone />
+              <ExampleDatasets />
+            </>
           : (
             <div>
               {/* Summary chips */}

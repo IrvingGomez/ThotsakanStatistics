@@ -13,11 +13,21 @@ export function Section({ title, children }: { title: string; children: ReactNod
   )
 }
 
-export function Row({ label, value }: { label: string; value: ReactNode }) {
+export function Row({ label, value }: { label: ReactNode; value: ReactNode }) {
   return (
     <div className="flex items-baseline justify-between gap-3 border-b border-[var(--color-border)] py-1 text-xs">
       <span className="text-[var(--color-text-muted)]">{label}</span>
       <span className="font-mono text-[var(--color-text)]">{value}</span>
+    </div>
+  )
+}
+
+/** A formula with its name above it, for the notebook's formula reference. */
+export function Formula({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="mb-2">
+      <p className="text-xs text-[var(--color-text-muted)]">{label}</p>
+      <p className="break-words font-mono text-xs text-[var(--color-text)]">{children}</p>
     </div>
   )
 }

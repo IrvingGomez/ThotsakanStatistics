@@ -1,4 +1,4 @@
-import { useState, Suspense, lazy, useMemo, useRef, useEffect } from 'react'
+import { useState, Suspense, lazy, useMemo } from 'react'
 import { ErrorBoundary } from 'react-error-boundary'
 import LogoBar from './layout/LogoBar'
 import Header from './layout/Header'
@@ -10,15 +10,19 @@ import DataTab from './features/data/DataTab'
 
 // ── Probability: Common Distributions ────────────────────────────────────────
 import CommonDistControls from './features/probability/common/CommonDistControls'
-import CommonDistNotebook from './features/probability/common/CommonDistNotebook'
+import { useData } from './context/DataContext'
 import {
   useDistribution,
   DISTRIBUTIONS,
-  type QueryOp,
+  clampParams,
 } from './hooks/useDistribution'
+import type { DistQuery } from './math/probabilityQuery'
+import { queryDomain } from './math/localDistributions'
+import { clampQuery, defaultQuery } from './math/queryDomain'
 
 // Lazy-loaded heavy chart components
 const CommonDistObservation = lazy(() => import('./features/probability/common/CommonDistObservation'))
+const CommonDistNotebook = lazy(() => import('./features/probability/common/CommonDistNotebook'))
 
 // ─── Navigation config ────────────────────────────────────────────────────────
 
@@ -67,15 +71,15 @@ const SUB_TABS: Partial<Record<TabId, SubTab[]>> = {
     { key: 'approx',  label: '🤏 Approximations' },
   ],
   estimation: [
+    { key: 'graphical',   label: '📊 Graphical Analysis' },
     { key: 'descriptive', label: '🧮 Descriptive Statistics' },
     { key: 'inference',   label: '💭 Statistical Inference' },
-    { key: 'graphical',   label: '📊 Graphical Analysis' },
   ],
 }
 
 const DEFAULT_SUB_TAB: Partial<Record<TabId, string>> = {
   probability: 'common',
-  estimation:  'inference',
+  estimation:  'graphical',
 }
 
 // ─── Placeholders ─────────────────────────────────────────────────────────────
@@ -131,20 +135,6 @@ export default function App() {
   // ── Navigation ──────────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<TabId>('home')
   const [subTabMap, setSubTabMap] = useState<Partial<Record<TabId, string>>>(DEFAULT_SUB_TAB)
-  const openColumnTypesRef = useRef(false)
-
-  function handleOpenColumnTypes() {
-    openColumnTypesRef.current = true
-    setActiveTab('data')
-  }
-
-  useEffect(() => {
-    if (activeTab !== 'data' || !openColumnTypesRef.current) return
-    openColumnTypesRef.current = false
-    const section = document.getElementById('column-types')
-    section?.focus({ preventScroll: true })
-    section?.scrollIntoView({ block: 'start' })
-  }, [activeTab])
 
   function handleTabChange(tab: string) {
     const t = tab as TabId
@@ -165,22 +155,24 @@ export default function App() {
   const [probParamValues, setProbParamValues] = useState<Record<string, number>>(
     Object.fromEntries(firstDiscrete.params.map((p) => [p.key, p.default]))
   )
-  const [probQueryOp, setProbQueryOp] = useState<QueryOp>('<=')
-  const [probQueryK, setProbQueryK] = useState(5)
+  const [probQuery, setProbQuery] = useState<DistQuery>(() => defaultQuery(firstDiscrete.name, probParamValues))
 
   const probDistParams = useMemo(() => ({
     distName: probDistName,
     paramValues: probParamValues,
-    queryOp: probQueryOp,
-    queryK: probQueryK,
-  }), [probDistName, probParamValues, probQueryOp, probQueryK])
+    query: probQuery,
+  }), [probDistName, probParamValues, probQuery])
 
-  const { result: probResult, isLoading: probLoading, appliedParams: probAppliedParams } = useDistribution(probDistParams)
+  const { result: probResult, isLoading: probLoading, error: probError, retry: probRetry, appliedParams: probAppliedParams } = useDistribution(probDistParams)
+  const { state: dataState } = useData()
 
   function handleDistChange(name: string) {
     const dist = DISTRIBUTIONS.find((d) => d.name === name)!
+    const defaults = Object.fromEntries(dist.params.map((p) => [p.key, p.default]))
     setProbDistName(name)
-    setProbParamValues(Object.fromEntries(dist.params.map((p) => [p.key, p.default])))
+    setProbParamValues(defaults)
+    // A query for another distribution may lie outside this one's support (x = 5 for a Beta).
+    setProbQuery((query) => defaultQuery(name, defaults, query))
   }
 
   function handleModelTypeChange(t: 'discrete' | 'continuous') {
@@ -216,21 +208,21 @@ export default function App() {
           modelType={probModelType}
           distName={probDistName}
           paramValues={probParamValues}
-          queryOp={probQueryOp}
-          queryK={probQueryK}
-          queryResult={probResult?.queryResult ?? null}
+          query={probQuery}
           onModelTypeChange={handleModelTypeChange}
           onDistChange={handleDistChange}
           onParamChange={(key, val) => {
-            setProbParamValues((prev) => ({ ...prev, [key]: val }))
+            const dist = DISTRIBUTIONS.find((entry) => entry.name === probDistName)!
+            const values = clampParams(dist, { ...probParamValues, [key]: val })
+            setProbParamValues(values)
+            setProbQuery((query) => clampQuery(query, queryDomain(probDistName, values)))
           }}
-          onQueryOpChange={setProbQueryOp}
-          onQueryKChange={setProbQueryK}
+          onQueryChange={setProbQuery}
           onReset={() => {
             const dist = DISTRIBUTIONS.find((entry) => entry.name === probDistName)!
-            setProbParamValues(Object.fromEntries(dist.params.map((param) => [param.key, param.default])))
-            setProbQueryOp('<=')
-            setProbQueryK(5)
+            const defaults = Object.fromEntries(dist.params.map((param) => [param.key, param.default]))
+            setProbParamValues(defaults)
+            setProbQuery(defaultQuery(probDistName, defaults))
           }}
         />
       )
@@ -241,15 +233,16 @@ export default function App() {
             appliedParams={probAppliedParams}
             result={probResult}
             isLoading={probLoading}
+            error={probError}
+            onRetry={probRetry}
+            precision={dataState.displayPrecision}
           />
         </Suspense>
       )
       notebook = (
-        <CommonDistNotebook
-          distParams={probDistParams}
-          result={probResult}
-          isLoading={probLoading}
-        />
+        <Suspense fallback={<ChartFallback />}>
+          <CommonDistNotebook distParams={probDistParams} />
+        </Suspense>
       )
     } else {
       controls    = <ComingSoon label="Custom Distribution" />
@@ -257,7 +250,7 @@ export default function App() {
       notebook    = <ComingSoon label="Custom Distribution" />
     }
 
-  // ── Estimation tab ─────────────────────────────────────────────────────────
+  // ── Statistics tab (id 'estimation') ─────────────────────────────────────────────────────────
   } else if (activeTab === 'estimation') {
     if (activeSubTab === 'graphical') {
       footerDataset = 'Graphical Analysis'
@@ -297,31 +290,17 @@ export default function App() {
       footerDataset = 'Descriptive Statistics'
       controls = (
         <Suspense fallback={<ChartFallback />}>
-          <DescriptiveControlsSlot onRun={descriptive.handleRun} onReset={descriptive.handleReset} isComputing={descriptive.isComputing} />
+          <DescriptiveControlsSlot state={descriptive} />
         </Suspense>
       )
       observation = (
         <Suspense fallback={<ChartFallback />}>
-          <DescriptiveObservationSlot
-            result={descriptive.result}
-            config={descriptive.config}
-            hasData={descriptive.hasData}
-            precision={descriptive.precision}
-            isComputing={descriptive.isComputing}
-            error={descriptive.error}
-          />
+          <DescriptiveObservationSlot state={descriptive} />
         </Suspense>
       )
       notebook = (
         <Suspense fallback={<ChartFallback />}>
-          <DescriptiveNotebookSlot
-            result={descriptive.result}
-            config={descriptive.config}
-            filename={descriptive.filename}
-            filteredN={descriptive.filteredN}
-            rawN={descriptive.rawN}
-            precision={descriptive.precision}
-          />
+          <DescriptiveNotebookSlot state={descriptive} />
         </Suspense>
       )
     }
@@ -331,7 +310,7 @@ export default function App() {
     footerDataset = 'Hypothesis Testing'
     controls = (
       <Suspense fallback={<ChartFallback />}>
-        <HypothesisControlsSlot state={hypothesis} onOpenColumnTypes={handleOpenColumnTypes} />
+        <HypothesisControlsSlot state={hypothesis} />
       </Suspense>
     )
     observation = (
@@ -378,7 +357,7 @@ export default function App() {
           }
         </ErrorBoundary>
       </div>
-      <Footer dataset={footerDataset} version="0.1.0-alpha" />
+      <Footer dataset={footerDataset} />
     </div>
   )
 }

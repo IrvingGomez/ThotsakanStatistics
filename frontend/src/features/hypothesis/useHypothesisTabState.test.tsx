@@ -1,9 +1,12 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { hypothesisApi, ONE_SAMPLE_T, TWO_SAMPLE_T, type HypothesisResponse } from '../../api/hypothesis';
+import { hypothesisApi, ONE_SAMPLE_T, ONE_WAY_ANOVA, TWO_SAMPLE_T, type HypothesisResponse } from '../../api/hypothesis';
 import { useHypothesisTabState, type HypothesisTabState } from './useHypothesisTabState';
 import HypothesisControls from './HypothesisControls';
+import { NotebookSlot, ObservationSlot } from './HypothesisTab';
+
+vi.mock('react-plotly.js', () => ({ default: () => null }));
 
 function dataFixture() {
   return {
@@ -43,7 +46,7 @@ let container: HTMLDivElement;
 let state: HypothesisTabState;
 function Harness({ controls = true }: { controls?: boolean }) {
   state = useHypothesisTabState();
-  return controls ? <HypothesisControls state={state} onOpenColumnTypes={() => {}} /> : null;
+  return controls ? <HypothesisControls state={state} /> : null;
 }
 async function render(controls = true) {
   await act(async () => root.render(<Harness controls={controls} />));
@@ -51,12 +54,10 @@ async function render(controls = true) {
 async function setNull(value = '30') {
   await act(async () => state.setDraft({ mu0Str: value }));
 }
-async function run() {
-  await act(async () => state.handleRun());
-}
 async function advance() {
   await act(async () => vi.advanceTimersByTimeAsync(250));
 }
+const lastRequest = () => vi.mocked(hypothesisApi.runTest).mock.lastCall![0];
 
 beforeEach(async () => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -76,117 +77,89 @@ afterEach(async () => {
 });
 
 describe('Hypothesis student workflow', () => {
-  it('keeps incomplete numeric text when controls unmount and return', async () => {
+  it('shows the full panel without a dataset, with the variable disabled', async () => {
+    data = { ...data, state: { ...data.state, status: 'idle' as never, sessionId: null as never, filename: '', dataset: null as never, numericCols: [] } };
+    vi.mocked(hypothesisApi.runTest).mockClear();
+    await render();
+    const select = [...container.querySelectorAll('select')][0];
+    expect(select.disabled).toBe(true);
+    expect(container.textContent).toContain('— no dataset loaded —');
+    expect(container.textContent).toContain('Test method');
+    expect(container.textContent).toContain('Upload a CSV file in the Data tab.');
+    expect(container.textContent).not.toContain('Open Data');
+    expect(hypothesisApi.runTest).not.toHaveBeenCalled();
+  });
+
+  it('calculates on its own with mu0 = 0 and has no Run or Reveal step', async () => {
+    expect(hypothesisApi.runTest).toHaveBeenCalledTimes(1);
+    expect(lastRequest()).toMatchObject({ test_type: ONE_SAMPLE_T, column: 'Breath', mu0: 0, alpha: 0.05 });
+    expect(state.result).not.toBeNull();
+    expect(container.textContent).not.toContain('Run Test');
+    expect(container.textContent).toContain('Reset to defaults');
+    expect(container.textContent).toContain('Significance level α');
+  });
+
+  it('collapses a burst of changes into one request after a short pause', async () => {
+    await setNull('3');
+    await setNull('30');
+    await act(async () => state.setDraft({ alphaStr: '0.01' }));
+    expect(state.isDirty).toBe(true);
+    expect(hypothesisApi.runTest).toHaveBeenCalledTimes(1);
+    await advance();
+    expect(hypothesisApi.runTest).toHaveBeenCalledTimes(2);
+    expect(lastRequest()).toMatchObject({ mu0: 30, alpha: 0.01 });
+    expect(state.isDirty).toBe(false);
+  });
+
+  it('keeps incomplete numeric text when controls unmount and return, and waits for a valid value', async () => {
     await act(async () => state.setDraft({ mu0Str: '-', alphaStr: '0.' }));
     await render(false);
     await render(true);
     expect(state.draft.mu0Str).toBe('-');
     expect(state.draft.alphaStr).toBe('0.');
     expect(Array.from(container.querySelectorAll('input[type="text"]')).map(input => (input as HTMLInputElement).value)).toEqual(['-', '0.']);
-    expect(state.canRun).toBe(false);
+    await advance();
+    expect(hypothesisApi.runTest).toHaveBeenCalledTimes(1);
+    expect(state.isDirty).toBe(true);
   });
 
-  it('explains the numeric-code grouping prerequisite and prevents an invalid run', async () => {
+  it('explains the grouping prerequisite and sends nothing without a categorical column', async () => {
     await act(async () => state.setDraft({ testType: TWO_SAMPLE_T }));
-    expect(container.textContent).toContain('No categorical columns available');
-    expect(container.textContent).toContain('Open Column Types');
-    expect((container.querySelector('button[type="submit"]') as HTMLButtonElement).disabled).toBe(true);
-    expect(hypothesisApi.runTest).not.toHaveBeenCalled();
-  });
-
-  it('keeps the answer revealed through alpha changes and hides it for a new null value', async () => {
-    await setNull();
-    await run();
-    await act(async () => state.onReveal());
-    vi.mocked(hypothesisApi.runTest).mockResolvedValue(response(2, 0.01));
-    await act(async () => state.setDraft({ alphaStr: '0.01' }));
-    expect(state.revealed).toBe(true);
-    expect(state.isDirty).toBe(true);
     await advance();
-    expect(state.result?.alpha).toBe(0.01);
-    expect(state.revealed).toBe(true);
-    expect(state.isDirty).toBe(false);
-    await setNull('31');
-    expect(state.revealed).toBe(false);
-  });
-
-  it('keeps reveal through incomplete alpha typing and retries the completed alpha after failure', async () => {
-    await setNull();
-    await run();
-    await act(async () => state.onReveal());
-    await act(async () => state.setDraft({ alphaStr: '' }));
-    expect(state.revealed).toBe(true);
-    expect(state.canRun).toBe(false);
-    expect(state.isDirty).toBe(true);
-    await advance();
+    expect(container.textContent).toContain('Mark a grouping column as categorical in Data → Column Types.');
+    expect(container.textContent).not.toContain('Open Column Types');
     expect(hypothesisApi.runTest).toHaveBeenCalledTimes(1);
-    vi.mocked(hypothesisApi.runTest).mockRejectedValueOnce(new Error('Service unavailable'));
-    await act(async () => state.setDraft({ alphaStr: '0.01' }));
-    await advance();
-    expect(state.error).toBe('Service unavailable');
-    expect(state.result?.alpha).toBe(0.05);
-    expect(state.applied?.config.alpha).toBe(0.05);
-    expect(state.revealed).toBe(true);
-    vi.mocked(hypothesisApi.runTest).mockResolvedValue(response(2, 0.01));
-    await act(async () => state.handleRetry());
-    expect(state.result?.alpha).toBe(0.01);
-    expect(state.revealed).toBe(true);
-    expect(state.error).toBeNull();
-    expect(state.isDirty).toBe(false);
   });
 
-  it('keeps test setup during Column Types detour and enables valid numeric-coded groups', async () => {
-    await setNull('35');
-    await act(async () => state.setDraft({ testType: TWO_SAMPLE_T, alphaStr: '0.01' }));
-    await render(false);
+  it('pre-fills groups from the first categorical column, and keeps what the user chose', async () => {
     data = { ...data, state: { ...data.state, numericCols: ['Breath'], categoricalCols: ['Smoke'] } };
-    await render(true);
-    expect(state.draft.testType).toBe(TWO_SAMPLE_T);
-    expect(state.draft.mu0Str).toBe('35');
-    expect(state.draft.alphaStr).toBe('0.01');
-    expect(state.canRun).toBe(false);
-    expect(container.textContent).not.toContain('No categorical columns available');
-    await act(async () => state.setDraft({
-      group1: { column: 'Smoke', values: ['0'], name: 'Non-smokers' },
-      group2: { column: 'Smoke', values: ['1'], name: 'Smokers' },
-    }));
-    expect(state.canRun).toBe(true);
-    expect(state.groupCounts).toEqual([1, 1]);
-    await render(false);
-    await render(true);
-    expect(state.draft.group2.values).toEqual(['1']);
-    await run();
-    expect(hypothesisApi.runTest).toHaveBeenCalledWith(expect.objectContaining({
-      test_type: TWO_SAMPLE_T, column: 'Breath', alpha: 0.01,
-      group1: { column: 'Smoke', values: ['0'], name: 'Non-smokers' },
-      group2: { column: 'Smoke', values: ['1'], name: 'Smokers' },
-    }));
-  });
-
-  it('marks retained output stale and cancels pending live runs when a draft becomes incomplete', async () => {
-    await setNull();
-    await run();
-    await setNull('31');
-    await setNull('');
+    await render();
+    await act(async () => state.setDraft({ testType: TWO_SAMPLE_T }));
+    expect(state.draft.group1).toMatchObject({ column: 'Smoke', values: ['0'] });
+    expect(state.draft.group2).toMatchObject({ column: 'Smoke', values: ['1'] });
     await advance();
-    expect(hypothesisApi.runTest).toHaveBeenCalledTimes(1);
-    expect(state.result).not.toBeNull();
-    expect(state.isDirty).toBe(true);
-    expect(state.canRun).toBe(false);
+    expect(lastRequest()).toMatchObject({
+      test_type: TWO_SAMPLE_T, column: 'Breath',
+      group1: { column: 'Smoke', values: ['0'], name: 'Group 1' }, group2: { column: 'Smoke', values: ['1'], name: 'Group 2' },
+    });
+    await act(async () => state.setDraft({ group1: { column: 'Smoke', values: ['1'], name: 'Smokers' } }));
+    expect(state.draft.group1).toMatchObject({ values: ['1'], name: 'Smokers' });
+    await act(async () => state.setDraft({ testType: ONE_WAY_ANOVA }));
+    expect(state.draft.anovaGroup).toMatchObject({ column: 'Smoke', values: ['0', '1'] });
   });
 
   it('lets only the newest request publish results', async () => {
     const older = pending();
     const newer = pending();
     vi.mocked(hypothesisApi.runTest).mockReturnValueOnce(older.promise).mockReturnValueOnce(newer.promise);
-    await setNull();
-    await run();
     await setNull('31');
-    await run();
+    await advance();
+    await setNull('32');
+    await advance();
     await act(async () => newer.resolve(response(3)));
     await act(async () => older.resolve(response(1)));
     expect(state.result?.statistic).toBe(3);
-    expect(state.applied?.config.mu0).toBe(31);
+    expect(state.applied?.config.mu0).toBe(32);
     expect(state.isComputing).toBe(false);
   });
 
@@ -194,10 +167,10 @@ describe('Hypothesis student workflow', () => {
     const older = pending();
     const newer = pending();
     vi.mocked(hypothesisApi.runTest).mockReturnValueOnce(older.promise).mockReturnValueOnce(newer.promise);
-    await setNull();
-    await run();
     await setNull('31');
-    await run();
+    await advance();
+    await setNull('32');
+    await advance();
     await act(async () => older.reject(new Error('Old failure')));
     expect(state.error).toBeNull();
     expect(state.isComputing).toBe(true);
@@ -205,45 +178,70 @@ describe('Hypothesis student workflow', () => {
     expect(state.result?.statistic).toBe(3);
   });
 
-  it('ignores completion after Reset', async () => {
+  it('restores the defaults on Reset and calculates them again', async () => {
     const request = pending();
     vi.mocked(hypothesisApi.runTest).mockReturnValueOnce(request.promise);
-    await setNull();
-    await run();
+    await setNull('31');
+    await advance();
     await act(async () => state.handleReset());
-    await act(async () => request.resolve(response()));
-    expect(state.result).toBeNull();
-    expect(state.draft.mu0Str).toBe('');
-    expect(state.isComputing).toBe(false);
-    expect(state.updatesAutomatically).toBe(false);
+    await act(async () => request.resolve(response(9)));
+    expect(state.draft.mu0Str).toBe('0');
+    expect(lastRequest()).toMatchObject({ mu0: 0 });
+    expect(state.result?.statistic).not.toBe(9);
   });
 
-  it('invalidates outstanding work on filter changes and resets the draft for a new dataset', async () => {
+  it('recalculates on filter changes and resets the draft for a new dataset', async () => {
     const request = pending();
     vi.mocked(hypothesisApi.runTest).mockReturnValueOnce(request.promise);
-    await setNull();
-    await run();
+    await setNull('30');
+    await advance();
     data = { ...data, state: { ...data.state, filters: { Smoke: ['1'] } } };
     await render();
-    await act(async () => request.resolve(response()));
-    expect(state.result).toBeNull();
+    await act(async () => request.resolve(response(9)));
+    expect(state.result?.statistic).not.toBe(9);
     expect(state.draft.mu0Str).toBe('30');
+    expect(lastRequest()).toMatchObject({ mu0: 30, filters: { Smoke: ['1'] } });
     data = { ...data, state: { ...data.state, sessionId: 'session-b', filename: 'new.csv' } };
     await render();
-    expect(state.draft.mu0Str).toBe('');
-    expect(state.result).toBeNull();
+    expect(state.draft.mu0Str).toBe('0');
   });
 
   it('retries the failed configuration without losing valid settings', async () => {
     vi.mocked(hypothesisApi.runTest).mockRejectedValueOnce(new Error('Service unavailable'));
     await setNull('35');
-    await run();
+    await advance();
     expect(state.error).toBe('Service unavailable');
     expect(state.draft.mu0Str).toBe('35');
     await act(async () => state.handleRetry());
-    expect(hypothesisApi.runTest).toHaveBeenCalledTimes(2);
-    expect(vi.mocked(hypothesisApi.runTest).mock.calls[1][0].mu0).toBe(35);
+    expect(lastRequest().mu0).toBe(35);
     expect(state.result).not.toBeNull();
     expect(state.error).toBeNull();
+  });
+});
+
+describe('Hypothesis panels', () => {
+  function Slots() {
+    state = useHypothesisTabState();
+    return <>
+      <div data-panel="controls"><HypothesisControls state={state} /></div>
+      <div data-panel="observation"><ObservationSlot state={state} /></div>
+      <div data-panel="notebook"><NotebookSlot state={state} /></div>
+    </>;
+  }
+  const panel = (name: string) => container.querySelector(`[data-panel="${name}"]`) as HTMLElement;
+
+  it('shows backend warnings above the plot, not in the notebook', async () => {
+    vi.mocked(hypothesisApi.runTest).mockResolvedValue({ ...response(), warnings: ['Group 2 has n < 5'] });
+    await act(async () => root.render(<Slots />));
+    expect(panel('observation').querySelector('[aria-label="Warnings"]')?.textContent).toContain('Group 2 has n < 5');
+    expect(panel('notebook').textContent).not.toContain('Group 2 has n < 5');
+  });
+
+  it('never shows the settings-changed message or filler sentences', async () => {
+    await act(async () => root.render(<Slots />));
+    await setNull('12');
+    expect(container.textContent).not.toContain('Settings changed');
+    expect(panel('controls').textContent).not.toContain('Results update automatically');
+    expect(panel('controls').textContent).not.toContain('Compare one population mean');
   });
 });

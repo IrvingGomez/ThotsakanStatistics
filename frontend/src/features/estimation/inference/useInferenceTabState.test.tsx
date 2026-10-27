@@ -7,6 +7,7 @@ import InferenceNotebook from './InferenceNotebook'
 import InferenceObservation from './InferenceObservation'
 import { useInferenceTabState, type InferenceState } from './useInferenceTabState'
 import { DEFAULT_SELECTED } from './inferenceOptions'
+import { HISTOGRAM_MARKER, PLOT_COLORS, regionLineColor } from '../../../plot/theme'
 
 function dataFixture() {
   return {
@@ -91,20 +92,20 @@ afterEach(async () => {
 
 describe('Inference student workflow', () => {
   it('preserves drafts and disclosure state when controls leave and return', async () => {
-    await act(async () => state.setDraft({ alphaStr: '0.', advancedOpen: true, selected: withBootstrap('ci.mean.boot') }))
+    await act(async () => state.setDraft({ alphaStr: '0.', ciOpen: true, selected: withBootstrap('ci.mean.boot') }))
     await render(false)
     await render(true)
     expect(state.draft.alphaStr).toBe('0.')
-    expect(state.draft.advancedOpen).toBe(true)
+    expect(state.draft.ciOpen).toBe(true)
     expect(state.draft.selected).toContain('ci.mean.boot')
     expect(inferenceApi.computeCI).toHaveBeenCalledTimes(1)
-    expect(panelText('notebook')).toContain('95% confidence · α = 0.05')
+    expect(panelText('notebook')).not.toContain('ApneaCMKL.csv')
     expect(panelText('notebook')).not.toContain('Update')
   })
 
   it('updates on its own after a short pause, and treats zoom/disclosures as display settings', async () => {
     vi.useFakeTimers()
-    await act(async () => state.setDraft({ zoomCI: true, advancedOpen: true }))
+    await act(async () => state.setDraft({ zoomCI: true, ciOpen: true }))
     await pause()
     expect(inferenceApi.computeCI).toHaveBeenCalledTimes(1)
     expect(state.isDirty).toBe(false)
@@ -115,7 +116,7 @@ describe('Inference student workflow', () => {
     expect(vi.mocked(inferenceApi.computeCI).mock.lastCall![0]).toMatchObject({ alpha: 0.1 })
     expect(state.isDirty).toBe(false)
     expect(state.appliedConfig?.alpha).toBe(0.1)
-    expect(panelText('observation')).toContain('90% confidence · α = 0.1')
+    expect(panelText('observation')).not.toContain('ApneaCMKL.csv')
     expect(panelText('observation')).not.toContain('Settings changed')
   })
 
@@ -188,15 +189,17 @@ describe('Inference student workflow', () => {
     expect(state.appliedConfig?.column).toBe('Age')
   })
 
-  it('clears and invalidates an in-flight run on Reset', async () => {
+  it('Reset ignores an in-flight run and calculates the defaults again', async () => {
     const pending = deferred<IntervalsResponse>()
     vi.mocked(inferenceApi.computeCI).mockReturnValueOnce(pending.promise)
+    await act(async () => state.setDraft({ alphaStr: '0.1' }))
     await startRun()
+    vi.mocked(inferenceApi.computeCI).mockResolvedValue(intervals(45))
     await act(async () => state.handleReset())
-    await act(async () => pending.resolve(intervals()))
-    expect(state.ciResult).toBeNull()
-    expect(state.piResult).toBeNull()
-    expect(state.appliedConfig).toBeNull()
+    await act(async () => pending.resolve(intervals(20)))
+    expect(state.ciResult?.point_estimates.mean).toBe(45)
+    expect(state.appliedConfig?.alpha).toBe(0.05)
+    expect(vi.mocked(inferenceApi.computeCI).mock.lastCall![0]).toMatchObject({ alpha: 0.05 })
     expect(state.isComputing).toBe(false)
   })
 
@@ -218,13 +221,14 @@ describe('Inference student workflow', () => {
     expect(state.partialResult).toBe(true)
     expect(failed === 'CI' ? state.ciResult : state.piResult).toBeNull()
     expect(failed === 'CI' ? state.piResult : state.ciResult).not.toBeNull()
-    for (const panel of ['observation', 'notebook'] as const) {
-      expect(panelText(panel)).toContain('Couldn’t update results')
-      expect(panelText(panel)).toContain('Partial result — only successful intervals are shown.')
-      expect(panelText(panel)).toContain(failed === 'CI' ? 'Confidence intervals failed' : 'Prediction intervals failed')
-    }
+    expect(panelText('observation')).toContain('Couldn’t update results')
+    expect(panelText('observation')).toContain('Partial result — only successful intervals are shown.')
+    expect(panelText('observation')).toContain(failed === 'CI' ? 'Confidence intervals failed' : 'Prediction intervals failed')
+    expect(panelText('notebook')).not.toContain('Couldn’t update results')
+    // Freeze the clock so the automatic update for the edit cannot fire before the checks on a slow run.
+    vi.useFakeTimers()
     await act(async () => state.setDraft({ alphaStr: '0.1' }))
-    const retry = [...container.querySelectorAll<HTMLButtonElement>('[data-panel="notebook"] button')].find(button => button.textContent === 'Retry')!
+    const retry = [...container.querySelectorAll<HTMLButtonElement>('[data-panel="observation"] button')].find(button => button.textContent === 'Retry')!
     await act(async () => retry.click())
     expect(state.error).toBeNull()
     expect(state.partialResult).toBe(false)
@@ -241,16 +245,15 @@ describe('Inference student workflow', () => {
     vi.mocked(inferenceApi.computeCI).mockReturnValueOnce(ci.promise)
     vi.mocked(inferenceApi.computePI).mockReturnValueOnce(pi.promise)
     await startRun()
-    for (const panel of ['observation', 'notebook'] as const) expect(panelText(panel)).toContain('Computing results…')
+    expect(panelText('observation')).toContain('Computing results…')
     await act(async () => { ci.reject(new Error('CI unavailable')); pi.reject(new Error('PI unavailable')) })
     expect(state.partialResult).toBe(false)
     expect(state.isComputing).toBe(false)
-    for (const panel of ['observation', 'notebook'] as const) {
-      expect(panelText(panel)).toContain('Couldn’t update results')
-      expect(panelText(panel)).toContain('Confidence intervals failed: CI unavailable')
-      expect(panelText(panel)).toContain('Prediction intervals failed: PI unavailable')
-      expect(panelText(panel)).not.toContain('Choose settings, then select Update')
-    }
+    expect(panelText('observation')).toContain('Couldn’t update results')
+    expect(panelText('observation')).toContain('Confidence intervals failed: CI unavailable')
+    expect(panelText('observation')).toContain('Prediction intervals failed: PI unavailable')
+    expect(panelText('observation')).not.toContain('Choose settings, then select Update')
+    expect(panelText('notebook')).not.toContain('Couldn’t update results')
   })
 
   it('keeps UI and confidence-region fields out of CI/PI payloads', () => {
@@ -324,9 +327,55 @@ describe('Inference student workflow', () => {
     })
     await act(async () => state.setDraft({ selected: withBootstrap('ci.mean.boot') }))
     await startRun()
-    const titles = [...container.querySelectorAll('[data-panel="notebook"] article h4')].map(node => node.textContent)
-    expect(titles.slice(0, 2)).toEqual(['Mean', 'Mean – bootstrap'])
-    expect(panelText('observation')).toContain('Mean – bootstrap:')
+    const notebook = panelText('notebook')!
+    expect(notebook.indexOf('Mean · t')).toBeGreaterThanOrEqual(0)
+    expect(notebook.indexOf('Mean · bootstrap')).toBeGreaterThan(notebook.indexOf('Mean · t'))
+    expect(container.querySelector('[data-panel="observation"] tbody')!.textContent).toContain('Bootstrap (B=500)')
+    expect(panelText('observation')).not.toContain('Mean – bootstrap:')
+  })
+
+  it('draws the observed values in the soft histogram look shared by every Statistics tab', async () => {
+    await startRun()
+    const observed = container.querySelector<HTMLElement>('[data-panel="observation"] [data-plot]')!
+    expect(JSON.parse(observed.dataset.plot!)[0].marker).toEqual(HISTOGRAM_MARKER)
+  })
+
+  it('puts alpha, the sigma estimator and the bootstrap samples together in one Settings section below the menus', async () => {
+    await act(async () => state.setDraft({ selected: withBootstrap('ci.mean.boot') }))
+    const text = container.textContent!
+    const at = (label: string) => text.indexOf(label)
+    expect(at('Settings')).toBeGreaterThan(at('Prediction intervals'))
+    expect(at('Significance level α')).toBeGreaterThan(at('Settings'))
+    expect(at('σ estimator')).toBeGreaterThan(at('Significance level α'))
+    expect(at('Bootstrap samples (B)')).toBeGreaterThan(at('σ estimator'))
+  })
+
+  it('keeps alpha nested under the marginal box for confidence regions, with no Settings section', async () => {
+    await act(async () => state.setDraft({ estimationType: 'Confidence Regions', addCiBox: true }))
+    const text = container.textContent!
+    expect(text).not.toContain('Settings')
+    expect(text.indexOf('Significance level α')).toBeGreaterThan(text.indexOf('Show marginal confidence interval box'))
+  })
+
+  it('shows the intervals table at the top, grouped and tinted like the plots', async () => {
+    await startRun()
+    const observation = container.querySelector('[data-panel="observation"]')!
+    const table = observation.querySelector('table')!
+    const firstPlot = observation.querySelector('[data-plot]')!
+    expect(table.compareDocumentPosition(firstPlot) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect([...table.querySelectorAll('th')].map(cell => cell.textContent))
+      .toEqual(['Interval', 'Statistic', 'Method', 'Estimate', 'Lower', 'Upper'])
+    const rows = [...table.querySelectorAll('tbody tr')] as HTMLElement[]
+    const labels = [...table.querySelectorAll<HTMLTableCellElement>('tbody td[rowspan]')]
+    expect(labels.map(cell => [cell.textContent, cell.rowSpan])).toEqual([['Prediction', 1], ['Confidence', 2]])
+    expect(rows.map(row => row.querySelector('td:not([rowspan])')!.textContent)).toEqual(['Based on the mean', 'Mean', 'Deviation'])
+    expect(rows[0].className).toContain('bg-rose-950/50')
+    expect(rows[1].className).toContain('bg-blue-950/50')
+    expect(rows[2].className).toContain('bg-amber-950/50')
+    expect(rows[1].children[2].textContent).toBe('t (df=4)')
+    expect(rows[1].textContent).toContain('29.000')
+    expect(rows[1].textContent).toContain('31.000')
+    expect(observation.textContent).toContain('95% coverage')
   })
 
   it('shares the observed/CI/PI location scale until zoom is explicitly selected', async () => {
@@ -345,11 +394,64 @@ describe('Inference student workflow', () => {
     expect(locationRanges()[2]).not.toEqual(locationRanges()[0])
     expect(panelText('observation')).toContain('Zoomed to confidence intervals — different x-axis scale')
     expect(state.isDirty).toBe(false)
-    const cards = container.querySelectorAll('[data-panel="notebook"] article')
-    expect(cards[0].textContent).toContain('Lower bound29.000')
-    expect(cards[0].textContent).toContain('Upper bound31.000')
-    expect(cards[0].querySelector('details')?.open).toBe(false)
     expect(container.querySelector('[data-panel="notebook"] table')).toBeNull()
+  })
+
+  it('sizes the interval plots margin to their row labels so long ones are not cut', async () => {
+    await startRun()
+    const layouts = [...container.querySelectorAll<HTMLElement>('[data-layout]')].map(element => JSON.parse(element.dataset.layout!))
+    const intervalPlots = layouts.filter(layout => layout.yaxis.ticktext)
+    expect(intervalPlots.length).toBeGreaterThan(0)
+    for (const layout of intervalPlots) expect(layout.yaxis.automargin).toBe(true)
+  })
+
+  it('sets the mean and median plot apart the same way only while it is zoomed', async () => {
+    await startRun()
+    const location = () => [...container.querySelectorAll('[data-panel="observation"] section')]
+      .find(node => node.querySelector('h3')?.textContent?.startsWith('Mean and median confidence intervals'))!
+    expect(location().className).not.toContain('border-t')
+    expect(location().querySelector('h3')!.textContent).not.toContain('Different scale')
+    const zoom = [...container.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'Zoom to intervals')!
+    await act(async () => zoom.click())
+    expect(location().className).toContain('border-t')
+    expect(location().querySelector('h3')!.textContent).toContain('Different scale')
+  })
+
+  it('sets the deviation plot apart: divider, a Different scale tag and a spread axis title', async () => {
+    await startRun()
+    const section = [...container.querySelectorAll('[data-panel="observation"] section')]
+      .find(node => node.querySelector('h3')?.textContent?.startsWith('Deviation confidence intervals'))!
+    expect(section.className).toContain('border-t')
+    expect(section.querySelector('h3')!.textContent).toContain('Different scale')
+    const layout = JSON.parse(section.querySelector<HTMLElement>('[data-layout]')!.dataset.layout!)
+    expect(layout.xaxis.title.text).toBe('Deviation σ of Breath (spread, in data units)')
+    expect(layout.xaxis.range).toBeUndefined()
+  })
+
+  it('shows in the right panel the formula of each interval shown, not its numbers', async () => {
+    await startRun()
+    const notebook = container.querySelector('[data-panel="notebook"]')!
+    const text = notebook.textContent!
+    const headings = [...notebook.querySelectorAll('h3')].map(node => node.textContent)
+    expect(headings).toEqual(['Confidence intervals', 'Prediction intervals', 'Notation'])
+    for (const label of ['Mean · t', 'Deviation · χ²', 'Based on the mean · t']) expect(text).toContain(label)
+    expect(text).not.toContain('Lower bound')
+    expect(notebook.querySelector('article')).toBeNull()
+    expect(notebook.querySelectorAll('.katex').length).toBeGreaterThan(3)
+    expect(notebook.querySelector('.katex-error')).toBeNull()
+  })
+
+  it('shows alpha in regions only with the CI box, and leaves the plot window to the backend', async () => {
+    await act(async () => state.setDraft({ estimationType: 'Confidence Regions' }))
+    expect(container.textContent).toContain('Significance level α')
+    expect(container.textContent).not.toContain('padding')
+    expect(vi.mocked(inferenceApi.computeRegions).mock.lastCall![0]).not.toHaveProperty('eps_mu')
+    vi.useFakeTimers()
+    await act(async () => state.setDraft({ alphaStr: '', addCiBox: false }))
+    await pause()
+    expect(container.textContent).not.toContain('Significance level α')
+    expect(state.fieldErrors).toEqual({}) // a hidden, empty alpha does not block the regions
+    expect(vi.mocked(inferenceApi.computeRegions).mock.lastCall![0]).toMatchObject({ alpha: 0.05, add_ci_box: false })
   })
 
   it('honors applied region-box settings and shows coverage as percentages', async () => {
@@ -357,12 +459,99 @@ describe('Inference student workflow', () => {
     expect(vi.mocked(inferenceApi.computeRegions).mock.lastCall![0]).toMatchObject({ probs: [0.5, 0.95], add_ci_box: false })
     const traces = () => JSON.parse(container.querySelector<HTMLElement>('[data-plot]')!.dataset.plot!) as { name: string }[]
     expect(traces().some(trace => trace.name === 'Separate marginal intervals')).toBe(false)
-    expect(panelText('notebook')).toContain('Coverage: 50%, 95%')
+    expect(panelText('notebook')).toContain('Cut-off for 50% coverage0.500')
+    expect(panelText('notebook')).toContain('Cut-off for 95% coverage0.050')
+    expect(panelText('notebook')).not.toContain('Marginal box')
     vi.useFakeTimers()
     await act(async () => state.setDraft({ addCiBox: true }))
     expect(traces().some(trace => trace.name === 'Separate marginal intervals')).toBe(false)
     await pause()
     expect(traces().some(trace => trace.name === 'Separate marginal intervals')).toBe(true)
-    expect(panelText('notebook')).toContain('The dashed box combines separate marginal intervals')
+    expect(panelText('notebook')).toContain('Marginal box (dashed, not a joint region)')
+    expect(panelText('notebook')).toContain('Mean interval (box)29.000 to 31.000')
+  })
+
+  it('draws the regions as white lines labeled by coverage, with no outlier red on the plot', async () => {
+    await act(async () => state.setDraft({ estimationType: 'Confidence Regions', addCiBox: true, crProbs: '0.5, 0.95' }))
+    await act(async () => { await vi.waitFor(() => expect(container.querySelector('[data-plot]')).not.toBeNull()) })
+    const element = container.querySelector<HTMLElement>('[data-plot]')!
+    const traces = JSON.parse(element.dataset.plot!) as Record<string, any>[]
+    const layout = JSON.parse(element.dataset.layout!) as Record<string, any>
+    const contours = traces.filter(trace => trace.type === 'contour')
+    expect(contours).toHaveLength(2)
+    // 'lines' would color each line from a color scale and ignore line.color.
+    expect(contours.every(trace => trace.contours.coloring === 'none')).toBe(true)
+    expect(contours.map(trace => trace.line.color)).toEqual([regionLineColor(0, 2), regionLineColor(1, 2)])
+    expect(regionLineColor(0, 2)).not.toBe(regionLineColor(1, 2))
+    expect(layout.annotations.map((note: { text: string }) => note.text)).toEqual(['50%', '95%'])
+    expect(JSON.stringify(traces)).not.toContain(PLOT_COLORS.outlier)
+    expect(traces.find(trace => trace.name === 'Estimated mean and deviation')!.marker.color).toBe(PLOT_COLORS.regionEstimate)
+    const box = traces.find(trace => trace.name === 'Separate marginal intervals')!
+    expect(box.line).toMatchObject({ color: PLOT_COLORS.regionBox, dash: 'dash' })
+  })
+
+  it('explains in the right panel how the regions are built, then gives their values', async () => {
+    await act(async () => state.setDraft({ estimationType: 'Confidence Regions', addCiBox: false }))
+    await act(async () => { await vi.waitFor(() => expect(state.regionResult).not.toBeNull()) })
+    const notebook = container.querySelector('[data-panel="notebook"]')!
+    expect([...notebook.querySelectorAll('h3')].map(node => node.textContent)).toEqual(['How the regions are built', 'Values'])
+    const text = notebook.textContent!
+    for (const label of ['Normal likelihood', 'Maximum-likelihood estimates (the deviation divides by n)', 'Relative likelihood', 'Region with coverage p']) {
+      expect(text).toContain(label)
+    }
+    expect(text).not.toMatch(/[μσ]\u0302/)
+    const values = [...notebook.querySelectorAll('section')].find(node => node.querySelector('h3')?.textContent === 'Values')!
+    const [mu, sigma] = [...values.querySelectorAll(':scope > div')]
+    expect(mu.firstElementChild!.querySelector('.katex')).not.toBeNull()
+    expect(mu.textContent).toContain('30.000')
+    expect(sigma.firstElementChild!.querySelector('.katex')).not.toBeNull()
+    expect(sigma.textContent).toContain('8.000')
+    expect(text).not.toContain('Method details')
+    expect(text).not.toContain('Grid:')
+    expect(text).not.toContain('Coverage:')
+    expect(notebook.querySelectorAll('.katex').length).toBeGreaterThanOrEqual(4)
+    expect(notebook.querySelector('.katex-error')).toBeNull()
+  })
+})
+
+describe('Inference follows the interaction contract', () => {
+  it('Estimate is a radio group', () => {
+    const radios = [...container.querySelectorAll<HTMLInputElement>('form input[type="radio"]')]
+    expect(radios.map(radio => radio.value)).toEqual(['Confidence and Prediction Intervals', 'Confidence Regions'])
+  })
+
+  it('has no explanatory prose in the panels', async () => {
+    await startRun()
+    expect(container.querySelector('form')!.textContent).not.toContain('A confidence interval describes')
+    expect(container.querySelector('form')!.textContent).not.toContain('no correction across rows')
+    expect(panelText('observation')).not.toContain('Lines show interval bounds')
+    expect(panelText('notebook')).not.toContain('Uncertainty about each population quantity')
+    expect(panelText('notebook')).not.toContain('Statistical inference')
+  })
+
+  it('reports status only in the center panel', async () => {
+    // Every CI call fails, so an automatic update that starts before the explicit run cannot use up the failure.
+    vi.mocked(inferenceApi.computeCI).mockRejectedValue(new Error('Service unavailable'))
+    await act(async () => state.setDraft({ alphaStr: '0.1' }))
+    await startRun()
+    expect(panelText('observation')).toContain('Couldn’t update results')
+    expect(panelText('notebook')).not.toContain('Couldn’t update results')
+  })
+
+  it('an estimator load failure is a warning above the results, not in the controls', async () => {
+    await act(async () => root.unmount())
+    root = createRoot(container)
+    vi.mocked(inferenceApi.getEstimators).mockRejectedValue(new Error('offline'))
+    await render()
+    await startRun()
+    expect(container.querySelector('[data-panel="observation"] [aria-label="Warnings"]')?.textContent).toContain('Estimator options could not be loaded')
+    expect(container.querySelector('form')!.textContent).not.toContain('Estimator options could not be loaded')
+  })
+
+  it('the zoom note is a muted section note', async () => {
+    await act(async () => state.setDraft({ zoomCI: true }))
+    await startRun()
+    const note = [...container.querySelectorAll('[data-panel="observation"] p')].find(p => p.textContent?.startsWith('Zoomed'))!
+    expect(note.className).not.toContain('amber')
   })
 })

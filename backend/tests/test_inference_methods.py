@@ -16,6 +16,11 @@ def _params(**overrides):
 DATA = pd.Series([float(v) for v in range(2, 42)])  # n = 40
 
 
+def _frame(data):
+    """The dataset the services read: the analysed column is "x", as in _params."""
+    return pd.DataFrame({"x": data})
+
+
 def _method(table, statistic):
     rows = json.loads(table.to_json(orient="records"))
     return next(r["Method"] for r in rows if r["Statistic"] == statistic)
@@ -101,7 +106,7 @@ def test_pi_iqr_row_names_its_normal_calibration():
 def _region_params(**overrides):
     from api.schemas.inference import ConfidenceRegionsParams
 
-    base = dict(session_id="t", column="x", probs=[0.5, 0.95], eps_mu=[0.1, 0.1], eps_sigma=[0.05, 0.05])
+    base = dict(session_id="t", column="x", probs=[0.5, 0.95])
     base.update(overrides)
     return ConfidenceRegionsParams(**base)
 
@@ -110,9 +115,9 @@ def test_regions_ignore_estimator_and_bootstrap_choices():
     """Regions always use the sample mean and std (ddof=1) with normal-theory intervals."""
     from services.inference import calculate_regions
 
-    reference = calculate_regions(DATA, _region_params())
+    reference = calculate_regions(_frame(DATA), _region_params())
     tampered = calculate_regions(
-        DATA,
+        _frame(DATA),
         _region_params(
             sigma_estimator="MAD (bias corrected)", mean_estimator="Trimmed Mean", trim_param=0.2,
             bootstrap_mean=True, bootstrap_deviation=True, bootstrap_samples=50,
@@ -125,7 +130,7 @@ def test_regions_ignore_estimator_and_bootstrap_choices():
 def test_regions_box_is_the_mean_t_interval_and_the_chi_square_deviation_interval():
     from services.inference import calculate_regions
 
-    res = calculate_regions(DATA, _region_params())
+    res = calculate_regions(_frame(DATA), _region_params())
     rows = json.loads(res["table"])
     mean = next(r for r in rows if r["Statistic"] == "Mean")
     dev = next(r for r in rows if r["Statistic"] == "Deviation")
@@ -137,7 +142,41 @@ def test_regions_box_is_the_mean_t_interval_and_the_chi_square_deviation_interva
 def test_regions_table_is_omitted_when_the_box_is_off():
     from services.inference import calculate_regions
 
-    assert calculate_regions(DATA, _region_params(add_ci_box=False))["table"] is None
+    assert calculate_regions(_frame(DATA), _region_params(add_ci_box=False))["table"] is None
+
+
+@pytest.mark.parametrize("data", [DATA, pd.Series([4.1, 5.3, 3.8, 6.0, 4.7]), pd.Series([0.001 * v for v in range(1, 201)])])
+@pytest.mark.parametrize("probs", [[0.5, 0.95], [0.1, 0.99]])
+def test_regions_window_holds_every_contour_and_the_box(data, probs):
+    """No contour touches the plot edge, whatever the scale or n, and the drawn CI box fits inside."""
+    import numpy as np
+    from services.inference import calculate_regions
+
+    res = calculate_regions(_frame(data), _region_params(probs=probs, alpha=0.001))
+    z = np.array(res["z_matrix"])
+    edge = np.concatenate([z[0], z[-1], z[:, 0], z[:, -1]])
+    assert edge.max() < min(res["levels"])
+    assert min(res["sigma_grid"]) > 0
+    assert min(res["mu_grid"]) <= res["mu_ci"][0] and res["mu_ci"][1] <= max(res["mu_grid"])
+    assert min(res["sigma_grid"]) <= res["sigma_ci"][0] and res["sigma_ci"][1] <= max(res["sigma_grid"])
+
+
+def test_regions_window_is_tight_around_the_largest_contour():
+    """The bounds are the exact projection: the contour reaches each bound, so R there equals the level."""
+    import numpy as np
+    from scipy.stats import chi2
+    from core.estimation.inference.likelihood import relative_likelihood
+    from core.estimation.inference.region_bounds import region_bounds
+
+    data = DATA.to_numpy()
+    (mu_lo, mu_hi), (s_lo, s_hi) = region_bounds(data=data, probs=[0.5, 0.95])
+    level = np.exp(-0.5 * chi2.ppf(0.95, 2))
+    mu_hat, s_hat = data.mean(), data.std(ddof=0)
+    profile_sigma = lambda mu: np.sqrt(s_hat**2 + (mu - mu_hat) ** 2)
+    for mu in (mu_lo, mu_hi):
+        assert relative_likelihood(data=data, mu=mu, sigma=profile_sigma(mu), sigma_hat=s_hat) == pytest.approx(level)
+    for s in (s_lo, s_hi):
+        assert relative_likelihood(data=data, mu=mu_hat, sigma=s, sigma_hat=s_hat) == pytest.approx(level)
 
 
 def test_ci_and_pi_halves_match_the_full_calculation():
@@ -145,8 +184,8 @@ def test_ci_and_pi_halves_match_the_full_calculation():
 
     params = _params(bootstrap_mean=True, bootstrap_pi=True, bootstrap_samples=200)
     full_ci, full_pi, _, _, _, _ = calculate_intervals(DATA, params)
-    ci, ci_ctx = calculate_ci(DATA, params)
-    pi, pi_ctx = calculate_pi(DATA, params)
+    ci, ci_ctx = calculate_ci(_frame(DATA), params)
+    pi, pi_ctx = calculate_pi(_frame(DATA), params)
     # normal-theory rows are deterministic, so they must be identical; bootstrap rows only need to exist
     stable = lambda table: [r for r in json.loads(table.to_json(orient="records")) if not r["Method"].startswith("Bootstrap")]
     assert stable(ci) == stable(full_ci)
@@ -165,8 +204,8 @@ def test_ci_half_does_not_resample_for_prediction_and_vice_versa(monkeypatch):
     real = module.ci_mean_bootstrap
     monkeypatch.setattr(module, "ci_mean_bootstrap", lambda **kw: calls.append("ci") or real(**kw))
     params = _params(bootstrap_mean=True, bootstrap_pi=True, bootstrap_samples=50)
-    calculate_ci(DATA, params)
+    calculate_ci(_frame(DATA), params)
     assert calls == ["ci"]
     calls.clear()
-    calculate_pi(DATA, params)
+    calculate_pi(_frame(DATA), params)
     assert calls == ["pi"]

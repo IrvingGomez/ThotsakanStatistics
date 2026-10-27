@@ -40,20 +40,24 @@ beforeEach(() => {
 })
 afterEach(() => { act(() => root.unmount()); container.remove() })
 
-function render(revealed: boolean, isDirty = false, isComputing = false) {
-  act(() => root.render(<HypothesisObservation result={result} hasData precision={3} canReveal
-    revealed={revealed} onReveal={() => {}} isDirty={isDirty} isComputing={isComputing} />))
+function render(isDirty = false, isComputing = false) {
+  act(() => root.render(<HypothesisObservation result={result} hasData loaded precision={3} isDirty={isDirty} isComputing={isComputing} />))
 }
 
-describe('hypothesis export teaching guard', () => {
-  it('does not construct export handlers until the result is revealed, clean, idle, and mounted', () => {
-    render(false)
-    expect(container.querySelector('button[data-handlers]')?.getAttribute('data-handlers')).toBe('false')
-    render(true)
+describe('hypothesis result panel', () => {
+  it('offers export as soon as the shown result is current, and not while it is updating', () => {
+    render()
     expect(container.querySelector('button[data-handlers]')?.getAttribute('data-handlers')).toBe('true')
-    render(true, true)
+    render(true)
     expect(container.querySelector('button[data-handlers]')?.getAttribute('data-handlers')).toBe('false')
-    render(true, false, true)
+    render(false, true)
     expect(container.querySelector('button[data-handlers]')?.getAttribute('data-handlers')).toBe('false')
+  })
+
+  it('shows the p-value area without any click and never prints a decision', () => {
+    render()
+    expect(container.textContent).toContain('Blue area: p-value')
+    expect(container.textContent).not.toContain('Reveal')
+    expect(container.textContent).not.toContain('Reject H')
   })
 })

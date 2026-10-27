@@ -37,8 +37,8 @@ def validate_deviation_estimator(*, sigma_estimator: str, n: int) -> None:
 
 
 def _normal_overlay_applies(params: GraphicalParams) -> bool:
-    """A normal curve is a density: it is drawn on the histogram and as a CDF on the ECDF only."""
-    return params.add_normal and params.graph_type != "PMF"
+    """A normal curve is drawn as a density on the histogram and as a CDF on the ECDF."""
+    return params.add_normal
 
 
 def resolve_weights_column(params: GraphicalParams) -> Optional[str]:
@@ -99,7 +99,6 @@ def _estimate_mu(data: pd.Series, params: GraphicalParams, weights: Optional[pd.
 
 def compute_graphical_data(df: pd.DataFrame, params: GraphicalParams) -> Dict[str, Any]:
     is_ecdf = params.graph_type == "ECDF"
-    is_pmf = params.graph_type == "PMF"
 
     weights_col = resolve_weights_column(params)
     data, weights = prepare_series(df, params.column, weights_col)
@@ -108,12 +107,9 @@ def compute_graphical_data(df: pd.DataFrame, params: GraphicalParams) -> Dict[st
 
     warnings: List[str] = []
 
-    # An empirical PMF plots probabilities, which sum to 1; a KDE and a normal
-    # curve are densities, which integrate to 1. Drawing one on the other's axis
-    # invites a comparison that is not true, so they are not drawn there.
+    # The KDE is a density, drawn over the histogram only.
     add_kde = params.add_kde and params.graph_type == "Histogram"
     add_normal = _normal_overlay_applies(params)
-    add_data = params.add_data and not is_ecdf
     add_band = params.add_conf_band and is_ecdf
 
     hat_mu: Optional[float] = None
@@ -124,22 +120,11 @@ def compute_graphical_data(df: pd.DataFrame, params: GraphicalParams) -> Dict[st
         hat_mu = _estimate_mu(data, params, weights)
         hat_sigma = float(estimate_sigma(data, params.sigma_estimator))
 
-    if is_pmf:
-        n_unique = int(data.nunique())
-        if n_unique > 0.5 * n:
-            warnings.append(
-                f"The empirical PMF assumes a discrete variable, but '{params.column}' has "
-                f"{n_unique} unique values in {n} observations. A histogram or the ECDF "
-                "will read better here."
-            )
-
     # -- Assemble the drawing data --------------------------------------------
     response: Dict[str, Any] = {"summary": gj.compute_summary(values)}
 
     if params.graph_type == "Histogram":
         response["histogram_data"] = gj.compute_histogram_data(values, bins=params.bins)
-    elif is_pmf:
-        response["pmf_data"] = gj.compute_pmf_data(values)
     elif is_ecdf:
         response["ecdf_data"] = gj.compute_ecdf_data(
             values, alpha=params.alpha, add_conf_band=add_band
@@ -151,12 +136,9 @@ def compute_graphical_data(df: pd.DataFrame, params: GraphicalParams) -> Dict[st
     # and keep the rest of the plot instead of failing the whole request.
     if add_kde:
         try:
-            response["kde_curve"] = gj.compute_kde_data(values)
+            response["kde_curve"] = gj.compute_kde_data(values, bandwidth=params.kde_bandwidth)
         except DegenerateDataError as e:
             warnings.append(f"KDE not drawn: {e}")
-
-    if add_data:
-        response["rug_data"] = gj.compute_rug_data(values)
 
     if add_normal:
         try:

@@ -1,37 +1,81 @@
 import { useMemo, useState, useEffect } from 'react'
 import DualInput from '../../../components/DualInput'
-import { AnalysisActions, SelectField, TextField } from '../../../components/ControlPrimitives'
-import { DISTRIBUTIONS, type QueryOp } from '../../../hooks/useDistribution'
+import { AnalysisActions, Divider, RadioGroup, SectionLabel, SelectField } from '../../../components/ControlPrimitives'
+import { DISTRIBUTIONS, paramBounds } from '../../../hooks/useDistribution'
+import { queryDomain } from '../../../math/localDistributions'
+import { opSymbol, type BoundOp, type DistQuery, type QueryOp } from '../../../math/probabilityQuery'
+import { defaultQuery, snapToStep, supportError } from '../../../math/queryDomain'
+import QuerySlider from './QuerySlider'
 
 interface CommonDistControlsProps {
   modelType: 'discrete' | 'continuous'
   distName: string
   paramValues: Record<string, number>
-  queryOp: QueryOp
-  queryK: number
-  queryResult: number | null
+  query: DistQuery
   onModelTypeChange: (t: 'discrete' | 'continuous') => void
   onDistChange: (name: string) => void
   onParamChange: (key: string, value: number) => void
-  onQueryOpChange: (op: QueryOp) => void
-  onQueryKChange: (k: number) => void
+  onQueryChange: (query: DistQuery) => void
   onReset: () => void
 }
 
-const QUERY_OPS: QueryOp[] = ['<=', '>=', '=', '<', '>']
+const QUERY_OPS: readonly QueryOp[] = ['<=', '<', '=', '>=', '>']
+const BOUND_OPS: readonly BoundOp[] = ['<', '<=']
+
+/** The query row reads as a formula, x₁ < X ≤ x₂, so its fields are compact and labelled for screen readers. */
+const compactField = `min-w-0 rounded-md border border-[var(--color-border-md)] bg-[var(--color-bg-input)] py-2 text-sm
+  text-[var(--color-text)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-accent)]`
+
+function OpSelect<T extends QueryOp>({ label, value, options, onChange }: {
+  label: string; value: T; options: readonly T[]; onChange: (op: T) => void
+}) {
+  return (
+    <select aria-label={label} value={value} onChange={(event) => onChange(event.target.value as T)}
+      className={`${compactField} w-12 shrink-0 px-1 text-center`}>
+      {options.map((op) => <option key={op} value={op}>{opSymbol(op)}</option>)}
+    </select>
+  )
+}
+
+function ValueInput({ label, value, invalid, onChange }: {
+  label: string; value: string; invalid: boolean; onChange: (raw: string) => void
+}) {
+  return (
+    <input type="text" inputMode="decimal" aria-label={label} aria-invalid={invalid} value={value}
+      onChange={(event) => onChange(event.target.value)} className={`${compactField} w-full flex-1 px-2 font-mono`} />
+  )
+}
+
+function parseNumber(raw: string): number {
+  const trimmed = raw.trim()
+  return /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(trimmed) ? Number(trimmed) : Number.NaN
+}
+
+/** The text in each query field; kept apart from the query so an unfinished entry is not lost. */
+function queryTexts(query: DistQuery) {
+  return query.kind === 'one-sided'
+    ? { k: String(query.k), lower: String(query.k), upper: String(query.k) }
+    : { k: String(query.lower), lower: String(query.lower), upper: String(query.upper) }
+}
+
+/** Whether the text already shows this query, e.g. "1.0" while typing 1.05 shows k = 1. */
+function textsShow(texts: { k: string; lower: string; upper: string }, query: DistQuery) {
+  return query.kind === 'one-sided'
+    ? parseNumber(texts.k) === query.k
+    : parseNumber(texts.lower) === query.lower && parseNumber(texts.upper) === query.upper
+}
+
+const INCOMPLETE = 'Enter a complete number.'
 
 export default function CommonDistControls({
   modelType,
   distName,
   paramValues,
-  queryOp,
-  queryK,
-  queryResult,
+  query,
   onModelTypeChange,
   onDistChange,
   onParamChange,
-  onQueryOpChange,
-  onQueryKChange,
+  onQueryChange,
   onReset,
 }: CommonDistControlsProps) {
   const availableDists = useMemo(
@@ -40,83 +84,85 @@ export default function CommonDistControls({
   )
 
   const currentDist = DISTRIBUTIONS.find((d) => d.name === distName)
+  const domain = useMemo(() => queryDomain(distName, paramValues), [distName, paramValues])
 
-  const [queryKText, setQueryKText] = useState(String(queryK))
-  const [queryError, setQueryError] = useState<string | undefined>()
+  const [texts, setTexts] = useState(() => queryTexts(query))
   const [resetGeneration, setResetGeneration] = useState(0)
 
-  useEffect(() => {
-    setQueryKText(String(queryK))
-    setQueryError(undefined)
-  }, [queryK])
+  // A query set from outside (slider, Reset, another distribution) replaces whatever is typed.
+  useEffect(() => { setTexts((current) => textsShow(current, query) ? current : queryTexts(query)) }, [query])
 
-  const handleQueryKChange = (raw: string) => {
-    setQueryKText(raw)
-    const trimmed = raw.trim()
-    const valid = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(trimmed)
-    const parsed = valid ? Number(trimmed) : Number.NaN
-    if (Number.isFinite(parsed)) {
-      setQueryError(undefined)
-      onQueryKChange(parsed)
-    } else setQueryError('Enter a complete numeric query value.')
-  }
+  const k = parseNumber(texts.k)
+  const lower = parseNumber(texts.lower)
+  const upper = parseNumber(texts.upper)
+  const valueError = (value: number) => Number.isFinite(value) ? supportError(value, domain) : INCOMPLETE
+  const errors = query.kind === 'one-sided'
+    ? { k: valueError(k) }
+    : {
+        lower: valueError(lower),
+        upper: valueError(upper),
+        order: Number.isFinite(lower) && Number.isFinite(upper) && lower > upper ? 'x₂ must not be less than x₁.' : undefined,
+      }
+  const messages = 'k' in errors
+    ? [errors.k]
+    : [errors.lower && `x₁: ${errors.lower}`, errors.upper && `x₂: ${errors.upper}`, errors.order]
 
-  const handleQueryKBlur = () => {
-    if (queryError) {
-      setQueryKText(String(queryK))
-      setQueryError(undefined)
+  /** Applies typed text; the query (and the result) only changes once every field is valid. */
+  const editText = (field: 'k' | 'lower' | 'upper', raw: string) => {
+    const next = { ...texts, [field]: raw }
+    setTexts(next)
+    const value = { k: parseNumber(next.k), lower: parseNumber(next.lower), upper: parseNumber(next.upper) }
+    const valid = (x: number) => !valueError(x)
+    if (query.kind === 'one-sided') {
+      if (valid(value.k)) onQueryChange({ ...query, k: value.k })
+    } else if (valid(value.lower) && valid(value.upper) && value.lower <= value.upper) {
+      onQueryChange({ ...query, lower: value.lower, upper: value.upper })
     }
   }
+
+  /** Slider handles cannot cross: x₁ stops at x₂ and x₂ stops at x₁. */
+  const slide = (index: number, raw: number) => {
+    const value = snapToStep(raw, domain)
+    if (query.kind === 'one-sided') onQueryChange({ ...query, k: value })
+    else if (index === 0) onQueryChange({ ...query, lower: Math.min(value, query.upper) })
+    else onQueryChange({ ...query, upper: Math.max(value, query.lower) })
+  }
+
+  const changeKind = (kind: DistQuery['kind']) => {
+    if (kind === query.kind) return
+    onQueryChange(defaultQuery(distName, paramValues, kind === 'one-sided'
+      ? { kind, op: '<=', k: 0 }
+      : { kind, lower: 0, lowerOp: '<', upper: 0, upperOp: '<=' }))
+  }
+
+  const fill: [number, number] | null = query.kind === 'interval' ? [query.lower, query.upper]
+    : query.op === '<=' || query.op === '<' ? [domain.min, query.k]
+    : query.op === '>=' || query.op === '>' ? [query.k, domain.max]
+    : null
 
   return (
     <div className="flex flex-col gap-5">
 
-      {/* Model Type toggle */}
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-widest
-          text-[var(--color-text-muted)] mb-2">
-          Model Type
-        </p>
-        <div className="flex rounded-md overflow-hidden border border-[var(--color-border-md)]" role="group" aria-label="Model type">
-          {(['discrete', 'continuous'] as const).map((t) => (
-            <button
-              key={t}
-              type="button"
-              aria-pressed={modelType === t}
-              onClick={() => onModelTypeChange(t)}
-              className={`flex-1 py-1.5 text-sm capitalize transition-colors cursor-pointer
-                ${modelType === t
-                  ? 'bg-[var(--color-accent)] text-white'
-                  : 'bg-[var(--color-bg-input)] text-[var(--color-text-muted)] hover:text-[var(--color-text)]'
-                }`}
-            >
-              {t}
-            </button>
-          ))}
-        </div>
-      </div>
+      <RadioGroup label="Model type" value={modelType} onChange={onModelTypeChange}
+        options={[{ value: 'discrete', label: 'Discrete' }, { value: 'continuous', label: 'Continuous' }]} />
 
       {/* Distribution dropdown */}
       <SelectField label="Distribution" value={distName} onChange={onDistChange}
         options={availableDists.map((dist) => ({ value: dist.name, label: `${dist.name} Distribution` }))} />
 
-      <div className="h-px bg-[var(--color-border)]" />
+      <Divider />
 
       {/* Distribution parameters */}
       {currentDist && (
         <div>
-          <p className="text-xs font-semibold uppercase tracking-widest
-            text-[var(--color-text-muted)] mb-3">
-            Distribution Parameters
-          </p>
+          <SectionLabel>Parameters</SectionLabel>
           <div className="flex flex-col gap-4">
             {currentDist.params.map((param) => (
               <DualInput
                 key={param.key}
                 label={param.label}
                 value={paramValues[param.key] ?? param.default}
-                min={param.min}
-                max={param.max}
+                {...paramBounds(param, paramValues)}
                 step={param.step}
                 decimals={param.decimals}
                 resetSignal={resetGeneration}
@@ -127,41 +173,44 @@ export default function CommonDistControls({
         </div>
       )}
 
-      <div className="h-px bg-[var(--color-border)]" />
+      <Divider />
 
       {/* Probability Query */}
       <div>
-        <p className="text-xs font-semibold uppercase tracking-widest
-          text-[var(--color-text-muted)] mb-3">
-          Probability Query
-        </p>
-        <div className="flex gap-2 mb-3">
-          {/* Op select */}
-          <div className="w-20"><SelectField label="Op" value={queryOp}
-            onChange={(value) => onQueryOpChange(value as QueryOp)} options={QUERY_OPS} /></div>
-          {/* Value input */}
-          <div className="flex-1"><TextField label="Value (k)" value={queryKText} error={queryError}
-            inputMode="decimal" onChange={handleQueryKChange} onBlur={handleQueryKBlur} />
+        <SectionLabel>Probability query</SectionLabel>
+        <RadioGroup label="Query" value={query.kind} onChange={changeKind}
+          options={[{ value: 'one-sided', label: 'One-sided' }, { value: 'interval', label: 'Interval' }]} />
+        {query.kind === 'one-sided' ? (
+          <div className="flex items-center gap-1.5">
+            <span className="font-mono text-sm text-[var(--color-text)]">X</span>
+            <OpSelect label="Inequality" value={query.op} options={QUERY_OPS} onChange={(op) => onQueryChange({ ...query, op })} />
+            <ValueInput label="Value (x)" value={texts.k} invalid={!!errors.k} onChange={(raw) => editText('k', raw)} />
           </div>
+        ) : (
+          <div className="flex items-center gap-1.5">
+            <ValueInput label="Lower value (x₁)" value={texts.lower} invalid={!!(errors.lower || errors.order)}
+              onChange={(raw) => editText('lower', raw)} />
+            <OpSelect label="Lower inequality" value={query.lowerOp} options={BOUND_OPS}
+              onChange={(op) => onQueryChange({ ...query, lowerOp: op })} />
+            <span className="font-mono text-sm text-[var(--color-text)]">X</span>
+            <OpSelect label="Upper inequality" value={query.upperOp} options={BOUND_OPS}
+              onChange={(op) => onQueryChange({ ...query, upperOp: op })} />
+            <ValueInput label="Upper value (x₂)" value={texts.upper} invalid={!!(errors.upper || errors.order)}
+              onChange={(raw) => editText('upper', raw)} />
+          </div>
+        )}
+        <div className="mt-3">
+          <QuerySlider min={domain.min} max={domain.max} step={domain.step} fill={fill} onChange={slide}
+            handles={query.kind === 'one-sided' ? [{ label: 'x', value: query.k }]
+              : [{ label: 'x₁', value: query.lower }, { label: 'x₂', value: query.upper }]} />
         </div>
-        {/* Live query result */}
-        <div className="mt-2 rounded-md px-3 py-2 border border-[var(--color-accent)]/30
-          bg-[var(--color-accent)]/5 text-center">
-          <p className="text-[10px] uppercase tracking-widest text-[var(--color-text-muted)] mb-0.5">
-            P(X {queryOp} {modelType === 'discrete' ? Math.round(queryK) : queryK})
-          </p>
-          <p className="text-lg font-bold font-mono tabular-nums text-[var(--color-accent)]">
-            {queryResult != null ? queryResult.toFixed(4) : '—'}
-          </p>
-        </div>
+        {messages.filter(Boolean).map((message) => <p key={message} role="alert" className="mt-2 text-xs text-red-400">{message}</p>)}
       </div>
 
       <AnalysisActions onReset={() => {
         setResetGeneration(value => value + 1)
-        setQueryKText('5')
-        setQueryError(undefined)
         onReset()
-      }} resetLabel="Reset to defaults" />
+      }} />
 
     </div>
   )

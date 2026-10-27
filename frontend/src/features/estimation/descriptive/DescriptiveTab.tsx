@@ -1,53 +1,34 @@
 // features/estimation/descriptive/DescriptiveTab.tsx
-// Composite that owns descriptive state and renders all three panels via slots
+// Slots for the three panels; the state lives in useDescriptiveTabState (owned by App).
 
-import { type DescriptiveResult } from '../../../api/descriptive'
-import DescriptiveControls, { type DescriptiveConfig } from './DescriptiveControls'
+import DescriptiveControls from './DescriptiveControls'
 import DescriptiveObservation from './DescriptiveObservation'
 import DescriptiveNotebook from './DescriptiveNotebook'
 import StatusBanner from '../../../components/StatusBanner'
+import type { DescriptiveState } from './useDescriptiveTabState'
 
-// ─── Slot wrappers ────────────────────────────────────────────────────────────
-
-interface SlotProps {
-  result: DescriptiveResult | null
-  config: DescriptiveConfig | null
-  isComputing: boolean
-  error?: string | null
-  hasData: boolean
-  precision: number
-  filename: string
-  filteredN: number
-  rawN: number
-  onRun: (cfg: DescriptiveConfig) => void
-  onReset: () => void
+export function DescriptiveStatus({ state }: { state: DescriptiveState }) {
+  return <StatusBanner isComputing={state.isComputing} error={state.error} hasResult={!!state.result}
+    onRetry={state.handleRetry} warnings={state.warnings} />
 }
 
-export function ControlsSlot({ onRun, onReset, isComputing }: Pick<SlotProps, 'onRun' | 'onReset' | 'isComputing'>) {
-  return <DescriptiveControls onRun={onRun} onReset={onReset} isComputing={isComputing} />
+export function ControlsSlot({ state }: { state: DescriptiveState }) {
+  return <DescriptiveControls state={state} />
 }
 
-export function ObservationSlot({ result, config, hasData, precision, isComputing, error = null }: Pick<SlotProps, 'result' | 'config' | 'hasData' | 'precision' | 'isComputing' | 'error'>) {
+export function ObservationSlot({ state }: { state: DescriptiveState }) {
   return (
     <div className="h-full">
-      <StatusBanner isComputing={isComputing} error={error} hasResult={!!result} />
-      <DescriptiveObservation result={result} config={config} hasData={hasData} precision={precision} isComputing={isComputing} />
+      <DescriptiveStatus state={state} />
+      <DescriptiveObservation result={state.result} config={state.config} rows={state.visibleRows} hasData={state.hasData}
+        loaded={state.loaded} precision={state.precision} isComputing={state.isComputing} />
     </div>
   )
 }
 
-export function NotebookSlot({ result, config, filename, filteredN, rawN, precision }:
-  Pick<SlotProps, 'result' | 'config' | 'filename' | 'filteredN' | 'rawN' | 'precision'>) {
+export function NotebookSlot({ state }: { state: DescriptiveState }) {
   return (
-    <DescriptiveNotebook
-      result={result}
-      config={config}
-      filename={filename}
-      filteredN={filteredN}
-      rawN={rawN}
-      precision={precision}
-    />
+    <DescriptiveNotebook result={state.result} config={state.config} precision={state.precision}
+      hasData={state.hasData} loaded={state.loaded} />
   )
 }
-
-// Removed hook to useDescriptiveTabState.ts

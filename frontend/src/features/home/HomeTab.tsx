@@ -35,7 +35,7 @@ const PRODUCTS = [
 const FEATURES = [
   { tab: 'data',        icon: '📁', label: 'Data',              desc: 'Load datasets and explore their structure' },
   { tab: 'probability', icon: '🎲', label: 'Probability',       desc: 'Explore distributions and model randomness' },
-  { tab: 'estimation',  icon: '📐', label: 'Estimation',        desc: 'Summarize data and quantify uncertainty' },
+  { tab: 'estimation',  icon: '📐', label: 'Statistics',        desc: 'Summarize data and quantify uncertainty' },
   { tab: 'hypothesis',  icon: '🧪', label: 'Hypothesis Testing', desc: 'Evaluate claims and compare groups' },
   { tab: 'regression',  icon: '📈', label: 'Linear Regression',  desc: 'Model relationships and interpret evidence' },
 ]
@@ -120,7 +120,7 @@ export default function HomeTab({ onNavigate }: HomeTabProps) {
                   {product.description}
                 </p>
                 {product.status === 'coming-soon' && (
-                  <span className="text-[10px] uppercase tracking-widest text-amber-400 font-semibold">
+                  <span className="text-xs uppercase tracking-widest text-amber-400 font-semibold">
                     Coming soon
                   </span>
                 )}
@@ -130,7 +130,7 @@ export default function HomeTab({ onNavigate }: HomeTabProps) {
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={(e) => e.stopPropagation()}
-                    className="text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-accent)] underline"
+                    className="text-xs text-[var(--color-text-muted)] hover:text-[var(--color-accent)] underline"
                   >
                     GitHub Repository →
                   </a>
@@ -180,7 +180,7 @@ export default function HomeTab({ onNavigate }: HomeTabProps) {
               />
             ))}
           </div>
-          <p className="text-[10px] text-[var(--color-text-muted)] opacity-75">
+          <p className="text-xs text-[var(--color-text-muted)] opacity-75">
             Built under <strong>Himmapan Lab</strong> for engineering education.
           </p>
         </section>

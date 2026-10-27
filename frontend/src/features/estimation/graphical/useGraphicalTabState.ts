@@ -2,10 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useData } from '../../../context/DataContext'
 import { graphicalApi, type GraphicalResponse } from '../../../api/graphical'
 import { inferenceApi } from '../../../api/inference'
-import { estimatorLabel } from '../../../labels'
 import {
   DEBOUNCE_MS, DEFAULT_CONFIG, DEFAULT_MU_ESTIMATOR, DEFAULT_SIGMA_ESTIMATOR, SAMPLE_MEDIAN,
-  configForDataset, normalApplies, supportedOverlays, toParams, updateGraphicalConfig, validateGraphicalConfig,
+  configForDataset, normalApplies, toParams, updateGraphicalConfig, validateGraphicalConfig,
   type GraphicalConfig, type GraphicalFieldErrors,
 } from './graphicalState'
 
@@ -28,22 +27,6 @@ interface Request {
   owner: string
 }
 interface Applied extends Request { data: GraphicalResponse }
-
-function describeApplied({ cfg, data }: Applied): string {
-  const shows = supportedOverlays(cfg.graphType)
-  const settings: string[] = []
-  if (shows.bins) settings.push(`${cfg.bins ?? 'Auto'} bins`)
-  if (shows.kde) settings.push(`KDE ${cfg.addKde ? 'on' : 'off'}`)
-  if (shows.rug) settings.push(`Rug ${cfg.addData ? 'on' : 'off'}`)
-  if (shows.confBand) settings.push(cfg.addConfBand ? `α = ${cfg.alpha} ECDF band` : 'ECDF band off')
-  if (data.normal_curve) {
-    settings.push(`μ: ${estimatorLabel(cfg.muEstimator)}`, `σ: ${estimatorLabel(cfg.sigmaEstimator)}`)
-    if (cfg.muEstimator === 'Trimmed Mean') settings.push(`Trim: ${cfg.trimParam}`)
-    if (cfg.muEstimator === 'Winsorized Mean') settings.push(`Tail limits: ${cfg.winsorLimits}`)
-    if (cfg.muEstimator === 'Weighted Mean') settings.push(`Weights: ${cfg.weightsColumn}`)
-  }
-  return settings.join(' · ')
-}
 
 function freshDraft(sessionId: string | null, columns: string[]): Draft {
   return { sessionId, cfg: { ...DEFAULT_CONFIG, column: columns[0] ?? '' }, winsorRaw: '0.1, 0.1', autoBins: true }
@@ -202,18 +185,19 @@ export function useGraphicalTabState() {
 
   const currentApplied = hasData && applied?.sessionId === sessionId ? applied : null
   const result = currentApplied?.data ?? null
-  const appliedContext = currentApplied
-    ? `${currentApplied.filename} · ${currentApplied.cfg.column} · ${currentApplied.cfg.graphType} · n = ${currentApplied.data.summary.n} · ${Object.entries(currentApplied.filters).map(([key, values]) => `${key}: ${values.join(', ')}`).join('; ') || 'All rows'}`
-    : null
-  const appliedSettings = currentApplied ? describeApplied(currentApplied) : null
+  // The estimator notice is a warning like the backend's: it shows above the plot, not in the controls.
+  const warnings = [...(estimatorNotice ? [estimatorNotice] : []), ...(result?.warnings ?? [])]
 
   return {
     cfg, winsorRaw: draft.winsorRaw, autoBins: draft.autoBins, fieldErrors,
-    muEstimators: [...meanEstimators, SAMPLE_MEDIAN], deviationEstimators, estimatorNotice,
+    // Median second: after the mean it is the most common choice.
+    muEstimators: [...meanEstimators.slice(0, 1), SAMPLE_MEDIAN, ...meanEstimators.slice(1)], deviationEstimators,
     updateConfig, setWinsorRaw, setAutoBins, normalOn: normalApplies(cfg),
-    result, warnings: result?.warnings ?? [], column: currentApplied?.cfg.column ?? cfg.column,
+    result, warnings, column: currentApplied?.cfg.column ?? cfg.column,
+    // The default KDE bandwidth for the variable on screen, which sets the slider's range.
+    kdeDefault: currentApplied?.cfg.column === cfg.column ? result?.kde_curve?.default_bandwidth ?? null : null,
     graphType: currentApplied?.cfg.graphType ?? cfg.graphType,
-    isComputing, error, appliedContext, appliedSettings, resetVersion,
+    isComputing, error, resetVersion,
     reset, retry, hasData, numericCols, precision: dataState.displayPrecision, sessionId,
   }
 }

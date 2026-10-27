@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_SELECTED, isRowVisible, parseQuantiles, visibleStatIds } from './descriptiveOptions'
+import { DEFAULT_SELECTED, estimatorTags, isRowVisible, parseQuantiles, visibleStatIds } from './descriptiveOptions'
 
 describe('visible statistics', () => {
   it('shows every basic statistic by default and no advanced ones', () => {
@@ -46,5 +46,15 @@ describe('parseQuantiles', () => {
     expect(parseQuantiles('a, 0.5')).toBeNull()
     expect(parseQuantiles('1.5')).toBeNull()
     expect(parseQuantiles('-0.1')).toBeNull()
+  })
+})
+
+describe('estimatorTags', () => {
+  const row = (statId: string) => ({ statId, consistencyCorr: 1 })
+  it('marks the ddof = 1 variance unbiased even without the normal-corrected column', () => {
+    expect(estimatorTags(row('variance_1'), false)).toEqual(['Unbiased', 'Consistent'])
+    expect(estimatorTags(row('variance_0'), false)).toEqual(['Consistent'])
+    expect(estimatorTags(row('std_dev_1'), false)).toEqual(['Consistent'])
+    expect(estimatorTags(row('variance_0'), true)).toEqual(['Unbiased', 'Consistent'])
   })
 })

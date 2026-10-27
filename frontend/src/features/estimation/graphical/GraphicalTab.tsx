@@ -1,4 +1,4 @@
-import StatusBanner from '../../../components/StatusBanner'
+import StatusBanner, { EmptyState } from '../../../components/StatusBanner'
 import GraphicalControls from './GraphicalControls'
 import GraphicalObservation from './GraphicalObservation'
 import GraphicalNotebook from './GraphicalNotebook'
@@ -14,10 +14,7 @@ export function ControlsSlot({ state }: SlotProps) {
 function Status({ state, warnings = false }: SlotProps & { warnings?: boolean }) {
   return (
     <StatusBanner isComputing={state.isComputing} error={state.error} hasResult={!!state.result} onRetry={state.retry}
-      warnings={warnings ? state.warnings : undefined}>
-      {state.appliedContext && <p>Applied: {state.appliedContext}</p>}
-      {state.appliedSettings && <details className="mt-1"><summary className="cursor-pointer">Applied graph settings</summary><p className="mt-1">{state.appliedSettings}</p></details>}
-    </StatusBanner>
+      warnings={warnings ? state.warnings : undefined} />
   )
 }
 
@@ -26,16 +23,17 @@ export function ObservationSlot({ state }: SlotProps) {
     <div className="analysis-panel flex flex-col min-h-0">
       <Status state={state} warnings />
       {(!state.error || state.result) && <GraphicalObservation result={state.result} column={state.column} graphType={state.graphType}
-        hasData={state.hasData} isComputing={state.isComputing} />}
+        hasData={state.hasData} loaded={!!state.sessionId} isComputing={state.isComputing} />}
     </div>
   )
 }
 
 export function NotebookSlot({ state }: SlotProps) {
+  if (!state.hasData) return <EmptyState loaded={!!state.sessionId} hasData={false} compact />
   return (
     <div className="analysis-panel">
       <Status state={state} />
-      {(state.result || (!state.error && !state.isComputing)) && <GraphicalNotebook result={state.result} column={state.column} graphType={state.graphType}
+      {(state.result || (!state.error && !state.isComputing)) && <GraphicalNotebook result={state.result} graphType={state.graphType}
         precision={state.precision} />}
     </div>
   )

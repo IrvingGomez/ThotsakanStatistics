@@ -16,13 +16,15 @@ function inferColType(values: string[]): 'numeric' | 'categorical' {
 
 export async function parseFile(file: File): Promise<ParsedDataset> {
   const name = file.name.toLowerCase()
-  if (!name.endsWith('.csv') && !name.endsWith('.tsv') && !name.endsWith('.txt')) {
-    throw new Error('Only CSV/TSV/TXT files are supported. (Excel support coming soon)')
+  // The server reads comma-separated .csv only; the preview must see the same columns.
+  if (!name.endsWith('.csv')) {
+    throw new Error('Only CSV files are supported.')
   }
 
   return new Promise((resolve, reject) => {
     Papa.parse<Record<string, string>>(file, {
       header: true,
+      delimiter: ',',
       skipEmptyLines: true,
       worker: true,
       complete: (results) => {

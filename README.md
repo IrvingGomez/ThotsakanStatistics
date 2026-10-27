@@ -10,7 +10,7 @@
 
 > **"Stop Calculating. Start Simulating."**
 
-An interactive **virtual statistics laboratory** for Thai engineering students. Instead of memorizing formulas, students move sliders, break assumptions and watch the data respond, the way scientists work.
+An interactive **statistics analysis tool** for CMKL students and staff, in the style of jamovi / JASP. Move a slider or tick an option and the tables, plots and formulas update by themselves; the app reports, the user decides.
 
 The React frontend only renders. Every number comes from a Python backend whose `core/` math the professor verifies directly. Sign-in is limited to verified `@cmkl.ac.th` Google accounts.
 
@@ -18,13 +18,13 @@ The React frontend only renders. Every number comes from a Python backend whose 
 
 | Module | What it does | Status |
 |---|---|---|
-| **Data** | CSV upload, preview, column-type fixes, category filters, display precision | ✅ |
-| **Probability → Common Distributions** | PMF / PDF / CDF and probability queries for 12 distributions | ✅ |
-| **Estimation → Descriptive Statistics** | Quantiles, centre, spread, shape (weighted / trimmed / Winsorized); histogram, box plot | ✅ |
-| **Estimation → Statistical Inference** | Confidence and prediction intervals, confidence regions | ✅ |
-| **Estimation → Graphical Analysis** | Histogram / empirical PMF / ECDF with KDE, rug, normal, DKW band | ✅ |
-| **Hypothesis Testing** | One- and two-sample t (Welch), Bartlett / Levene, one-way ANOVA; α, critical values, rejection region, verdict | ✅ |
-| **Linear Regression** | OLS, CI/PI bands, residuals | 📋 Not started |
+| **Data** | CSV upload or one of three example datasets; preview, column-type fixes, category filters, display precision | ✅ |
+| **Probability → Common Distributions** | PMF / PDF of 12 distributions, with the area of a one-sided or interval probability query | ✅ |
+| **Statistics → Graphical Analysis** | Histogram / ECDF with KDE, normal model, DKW band | ✅ |
+| **Statistics → Descriptive Statistics** | Quantiles, centre, spread, shape (weighted / trimmed / Winsorized), estimator tags; histogram, box plot | ✅ |
+| **Statistics → Statistical Inference** | Confidence and prediction intervals (normal theory and bootstrap), confidence regions | ✅ |
+| **Hypothesis Testing** | One- and two-sample t (Welch), Bartlett / Levene, one-way ANOVA; α, critical values, rejection region | 🔧 Works; deep rework planned after v1 |
+| **Linear Regression** | OLS, CI/PI bands, residuals | 📋 Planned |
 | **Custom Distribution / Approximations** | User-defined distributions; binomial → normal, CLT | 📋 Planned |
 
 ## Getting started
@@ -37,7 +37,7 @@ cd ThotsakanStatistics
 cp .env.example .env     # fill in GOOGLE_CLIENT_ID + AUTH_SECRET_KEY, or set AUTH_DISABLED=true locally
 ```
 
-Sign-in setup is described in [`doc/AUTH.md`](doc/AUTH.md). Without that configuration the backend refuses to start.
+Sign-in setup is described in [`docs/AUTH.md`](docs/AUTH.md). Without that configuration the backend refuses to start.
 
 **Local:**
 
@@ -68,11 +68,13 @@ cd frontend && npm run test && npm run build
 
 | Document | Contents |
 |---|---|
-| [`doc/design.md`](doc/design.md) | Product identity, UX pillars, anti-features, LabBench layout, theme |
-| [`doc/architecture.md`](doc/architecture.md) | Layers, folders, request flow, sessions, API endpoints, testing |
-| [`doc/roadmap.md`](doc/roadmap.md) | Authoritative feature status, remaining work, known issues |
-| [`doc/AUTH.md`](doc/AUTH.md) | Google sign-in setup and troubleshooting |
-| [`doc/ux_proposals.md`](doc/ux_proposals.md) | UX ideas not yet built |
+| [`docs/decisions.md`](docs/decisions.md) | Every decision on how the app looks and behaves, with dates. Do not reverse one without Irving Gomez |
+| [`docs/interaction_contract.md`](docs/interaction_contract.md) | Rules every analysis tab follows |
+| [`docs/design.md`](docs/design.md) | What the app is, the three panels, DualInput, theme, performance |
+| [`docs/architecture.md`](docs/architecture.md) | Layers, folders, request flow, sessions, API endpoints, testing |
+| [`docs/roadmap.md`](docs/roadmap.md) | Authoritative feature status, backlog after v1, known issues |
+| [`docs/AUTH.md`](docs/AUTH.md) | Google sign-in setup and troubleshooting |
+| [`docs/guide/`](docs/guide/) | A readable PDF guide to all of the above, for the lab and its students |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Workflow, coding standards, testing, commits |
 | [`changelogs/`](changelogs/) | Dated change notes |
 

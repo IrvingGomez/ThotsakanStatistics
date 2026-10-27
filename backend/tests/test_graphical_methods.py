@@ -64,7 +64,7 @@ def test_ecdf_band_omitted_when_switched_off(df):
 
 def test_alpha_is_only_reported_for_the_ecdf_band(df):
     assert compute_graphical_data(df, params())["alpha"] is None
-    assert compute_graphical_data(df, params(graph_type="PMF"))["alpha"] is None
+    assert compute_graphical_data(df, params(add_kde=False))["alpha"] is None
 
 
 # -- Normal overlay ----------------------------------------------------------
@@ -127,7 +127,7 @@ def test_interval_and_bootstrap_fields_are_gone():
     assert not hasattr(p, "add_ci") and not hasattr(p, "bootstrap_mean")
 
 
-# -- Histogram / PMF / rug ---------------------------------------------------
+# -- Histogram ---------------------------------------------------------------
 
 def test_histogram_bin_count_is_controllable(df):
     auto = compute_graphical_data(df, params())
@@ -136,20 +136,78 @@ def test_histogram_bin_count_is_controllable(df):
     assert len(auto["histogram_data"]["counts"]) == len(auto["histogram_data"]["bins"]) - 1
 
 
-def test_rug_data_only_when_requested(df):
-    assert "rug_data" not in compute_graphical_data(df, params())
-    res = compute_graphical_data(df, params(add_data=True))
-    assert res["rug_data"]["n_total"] == len(VALUES)
+def whole_numbers(values):
+    return pd.DataFrame({"Age": np.asarray(values, dtype=float)})
 
 
-def test_pmf_warns_on_a_near_continuous_column(df):
-    res = compute_graphical_data(df, params(graph_type="PMF"))
-    assert any("empirical PMF" in w for w in res["warnings"])
+def test_whole_numbers_get_one_bar_per_value():
+    """Whole numbers with repeats read as discrete: bars of width 1 centred on each value."""
+    res = compute_graphical_data(whole_numbers(np.repeat([2, 3, 5], [4, 10, 6])), params())
+    hist = res["histogram_data"]
+    assert hist["unit_width"] is True
+    assert hist["bins"] == [1.5, 2.5, 3.5, 4.5, 5.5]
+    assert hist["counts"] == [4, 10, 0, 6]
+    assert sum(d * 1.0 for d in hist["densities"]) == pytest.approx(1.0)
+
+
+def test_continuous_data_keep_the_automatic_bins(df):
+    assert compute_graphical_data(df, params())["histogram_data"]["unit_width"] is False
+
+
+def test_whole_numbers_without_enough_repeats_stay_continuous():
+    # 60 distinct values in 60 observations: more than half are distinct.
+    res = compute_graphical_data(whole_numbers(np.arange(60)), params())
+    assert res["histogram_data"]["unit_width"] is False
+
+
+def test_unit_width_is_skipped_when_it_would_need_more_than_200_bars():
+    res = compute_graphical_data(whole_numbers(np.repeat([0, 500, 1000], 10)), params())
+    assert res["histogram_data"]["unit_width"] is False
+
+
+def test_a_chosen_bin_count_overrides_unit_width():
+    res = compute_graphical_data(whole_numbers(np.repeat([2, 3, 5], [4, 10, 6])), params(bins=2))
+    assert res["histogram_data"]["unit_width"] is False
+    assert len(res["histogram_data"]["counts"]) == 2
+
+
+def test_the_pmf_and_the_rug_are_gone(df):
+    with pytest.raises(ValidationError):
+        params(graph_type="PMF")
+    res = compute_graphical_data(df, params(add_data=True))  # an old client's flag is ignored
+    assert "rug_data" not in res and "pmf_data" not in res
 
 
 def test_unknown_graph_type_is_rejected():
     with pytest.raises(Exception):
         GraphicalParams(column="Age", graph_type="Empirical Probability Mass Function")
+
+
+# -- KDE ---------------------------------------------------------------------
+
+def test_kde_defaults_to_scotts_rule(df):
+    from scipy.stats import gaussian_kde
+
+    kde = compute_graphical_data(df, params())["kde_curve"]
+    scott = float(np.std(VALUES, ddof=1)) * len(VALUES) ** (-1 / 5)
+    assert kde["bandwidth"] == pytest.approx(scott)
+    assert kde["default_bandwidth"] == pytest.approx(scott)
+    assert kde["y"] == pytest.approx(gaussian_kde(VALUES)(np.array(kde["x"])).tolist())
+
+
+def test_kde_bandwidth_is_controllable(df):
+    from scipy.stats import norm
+
+    kde = compute_graphical_data(df, params(kde_bandwidth=2.0))["kde_curve"]
+    assert kde["bandwidth"] == pytest.approx(2.0)
+    assert kde["default_bandwidth"] == pytest.approx(float(np.std(VALUES, ddof=1)) * len(VALUES) ** (-1 / 5))
+    x = kde["x"][250]
+    assert kde["y"][250] == pytest.approx(float(norm.pdf(x, VALUES, 2.0).mean()))
+
+
+def test_kde_bandwidth_must_be_positive():
+    with pytest.raises(ValidationError):
+        params(kde_bandwidth=0.0)
 
 
 # -- Weights -----------------------------------------------------------------

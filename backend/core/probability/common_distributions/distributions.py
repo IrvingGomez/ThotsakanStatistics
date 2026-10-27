@@ -103,22 +103,40 @@ def _safe_stat(val: Any) -> float | str:
 
 # ── query result ───────────────────────────────────────────────────────────────
 
-def _query_result(rv, dist_type: str, query_op: str, query_k: float) -> float:
-    """Compute P(X op query_k) using the frozen rv."""
-    if dist_type == 'discrete':
-        k = int(round(query_k))
-        match query_op:
-            case '=':   return float(rv.pmf(k))
-            case '<=':  return float(rv.cdf(k))
-            case '<':   return float(rv.cdf(k - 1))
-            case '>=':  return float(1 - rv.cdf(k - 1))
-            case '>':   return float(1 - rv.cdf(k))
-    else:
-        match query_op:
-            case '<=' | '<':  return float(rv.cdf(query_k))
-            case '>=' | '>':  return float(1 - rv.cdf(query_k))
-            case '=':         return float(rv.pdf(query_k))
-    return 0.0
+BOUND_OPS = ('<', '<=')
+
+
+def _query_result(
+    rv, is_discrete: bool, query_op: str, query_k: float,
+    query_upper: float | None = None, lower_op: str | None = None, upper_op: str | None = None,
+) -> float:
+    """P(X op query_k), or P(query_k lower_op X upper_op query_upper) for query_op 'between'.
+
+    Exact for any real query value: a discrete X only takes whole numbers, so P(X <= 2.5) = P(X <= 2),
+    and P(X = x) is 0 for a continuous X or a non-integer x.
+    """
+    def at_most(x: float) -> float:  # P(X <= x)
+        return float(rv.cdf(math.floor(x) if is_discrete else x))
+
+    def below(x: float) -> float:  # P(X < x)
+        return float(rv.cdf(math.ceil(x) - 1 if is_discrete else x))
+
+    match query_op:
+        case '<=': return at_most(query_k)
+        case '<':  return below(query_k)
+        case '>=': return 1 - below(query_k)
+        case '>':  return 1 - at_most(query_k)
+        case '=':
+            return float(rv.pmf(query_k)) if is_discrete and float(query_k).is_integer() else 0.0
+        case 'between':
+            if query_upper is None or lower_op not in BOUND_OPS or upper_op not in BOUND_OPS:
+                raise ValueError("An interval query needs an upper value and '<' or '<=' at each end.")
+            if query_k > query_upper:
+                raise ValueError('The lower value must not be greater than the upper value.')
+            upper = at_most(query_upper) if upper_op == '<=' else below(query_upper)
+            lower = at_most(query_k) if lower_op == '<' else below(query_k)
+            return upper - lower
+    raise ValueError(f'Unknown query operator: {query_op}')
 
 
 # ── main entry point ───────────────────────────────────────────────────────────
@@ -128,6 +146,9 @@ def compute_distribution(
     params: dict,
     query_op: str,
     query_k: float,
+    query_upper: float | None = None,
+    lower_op: str | None = None,
+    upper_op: str | None = None,
 ) -> dict:
     """
     Returns full plot data + query result + theoretical stats for one distribution.
@@ -142,10 +163,8 @@ def compute_distribution(
 
     is_discrete = hasattr(rv, 'pmf')
 
-    q_raw = _query_result(rv, 'discrete' if is_discrete else 'continuous', query_op, query_k)
-    q_final = float(np.nan_to_num(q_raw, nan=0.0, posinf=1.0, neginf=0.0))
-    if not (not is_discrete and query_op == '='):
-        q_final = max(0.0, min(1.0, q_final))
+    q_raw = _query_result(rv, is_discrete, query_op, query_k, query_upper, lower_op, upper_op)
+    q_final = max(0.0, min(1.0, float(np.nan_to_num(q_raw, nan=0.0, posinf=1.0, neginf=0.0))))
 
     if is_discrete:
         max_k = min(_discrete_max_k(dist_name, params), 60)
@@ -163,7 +182,8 @@ def compute_distribution(
     else:
         lo, hi = _continuous_range(dist_name, params)
         xs = np.linspace(lo, hi, 201).tolist()
-        ys = [float(np.nan_to_num(rv.pdf(x), nan=0.0)) for x in xs]
+        # A pole (Beta/Gamma/Chi-squared shape < 1) is drawn as 0, like the frontend.
+        ys = [float(np.nan_to_num(rv.pdf(x), nan=0.0, posinf=0.0)) for x in xs]
         cdf_ys = [float(np.nan_to_num(rv.cdf(x), nan=0.0)) for x in xs]
         return {
             "xs": xs,

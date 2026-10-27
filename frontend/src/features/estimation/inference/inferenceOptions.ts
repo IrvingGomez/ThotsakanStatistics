@@ -4,7 +4,7 @@ import type { InferenceParams } from '../../../api/inference'
 /**
  * Which intervals the user asked for, as a tree of ticks (confidence/prediction → quantity → method).
  * Everything the request needs is derived from the *visible* ticks, so an option hidden under an
- * unticked parent is never sent (doc/interaction_contract.md, rule 1).
+ * unticked parent is never sent (docs/interaction_contract.md, rule 1).
  */
 export const INTERVAL_TREE: readonly CheckboxNode[] = [
   {

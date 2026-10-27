@@ -1,6 +1,8 @@
 import pandas as pd
 from typing import List
 
+from api.deps import apply_filters
+
 from core.estimation.descriptive import (
     compute_descriptive_statistics,
     compute_histogram,
@@ -57,16 +59,7 @@ def calculate_descriptive(df: pd.DataFrame, req: DescriptiveRequest) -> Descript
     if req.column not in df.columns:
         raise ValueError(f"Column '{req.column}' not found in dataset")
         
-    # Apply client-side filters to match frontend view
-    if req.filters:
-        for col, allowed_values in req.filters.items():
-            if col in df.columns and allowed_values:
-                # Need to gracefully handle float/int/string matches 
-                # e.g., if allowed is ["1"], but df[col] is 1.0
-                df_col_str = df[col].astype(str)
-                # also try to strip trailing '.0' for numeric parity
-                df_col_cleaned = df_col_str.str.replace(r'\.0$', '', regex=True)
-                df = df[df_col_str.isin(allowed_values) | df_col_cleaned.isin(allowed_values)]
+    df = apply_filters(df, req.filters)  # the same filter as every other tab
 
     if req.weightsCol:
         if req.weightsCol not in df.columns:

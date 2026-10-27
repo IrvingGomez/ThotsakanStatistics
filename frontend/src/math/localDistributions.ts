@@ -2,7 +2,7 @@
 // backend/core/probability/common_distributions/distributions.py.
 // Never authoritative — every result here gets overwritten by the backend
 // response ~250ms later. Precision is cosmetic, not verified math.
-import type { QueryOp } from '../hooks/useDistribution'
+import { queryProbability, type DistQuery } from './probabilityQuery'
 import type { DistributionResponse } from '../api/probability'
 
 // ─── Special functions ─────────────────────────────────────────────────────
@@ -156,6 +156,16 @@ function safeStat(v: number): number | string {
   return Number.isFinite(v) ? v : '∞'
 }
 
+/** a·log(x), taken as 0 when a = 0 so a density stays finite at x = 0 (as scipy's xlogy). */
+function xlogy(a: number, x: number): number {
+  return a === 0 ? 0 : a * Math.log(x)
+}
+
+/** A density that is infinite at a support edge (a pole) is drawn as 0, as in the backend. */
+function poleToZero(v: number): number {
+  return v === Infinity ? 0 : v
+}
+
 function nanToZero(v: number): number {
   return Number.isNaN(v) ? 0 : v
 }
@@ -266,7 +276,7 @@ function makeRV(distName: string, p: Record<string, number>): RV {
       const alpha = p.alpha, beta = p.beta
       return {
         isDiscrete: false,
-        pdf: (x) => (x <= 0 ? 0 : Math.exp(alpha * Math.log(beta) + (alpha - 1) * Math.log(x) - beta * x - lgamma(alpha))),
+        pdf: (x) => (x < 0 ? 0 : poleToZero(Math.exp(alpha * Math.log(beta) + xlogy(alpha - 1, x) - beta * x - lgamma(alpha)))),
         cdf: (x) => (x <= 0 ? 0 : gammaP(alpha, beta * x)),
         mean: alpha / beta, variance: alpha / (beta * beta),
       }
@@ -275,9 +285,9 @@ function makeRV(distName: string, p: Record<string, number>): RV {
       const alpha = p.alpha, beta = p.beta
       return {
         isDiscrete: false,
-        pdf: (x) => (x <= 0 || x >= 1 ? 0 : Math.exp(
-          (alpha - 1) * Math.log(x) + (beta - 1) * Math.log(1 - x) - (lgamma(alpha) + lgamma(beta) - lgamma(alpha + beta)),
-        )),
+        pdf: (x) => (x < 0 || x > 1 ? 0 : poleToZero(Math.exp(
+          xlogy(alpha - 1, x) + xlogy(beta - 1, 1 - x) - (lgamma(alpha) + lgamma(beta) - lgamma(alpha + beta)),
+        ))),
         cdf: (x) => (x <= 0 ? 0 : x >= 1 ? 1 : betaIncomplete(x, alpha, beta)),
         mean: alpha / (alpha + beta),
         variance: (alpha * beta) / ((alpha + beta) ** 2 * (alpha + beta + 1)),
@@ -287,7 +297,7 @@ function makeRV(distName: string, p: Record<string, number>): RV {
       const k = p.k
       return {
         isDiscrete: false,
-        pdf: (x) => (x <= 0 ? 0 : Math.exp((k / 2 - 1) * Math.log(x) - x / 2 - (k / 2) * Math.log(2) - lgamma(k / 2))),
+        pdf: (x) => (x < 0 ? 0 : poleToZero(Math.exp(xlogy(k / 2 - 1, x) - x / 2 - (k / 2) * Math.log(2) - lgamma(k / 2)))),
         cdf: (x) => (x <= 0 ? 0 : gammaP(k / 2, x / 2)),
         mean: k, variance: 2 * k,
       }
@@ -313,40 +323,61 @@ function makeRV(distName: string, p: Record<string, number>): RV {
   }
 }
 
+// ─── Query domain (Common Distributions left panel) ───────────────────────
+
+/** Where a probability query may go: `support` limits typed values, [min, max] is the slider's range. */
+export interface QueryDomain { discrete: boolean; support: [number, number]; min: number; max: number; step: number }
+
+function supportOf(distName: string, p: Record<string, number>): [number, number] {
+  switch (distName) {
+    case 'Binomial': return [0, p.n]
+    case 'Geometric': return [1, Infinity]
+    case 'Hypergeometric': return [Math.max(0, p.n + p.K - p.N), Math.min(p.n, p.K)]
+    case 'Normal': case "Student's t": return [-Infinity, Infinity]
+    case 'Uniform': return [p.a, p.b]
+    case 'Beta': return [0, 1]
+    default: return [0, Infinity] // Poisson, Negative Binomial, Exponential, Gamma, Chi-squared
+  }
+}
+
+/** 1, 2 or 5 times a power of ten, at least x. */
+function niceStep(x: number): number {
+  const power = 10 ** Math.floor(Math.log10(x))
+  const m = x / power
+  return (m <= 1 ? 1 : m <= 2 ? 2 : m <= 5 ? 5 : 10) * power
+}
+
+export function queryDomain(distName: string, p: Record<string, number>): QueryDomain {
+  const support = supportOf(distName, p)
+  if (makeRV(distName, p).isDiscrete) {
+    // The slider ends where the plotted bars end (at most k = 60).
+    return { discrete: true, support, min: support[0], max: Math.min(support[1], discreteMaxK(distName, p), 60), step: 1 }
+  }
+  const [lo, hi] = continuousRange(distName, p)
+  const step = niceStep((hi - lo) / 100)
+  const min = Math.max(support[0], Math.floor(lo / step) * step)
+  const max = Math.min(support[1], Math.ceil(hi / step) * step)
+  return { discrete: false, support, min, max, step }
+}
+
+/** Mean and standard deviation; NaN when they do not exist (e.g. Student's t with ν ≤ 2). */
+export function distributionMoments(distName: string, p: Record<string, number>): { mean: number; sd: number } {
+  const rv = makeRV(distName, p)
+  return { mean: rv.mean, sd: Math.sqrt(rv.variance) }
+}
+
 // ─── Main entry point (mirrors compute_distribution) ──────────────────────
 
 export function computeLocalDistribution(
   distName: string,
   params: Record<string, number>,
-  queryOp: QueryOp,
-  queryK: number,
+  query: DistQuery,
 ): DistributionResponse {
   const rv = makeRV(distName, params)
   const theorMean = safeStat(rv.mean)
   const theorVariance = safeStat(rv.variance)
 
-  let qRaw: number
-  if (rv.isDiscrete) {
-    const k = Math.round(queryK)
-    switch (queryOp) {
-      case '=': qRaw = rv.pmf(k); break
-      case '<=': qRaw = rv.cdf(k); break
-      case '<': qRaw = rv.cdf(k - 1); break
-      case '>=': qRaw = 1 - rv.cdf(k - 1); break
-      case '>': qRaw = 1 - rv.cdf(k); break
-    }
-  } else {
-    switch (queryOp) {
-      case '<=': case '<': qRaw = rv.cdf(queryK); break
-      case '>=': case '>': qRaw = 1 - rv.cdf(queryK); break
-      case '=': qRaw = rv.pdf(queryK); break
-    }
-  }
-
-  let queryResult = nanToNumQuery(qRaw)
-  if (!(!rv.isDiscrete && queryOp === '=')) {
-    queryResult = Math.max(0, Math.min(1, queryResult))
-  }
+  const queryResult = Math.max(0, Math.min(1, nanToNumQuery(queryProbability(rv, query))))
 
   if (rv.isDiscrete) {
     const maxK = Math.min(discreteMaxK(distName, params), 60)

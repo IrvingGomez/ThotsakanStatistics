@@ -9,7 +9,7 @@ from api.schemas.probability import (
 
 
 def compute_distribution_response(req: DistributionRequest) -> DistributionResponse:
-    data = compute_distribution(req.distName, req.params, req.queryOp, req.queryK)
+    data = compute_distribution(req.distName, req.params, req.queryOp, req.queryK, req.queryUpper, req.lowerOp, req.upperOp)
     return DistributionResponse(**data)
 
 
