@@ -11,3 +11,9 @@
 - New `docs/decisions.md`: every decision taken on this branch, dated, by Irving Gomez.
 - `design.md` describes the analysis tool and its three panels; the guided-teaching layer is listed as later work. The interaction contract records Reset, the order in the center and right panels, and that a contract change needs Irving's approval. `architecture.md`, `roadmap.md`, `README.md`, `AGENT.md` and `CONTRIBUTING.md` match the code.
 - `roadmap.md` holds the one backlog after v1; `ux_proposals.md` (folded into it) and the finished 2026-10-19 plan are removed.
+
+## Before the deploy (agents, CI, branches)
+- `AGENT.md` is now `AGENTS.md` (read by most AI coding tools); new `CLAUDE.md` points Claude Code to it.
+- New `.github/workflows/tests.yml`: backend `pytest` and frontend tests + build on every pull request into `dev` or `main`.
+- `main` will hold the released app and `dev` the next release; the old Gradio app is archived under the tag `gradio-final`. `docker.yml` also publishes `:main`, `:latest` and `:1.0.0`-style images.
+- Deploy moved forward to Wednesday 28 October 2026.

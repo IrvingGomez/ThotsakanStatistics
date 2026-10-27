@@ -8,7 +8,7 @@ How the React frontend and the FastAPI backend fit together: layers, folders, re
 |---|---|
 | `frontend/` | React 19, TypeScript 5.9, Vite 7, Tailwind CSS 4; Plotly (`react-plotly.js` + `plotly.js-basic-dist-min`, lazy-loaded); KaTeX (formulas in the right panels); papaparse, jsPDF, react-error-boundary; Vitest 4 + jsdom |
 | `backend/` | FastAPI, uvicorn (single worker), numpy, pandas, scipy, statsmodels, pingouin; google-auth + PyJWT for sign-in; pytest + httpx in `requirements-dev.txt` |
-| Reference | The professor's Gradio app (`ThotsakanStatistics/`, branch `main`) and the Reflex prototype (`Try_reflex/`): read-only, git-ignored, local only |
+| Reference | The professor's Gradio app (`ThotsakanStatistics/`; in this repository archived under the tag `gradio-final`) and the Reflex prototype (`Try_reflex/`): read-only, git-ignored, local only |
 
 MathLive is **not** installed; a leftover type declaration remains (see [roadmap.md](roadmap.md#known-issues)).
 
@@ -163,5 +163,6 @@ Tab state hooks are created in `App.tsx`, so each tab keeps its state when you s
 
 - **Backend:** `pytest` in `backend/` (needs `requirements-dev.txt`). API tests run as a signed-in user via `tests/conftest.py`; `tests/api/` covers auth, upload, filters, descriptive, inference, graphical and hypothesis, and `tests/services/test_probability_query.py` the probability route.
 - **Frontend:** `npm run test` (Vitest, tests next to the code) and `npm run build` (type check + build).
-- **CI** (`.github/workflows/docker.yml`): builds both images, pushes to GHCR on pushes to `dev`, and smoke-tests the compose stack with `AUTH_DISABLED=true`. It does **not** run pytest or Vitest, so run them locally.
+- **CI:** `.github/workflows/tests.yml` runs `pytest` and the frontend tests + build on every pull request into `dev` or `main` (and on pushes to `dev`). `.github/workflows/docker.yml` builds both images and pushes them to GHCR: `:dev` from `dev`, `:main` and `:latest` from `main`, `:1.0.0`-style tags from release tags; it also smoke-tests the compose stack with `AUTH_DISABLED=true`.
+- **Releases:** `dev` → `main` by a pull request Irving approves; then tag `main` `vX.Y.Z` (the version in `frontend/package.json`). The server runs the `:main` images.
 - No linter or formatter is configured.

@@ -55,7 +55,7 @@
 \begin{note}
 \textbf{For:} Irving Gomez (lab head) and the students who work on the project.\\[3pt]
 \textbf{Describes:} the code and documents on branch \f{irving-reviewing-experiment}, 27 October 2026,
-a week before v1 is deployed (Wednesday 4 November 2026).\\[3pt]
+the day before v1 is deployed (Wednesday 28 October 2026).\\[3pt]
 \textbf{How to use it:} this guide is a map. The documents in the repository are the source of truth; when
 they change, they win over this PDF.
 \end{note}
@@ -93,7 +93,7 @@ Linear Regression & Planned. \\
 \end{tabularx}
 \end{center}
 
-\textbf{v1} is the version deployed on 4 November 2026 and shown at the event on 6 November. It covers the
+\textbf{v1} is the version deployed on 28 October 2026 and shown at the event on 6 November. It covers the
 Data tab and the four tabs Common Distributions, Graphical, Descriptive and Inference, all made consistent with
 each other. Hypothesis Testing stays as it is; Linear Regression and other file formats come later.
 
@@ -117,8 +117,9 @@ the order of the first column when you join the project.
 — & \f{docs/AUTH.md} & How to set up Google sign-in (restricted to \f{@cmkl.ac.th}) and fix sign-in problems. \\
 — & \f{docs/plans/}\newline\f{2026-10-23-v1-release.md} & The checklist of the steps to v1 (A done, B done, C documentation, D release, E protection). Removed after the deploy. \\
 — & \f{CONTRIBUTING.md} & Workflow, coding standards, how to test, how to write commits and pull requests. \\
-— & \f{AGENT.md} & Instructions for AI coding assistants (Claude Code, Codex, …): the same rules, written for them. Will be renamed \f{AGENTS.md}. \\
+— & \f{AGENTS.md}, \f{CLAUDE.md} & Instructions for AI coding assistants (Codex, Cursor, … read \f{AGENTS.md}; Claude Code reads \f{CLAUDE.md}, which points to it): the same rules, written for them. \\
 — & \f{CODE\_OF\_CONDUCT.md} & How we treat each other. \\
+— & Branches & \f{main}: the released app the server runs. \f{dev}: the next release. One short branch per task, merged into \f{dev} by a pull request Irving approves, then deleted. The professor's original Gradio app is archived under the tag \f{gradio-final}. \\
 — & \f{changelogs/} & One dated note per batch of changes: what changed, in plain words. \\
 \bottomrule
 \end{tabularx}
@@ -158,7 +159,7 @@ changes the same way: ask Irving, record the decision, change the contract, then
 \item \textbf{Data.} CSV only for now. A column is numeric when at least 80\% of its filled cells are numbers;
   the other cells count as missing. Filters compare values as written in the CSV.
 \end{itemize}
-The full list (29 entries) with dates and commits is in \f{docs/decisions.md}.
+The full list (31 entries) with dates and commits is in \f{docs/decisions.md}.
 
 \subsection*{The contract in five lines}
 \begin{enumerate}
@@ -341,8 +342,7 @@ your own machine you may set \f{AUTH\_DISABLED=true} instead.
 \bottomrule
 \end{tabularx}
 
-The continuous-integration workflow does not run the tests yet (it is planned), so run them yourself and report
-the real result.
+GitHub runs the same checks on every pull request, but run them yourself first and report the real result.
 
 \subsection{Change it}
 \begin{enumerate}
@@ -374,8 +374,8 @@ a secret; add a dependency without approval.
 A. Consistency additions & Done (intervals table, formulas, colors, plotting rules). \\
 B. Correctness and review & Done (weights bug, final review of the branch). \\
 C. Documentation & C1 \f{docs/} rename, C2 decision log, C3 documents updated: done. C4 one version number (1.0.0, semantic versioning): done. \\
-D. Release & Full verification, merge into \f{dev}, deploy on Wednesday 4 November. \\
-E. Protecting the decisions & Right after the merge: \f{AGENTS.md}, tests in CI, branch protection on GitHub. \\
+D. Release & Verification and merge into \f{dev}: done. Deploy on Wednesday 28 October. \\
+E. Protecting the decisions & \f{AGENTS.md} and tests in CI: done. Branch protection on GitHub: next. \\
 \bottomrule
 \end{tabularx}
 

@@ -36,6 +36,18 @@ only bug fixes the last one (1.0.1), and a big change in what the app is the fir
 lives in one place, `frontend/package.json`; the footer reads it, and the root `package.json` matches it.
 *Where:* `frontend/vite.config.ts`, `frontend/src/layout/Footer.tsx`.
 
+### Deploy moved forward — 2026-10-27
+Deploy on Wednesday 28 October 2026, a week earlier than planned: the release work and its checks were
+finished on 27 October.
+
+### Branches — 2026-10-27
+Only `dev` and `main` live long. Each task gets one short branch from `dev`, merged by a pull request Irving
+approves, then deleted. `irving-reviewing-experiment` is deleted once its last pull request is merged. `main` holds the released
+app (what the server runs) and `dev` the next release; a release goes `dev` → `main` by pull request and is
+tagged `vX.Y.Z`. The old Gradio app that `main` held until v1 is kept under the tag `gradio-final`, with its
+releases v0.1.0–v0.1.2.
+*Where:* `AGENTS.md`, `CONTRIBUTING.md`.
+
 ### Order after v1 — 2026-10-27
 First the goodness-of-fit test for the normal distribution, then a deep rework of Hypothesis Testing, then
 Linear Regression. Hypothesis Testing is marked as working but needing that rework, not as complete.

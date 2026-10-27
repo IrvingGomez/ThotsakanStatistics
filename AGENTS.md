@@ -1,4 +1,4 @@
-# AGENT.md
+# AGENTS.md
 
 Guidance for Claude Code and other AI coding agents working in this repository. Also follow [`CONTRIBUTING.md`](CONTRIBUTING.md) (coding standards, testing, commit/PR process) and [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md). If either conflicts with a user request, say so and ask before going ahead.
 
@@ -8,7 +8,7 @@ Guidance for Claude Code and other AI coding agents working in this repository. 
 
 - **Frontend:** React 19 + TypeScript + Vite (`frontend/`). It handles the UI only.
 - **Backend:** FastAPI + Python (`backend/`). It is the authoritative source of all statistics (scipy, statsmodels, pingouin). The professor verifies the math by reading `backend/core/`.
-- **Branches:** work happens on `dev`; `main` holds the original Gradio app.
+- **Branches:** only `dev` (next release) and `main` (the released, deployed app) live long; the professor's original Gradio app is archived under the git tag `gradio-final`. Each task gets one short branch from `dev`, created only when the user agreed to that task, merged by a pull request Irving Gomez approves, then deleted. Never commit to `dev` or `main` directly.
 - **Status:** every feature is migrated except **Linear regression**; Hypothesis Testing works but needs a deep rework. Order after v1: normality goodness-of-fit, Hypothesis Testing, Linear regression (see `docs/roadmap.md`).
 
 | Topic | Document |
@@ -43,7 +43,7 @@ docker compose -f docker-compose.dev.yml up  # hot reload: frontend :5173, backe
 
 - **Startup requirement:** the backend refuses to start unless `GOOGLE_CLIENT_ID` and `AUTH_SECRET_KEY` (≥ 32 chars) are set in the root `.env`, or `AUTH_DISABLED=true` (local dev only).
 - **Single worker:** the backend must run one uvicorn worker, because dataset sessions are held in memory.
-- **CI:** `.github/workflows/docker.yml` builds both images on the `dev` branch, pushes them to GHCR, and smoke-tests the stack. It does **not** run the tests.
+- **CI:** `.github/workflows/tests.yml` runs backend `pytest` and frontend tests + build on every pull request into `dev` or `main`; `docker.yml` builds both images, pushes them to GHCR from `dev`, and smoke-tests the stack.
 - **No linter:** no linter or formatter is configured.
 
 ## Hard rules
