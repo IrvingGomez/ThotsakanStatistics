@@ -133,11 +133,11 @@ export default function InferenceObservation({ state }: { state: InferenceState 
     })
     const regionLabels = region.levels.flatMap((level, index) => {
       const point = regionLabelPoint(region, level)
-      return point ? [{ ...point, text: coveragePercent(region.probs[index]), showarrow: false, yshift: 9, font: { color: regionLineColor(index, region.levels.length), size: 11 } }] : []
+      return point ? [{ ...point, text: coveragePercent(region.probs[index]), showarrow: false, yshift: 9, font: { color: regionLineColor(index, region.levels.length), size: 12 } }] : []
     })
     content = <ResultSection title="Joint confidence regions">
       <div role="img" aria-label={'Joint confidence regions for ' + variable + '. Estimates and coverage levels are available in the results panel.'}>
-        <ReactPlotly data={data} layout={{ ...BASE_LAYOUT, height: 470, margin: { l: 62, r: 80, b: 130, t: 20 }, xaxis: { ...AXIS, title: { text: 'Mean (μ)', standoff: 8 } }, yaxis: { ...AXIS, title: { text: 'Deviation (σ)', standoff: 8 } }, annotations: regionLabels, showlegend: true, legend: { x: 0, y: -0.25, orientation: 'h', font: { size: 11 } } }} useResizeHandler style={{ width: '100%', height: 470 }} config={CONFIG}
+        <ReactPlotly data={data} layout={{ ...BASE_LAYOUT, height: 470, margin: { l: 62, r: 80, b: 130, t: 20 }, xaxis: { ...AXIS, title: { text: 'Mean (μ)', standoff: 8 } }, yaxis: { ...AXIS, title: { text: 'Deviation (σ)', standoff: 8 } }, annotations: regionLabels, showlegend: true, legend: { x: 0, y: -0.25, orientation: 'h', font: { size: 12 } } }} useResizeHandler style={{ width: '100%', height: 470 }} config={CONFIG}
           onInitialized={registry.register('region', 'Joint confidence regions')}
           onUpdate={registry.register('region', 'Joint confidence regions')}
           onPurge={registry.unregister('region')} />
