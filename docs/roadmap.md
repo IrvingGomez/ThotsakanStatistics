@@ -1,7 +1,7 @@
 # Roadmap and Known Issues
 
 Feature status, the backlog after v1, and open defects. **This status table is the authoritative one.**
-Checked on 2026-10-27, on branch `irving-reviewing-experiment`. v1 (deploy 4 November 2026) and its remaining
+Checked on 2026-10-27, on branch `irving-reviewing-experiment`. v1 (deployed 28 October 2026) and its remaining
 steps are in [`plans/2026-10-23-v1-release.md`](plans/2026-10-23-v1-release.md); decisions are in
 [`decisions.md`](decisions.md).
 
@@ -77,9 +77,8 @@ When you fix one, delete it here and add a dated note under `changelogs/`.
 | 4 | Dataset sessions aren't tied to the user | `get_session_data` checks only the header | Store the owner with the session |
 | 7 | Leftover MathLive declaration | `frontend/src/custom-elements.d.ts`; package not installed | Delete it |
 | 9 | `core/data_stats.py` imports `gradio` | Not installed; module unused | Leave it (legacy copy) or remove it |
-| 10 | CI doesn't run tests | `docker.yml` only smoke-tests `/` and `/api/health` | Add pytest + Vitest jobs (v1 plan E2) |
 | 13 | No license file | Older docs disagreed (MIT vs "contact maintainers") | Maintainer decision |
 
 Fixed on this branch (2026-10-19 to 10-27): 1 weights misaligned with missing values, 3 upload formats disagreed,
 5 `LabBench` `setState` during render, 8 unused `useContainerBreakpoint`, 11 missing route tests, 12 frontend
-tests not re-verified (all pass).
+tests not re-verified (all pass), 10 CI did not run the tests (`tests.yml`).

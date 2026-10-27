@@ -2,7 +2,8 @@ name: Docker images
 
 on:
   push:
-    branches: [dev]
+    branches: [dev, main]
+    tags: ["v*"]
   pull_request:
     branches: [dev]
     paths:
@@ -49,10 +50,13 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ github.repository }}-${{ matrix.image }}
+          # :dev and :main follow their branches; main is also :latest; a v1.2.3 tag gives :1.2.3.
           tags: |
             type=ref,event=branch
             type=ref,event=pr
             type=sha
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=semver,pattern={{version}}
 
       - name: Build and push
         uses: docker/build-push-action@v6

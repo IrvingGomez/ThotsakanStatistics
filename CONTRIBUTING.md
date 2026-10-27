@@ -21,7 +21,7 @@ Thanks for helping. Please read the [Code of Conduct](CODE_OF_CONDUCT.md) first.
 
 ## Workflow
 
-1. Branch from `dev` (`main` holds the original Gradio app). Name the branch `feat/…`, `fix/…`, `docs/…`, `refactor/…`, `test/…` or `chore/…`.
+1. Branch from `dev` (`main` holds the released app; the professor's original Gradio app is archived under the git tag `gradio-final`); one short branch per task. Name it `feat/…`, `fix/…`, `docs/…`, `refactor/…`, `test/…` or `chore/…`. Irving Gomez approves the pull request; the branch is deleted after the merge.
 2. Make small, focused changes. Don't mix a refactor with a feature.
 3. Add or update tests and docs in the same change.
 4. Run the checks and open a PR against `dev`:
@@ -31,7 +31,7 @@ cd backend  && pytest
 cd frontend && npm run test && npm run build   # build includes the tsc type check
 ```
 
-CI only builds the Docker images and smoke-tests them. It doesn't run these checks, so run them yourself. If you change dependencies or a Dockerfile, make sure `docker compose up --build` still works.
+CI runs the same checks on every pull request (`.github/workflows/tests.yml`), but run them yourself first. If you change dependencies or a Dockerfile, make sure `docker compose up --build` still works.
 
 No linter or formatter is configured, so match the surrounding code. Never commit virtual environments, `node_modules/`, `__pycache__/`, `.env` or `dev-playground/`.
 
