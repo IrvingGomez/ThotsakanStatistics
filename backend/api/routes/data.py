@@ -9,6 +9,21 @@ from sessions.store import set_session
 
 router = APIRouter()
 
+# The Data tab (frontend/src/utils/parseFile.ts) lists a column as numeric when at least 80 % of its
+# filled cells are numbers, and ignores the rest. The server reads the column the same way, so an
+# analysis does not fail on a stray "?" or "n/a".
+NUMERIC_SHARE = 0.8
+
+
+def _read_numbers_as_numbers(df: pd.DataFrame) -> pd.DataFrame:
+    for col in df.select_dtypes(include=["object"]).columns:  # text only; a True/False column stays
+        filled = df[col].notna().sum()
+        numbers = pd.to_numeric(df[col], errors="coerce")
+        if filled and numbers.notna().sum() / filled >= NUMERIC_SHARE:
+            df[col] = numbers
+    return df
+
+
 @router.post("/upload")
 async def upload_dataset(file: UploadFile = File(...)):
     if not file.filename.endswith('.csv'):
@@ -20,7 +35,7 @@ async def upload_dataset(file: UploadFile = File(...)):
         # Parse CSV
         # We handle parsing using pandas as requested. 
         # Further schema improvements might be needed for dates, numerical, and categorical parsing.
-        df = pd.read_csv(io.BytesIO(content))
+        df = _read_numbers_as_numbers(pd.read_csv(io.BytesIO(content)))
         
         # Generate session ID
         session_id = str(uuid.uuid4())
