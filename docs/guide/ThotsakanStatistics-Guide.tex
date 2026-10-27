@@ -158,7 +158,7 @@ changes the same way: ask Irving, record the decision, change the contract, then
 \item \textbf{Data.} CSV only for now. A column is numeric when at least 80\% of its filled cells are numbers;
   the other cells count as missing. Filters compare values as written in the CSV.
 \end{itemize}
-The full list (28 entries) with dates and commits is in \f{docs/decisions.md}.
+The full list (29 entries) with dates and commits is in \f{docs/decisions.md}.
 
 \subsection*{The contract in five lines}
 \begin{enumerate}
@@ -373,7 +373,7 @@ a secret; add a dependency without approval.
 \midrule
 A. Consistency additions & Done (intervals table, formulas, colors, plotting rules). \\
 B. Correctness and review & Done (weights bug, final review of the branch). \\
-C. Documentation & C1 \f{docs/} rename, C2 decision log, C3 documents updated: done. C4 one version number (1.0.0): next. \\
+C. Documentation & C1 \f{docs/} rename, C2 decision log, C3 documents updated: done. C4 one version number (1.0.0, semantic versioning): done. \\
 D. Release & Full verification, merge into \f{dev}, deploy on Wednesday 4 November. \\
 E. Protecting the decisions & Right after the merge: \f{AGENTS.md}, tests in CI, branch protection on GitHub. \\
 \bottomrule
