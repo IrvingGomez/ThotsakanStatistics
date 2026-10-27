@@ -182,7 +182,8 @@ def compute_distribution(
     else:
         lo, hi = _continuous_range(dist_name, params)
         xs = np.linspace(lo, hi, 201).tolist()
-        ys = [float(np.nan_to_num(rv.pdf(x), nan=0.0)) for x in xs]
+        # A pole (Beta/Gamma/Chi-squared shape < 1) is drawn as 0, like the frontend.
+        ys = [float(np.nan_to_num(rv.pdf(x), nan=0.0, posinf=0.0)) for x in xs]
         cdf_ys = [float(np.nan_to_num(rv.cdf(x), nan=0.0)) for x in xs]
         return {
             "xs": xs,

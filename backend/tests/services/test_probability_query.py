@@ -80,3 +80,15 @@ def test_api_rejects_reversed_interval():
         'queryUpper': 1, 'lowerOp': '<', 'upperOp': '<',
     })
     assert response.status_code == 400
+
+
+@pytest.mark.parametrize('dist, params', [
+    ('Beta', {'alpha': 0.5, 'beta': 0.5}),
+    ('Gamma', {'alpha': 0.5, 'beta': 1}),
+    ('Chi-squared', {'k': 1}),
+])
+def test_unbounded_density_is_zero_at_the_pole(dist, params):
+    # An infinite density at a support edge must not stretch the y-axis.
+    ys = compute_distribution(dist, params, '<=', 0.5)['ys']
+    assert ys[0] == 0
+    assert max(ys) < 1e3
