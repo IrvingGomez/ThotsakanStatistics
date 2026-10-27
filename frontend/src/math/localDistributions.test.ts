@@ -45,4 +45,20 @@ describe('computeLocalDistribution', () => {
     const sum = (r.probs ?? []).reduce((a, b) => a + b, 0)
     expect(sum).toBeCloseTo(1, 3)
   })
+
+  // Same values as the backend (scipy): a finite density at a support edge is drawn, a pole is drawn as 0.
+  it.each([
+    ['Beta', { alpha: 1, beta: 1 }, 1, 1],
+    ['Beta', { alpha: 1, beta: 5 }, 5, 0],
+    ['Beta', { alpha: 2, beta: 1 }, 0, 2],
+    ['Beta', { alpha: 0.5, beta: 0.5 }, 0, 0],
+    ['Gamma', { alpha: 1, beta: 5 }, 5, null],
+    ['Gamma', { alpha: 0.5, beta: 1 }, 0, null],
+    ['Chi-squared', { k: 2 }, 0.5, null],
+    ['Chi-squared', { k: 1 }, 0, null],
+  ] as const)('%s %o density at the support edges', (dist, params, first, last) => {
+    const ys = computeLocalDistribution(dist, params, { kind: 'one-sided', op: '<=', k: 0.5 }).ys ?? []
+    expect(ys[0]).toBeCloseTo(first, 9)
+    if (last !== null) expect(ys[ys.length - 1]).toBeCloseTo(last, 9)
+  })
 })

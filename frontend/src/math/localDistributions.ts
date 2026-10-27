@@ -156,6 +156,16 @@ function safeStat(v: number): number | string {
   return Number.isFinite(v) ? v : '∞'
 }
 
+/** a·log(x), taken as 0 when a = 0 so a density stays finite at x = 0 (as scipy's xlogy). */
+function xlogy(a: number, x: number): number {
+  return a === 0 ? 0 : a * Math.log(x)
+}
+
+/** A density that is infinite at a support edge (a pole) is drawn as 0, as in the backend. */
+function poleToZero(v: number): number {
+  return v === Infinity ? 0 : v
+}
+
 function nanToZero(v: number): number {
   return Number.isNaN(v) ? 0 : v
 }
@@ -266,7 +276,7 @@ function makeRV(distName: string, p: Record<string, number>): RV {
       const alpha = p.alpha, beta = p.beta
       return {
         isDiscrete: false,
-        pdf: (x) => (x <= 0 ? 0 : Math.exp(alpha * Math.log(beta) + (alpha - 1) * Math.log(x) - beta * x - lgamma(alpha))),
+        pdf: (x) => (x < 0 ? 0 : poleToZero(Math.exp(alpha * Math.log(beta) + xlogy(alpha - 1, x) - beta * x - lgamma(alpha)))),
         cdf: (x) => (x <= 0 ? 0 : gammaP(alpha, beta * x)),
         mean: alpha / beta, variance: alpha / (beta * beta),
       }
@@ -275,9 +285,9 @@ function makeRV(distName: string, p: Record<string, number>): RV {
       const alpha = p.alpha, beta = p.beta
       return {
         isDiscrete: false,
-        pdf: (x) => (x <= 0 || x >= 1 ? 0 : Math.exp(
-          (alpha - 1) * Math.log(x) + (beta - 1) * Math.log(1 - x) - (lgamma(alpha) + lgamma(beta) - lgamma(alpha + beta)),
-        )),
+        pdf: (x) => (x < 0 || x > 1 ? 0 : poleToZero(Math.exp(
+          xlogy(alpha - 1, x) + xlogy(beta - 1, 1 - x) - (lgamma(alpha) + lgamma(beta) - lgamma(alpha + beta)),
+        ))),
         cdf: (x) => (x <= 0 ? 0 : x >= 1 ? 1 : betaIncomplete(x, alpha, beta)),
         mean: alpha / (alpha + beta),
         variance: (alpha * beta) / ((alpha + beta) ** 2 * (alpha + beta + 1)),
@@ -287,7 +297,7 @@ function makeRV(distName: string, p: Record<string, number>): RV {
       const k = p.k
       return {
         isDiscrete: false,
-        pdf: (x) => (x <= 0 ? 0 : Math.exp((k / 2 - 1) * Math.log(x) - x / 2 - (k / 2) * Math.log(2) - lgamma(k / 2))),
+        pdf: (x) => (x < 0 ? 0 : poleToZero(Math.exp(xlogy(k / 2 - 1, x) - x / 2 - (k / 2) * Math.log(2) - lgamma(k / 2)))),
         cdf: (x) => (x <= 0 ? 0 : gammaP(k / 2, x / 2)),
         mean: k, variance: 2 * k,
       }
