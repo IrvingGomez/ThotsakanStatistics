@@ -13,7 +13,7 @@ export interface CheckboxNode {
 
 /**
  * Ids that are ticked *and* whose ancestors are all ticked. A control that is hidden is never sent
- * (see doc/interaction_contract.md, rule 1), so requests must be built from this, not from `checked`.
+ * (see docs/interaction_contract.md, rule 1), so requests must be built from this, not from `checked`.
  */
 export function visibleChecked(nodes: readonly CheckboxNode[], checked: readonly string[]): string[] {
   const on = new Set(checked)

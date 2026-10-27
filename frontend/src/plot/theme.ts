@@ -1,5 +1,5 @@
 /**
- * Shared Plotly look (doc/interaction_contract.md, rule 17). Plotly cannot read CSS variables, so the
+ * Shared Plotly look (docs/interaction_contract.md, rule 17). Plotly cannot read CSS variables, so the
  * values are mirrored here from style.css. Semantic names, not hex literals, go in chart code; switching
  * theme later means changing the values in this file only.
  *

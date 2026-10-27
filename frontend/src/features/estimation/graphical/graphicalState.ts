@@ -4,7 +4,7 @@
 // can be tested directly.
 //
 // Every setting is live: there is no Run step. The request is built only from options
-// that are visible for the current graph type (doc/interaction_contract.md, rule 1),
+// that are visible for the current graph type (docs/interaction_contract.md, rule 1),
 // so an option belonging to another plot never reaches the backend.
 
 import type { GraphType, GraphicalParams } from '../../../api/graphical'

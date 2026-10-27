@@ -1,6 +1,6 @@
 # 2026-10-14 — Inference, Descriptive and Graphical follow the interaction contract
 
-Follows the professor's review. The rules every tab follows are in `doc/interaction_contract.md`; new shared pieces are `CheckboxTree`, `StatusBanner`, `components/notebook/NotebookParts`, `plot/theme.ts` and `labels.ts`.
+Follows the professor's review. The rules every tab follows are in `docs/interaction_contract.md`; new shared pieces are `CheckboxTree`, `StatusBanner`, `components/notebook/NotebookParts`, `plot/theme.ts` and `labels.ts`.
 
 ## Inference
 - Checkbox tree replaces the bootstrap switches: confidence / prediction intervals x mean / median / deviation x normal / bootstrap. Normal-theory methods are ticked by default.

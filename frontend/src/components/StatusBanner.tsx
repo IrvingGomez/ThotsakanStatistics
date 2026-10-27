@@ -1,5 +1,5 @@
 /**
- * The one place a tab reports its result state (doc/interaction_contract.md, rules 7 and 16): computing,
+ * The one place a tab reports its result state (docs/interaction_contract.md, rules 7 and 16): computing,
  * error with Retry, and warnings that apply to the result on screen. Results update automatically, so there is no "settings changed" state.
  * Warnings must only be passed for the plot or result currently shown (contract rule 10).
  */

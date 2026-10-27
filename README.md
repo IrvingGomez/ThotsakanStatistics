@@ -37,7 +37,7 @@ cd ThotsakanStatistics
 cp .env.example .env     # fill in GOOGLE_CLIENT_ID + AUTH_SECRET_KEY, or set AUTH_DISABLED=true locally
 ```
 
-Sign-in setup is described in [`doc/AUTH.md`](doc/AUTH.md). Without that configuration the backend refuses to start.
+Sign-in setup is described in [`docs/AUTH.md`](docs/AUTH.md). Without that configuration the backend refuses to start.
 
 **Local:**
 
@@ -68,11 +68,11 @@ cd frontend && npm run test && npm run build
 
 | Document | Contents |
 |---|---|
-| [`doc/design.md`](doc/design.md) | Product identity, UX pillars, anti-features, LabBench layout, theme |
-| [`doc/architecture.md`](doc/architecture.md) | Layers, folders, request flow, sessions, API endpoints, testing |
-| [`doc/roadmap.md`](doc/roadmap.md) | Authoritative feature status, remaining work, known issues |
-| [`doc/AUTH.md`](doc/AUTH.md) | Google sign-in setup and troubleshooting |
-| [`doc/ux_proposals.md`](doc/ux_proposals.md) | UX ideas not yet built |
+| [`docs/design.md`](docs/design.md) | Product identity, UX pillars, anti-features, LabBench layout, theme |
+| [`docs/architecture.md`](docs/architecture.md) | Layers, folders, request flow, sessions, API endpoints, testing |
+| [`docs/roadmap.md`](docs/roadmap.md) | Authoritative feature status, remaining work, known issues |
+| [`docs/AUTH.md`](docs/AUTH.md) | Google sign-in setup and troubleshooting |
+| [`docs/ux_proposals.md`](docs/ux_proposals.md) | UX ideas not yet built |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Workflow, coding standards, testing, commits |
 | [`changelogs/`](changelogs/) | Dated change notes |
 

@@ -2,9 +2,9 @@
 
 Thanks for helping. Please read the [Code of Conduct](CODE_OF_CONDUCT.md) first. It applies to everything below.
 
-- **Before proposing a feature:** read [`doc/design.md`](doc/design.md). If a feature doesn't fit the lab identity, we don't build it.
+- **Before proposing a feature:** read [`docs/design.md`](docs/design.md). If a feature doesn't fit the lab identity, we don't build it.
 - **Setup:** see the [README](README.md#getting-started).
-- **Architecture:** see [`doc/architecture.md`](doc/architecture.md).
+- **Architecture:** see [`docs/architecture.md`](docs/architecture.md).
 
 ## Ground rules
 
@@ -116,9 +116,9 @@ A statistics feature touches every layer, in this order:
 4. `backend/tests/…`: core/service tests plus an API test in `tests/api/`.
 5. `frontend/src/api/<feature>.ts`: typed client.
 6. `frontend/src/features/<area>/`: a `use<Feature>TabState` hook plus `*Controls`, `*Observation`, `*Notebook` and `*Tab`, wired into `App.tsx`.
-7. Docs: the status table in `doc/roadmap.md`, the Features table in `README.md`, and a dated note under `changelogs/`.
+7. Docs: the status table in `docs/roadmap.md`, the Features table in `README.md`, and a dated note under `changelogs/`.
 
-Linear regression is the only feature left to migrate. Discuss the design first; the plan is in [`doc/roadmap.md`](doc/roadmap.md).
+Linear regression is the only feature left to migrate. Discuss the design first; the plan is in [`docs/roadmap.md`](docs/roadmap.md).
 
 ## Testing
 

@@ -3,7 +3,7 @@ import { visibleChecked, type CheckboxNode } from '../../../components/CheckboxT
 /**
  * Which statistics the user wants on screen. Ids match `statId` on the rows the backend returns, so
  * showing or hiding a statistic is a filter over the result already loaded — it never asks the backend
- * again (doc/interaction_contract.md, rule 5).
+ * again (docs/interaction_contract.md, rule 5).
  */
 
 /** Basic statistics: grouped, each one individually deselectable, all ticked by default. */

@@ -1,7 +1,7 @@
 import type { FieldOption } from './components/ControlPrimitives'
 
 /**
- * One display-name map for statistics and estimators (doc/interaction_contract.md, rule 11).
+ * One display-name map for statistics and estimators (docs/interaction_contract.md, rule 11).
  * Only the *label* changes. The wire value sent to the backend is untouched, because professor-verified
  * core/ compares these strings literally (including the "(bias corrected)" suffix).
  */

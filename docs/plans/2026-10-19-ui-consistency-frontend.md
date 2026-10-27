@@ -8,7 +8,7 @@
 
 **Tech Stack:** React 19, TypeScript, Tailwind 4, Plotly (react-plotly.js), Vitest + jsdom.
 
-**Spec:** `C:\Users\Dmitri\Documents\Thotsakan-Consistency-Review.pdf` (items 1–18; "Proposed fix" column approved by the user on 2026-10-19) and `doc/interaction_contract.md`. Items 19–22 (backend, docs) get their own plans.
+**Spec:** `C:\Users\Dmitri\Documents\Thotsakan-Consistency-Review.pdf` (items 1–18; "Proposed fix" column approved by the user on 2026-10-19) and `docs/interaction_contract.md`. Items 19–22 (backend, docs) get their own plans.
 
 ## Global Constraints
 
