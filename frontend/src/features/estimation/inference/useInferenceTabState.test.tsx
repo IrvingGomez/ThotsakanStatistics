@@ -189,15 +189,17 @@ describe('Inference student workflow', () => {
     expect(state.appliedConfig?.column).toBe('Age')
   })
 
-  it('clears and invalidates an in-flight run on Reset', async () => {
+  it('Reset ignores an in-flight run and calculates the defaults again', async () => {
     const pending = deferred<IntervalsResponse>()
     vi.mocked(inferenceApi.computeCI).mockReturnValueOnce(pending.promise)
+    await act(async () => state.setDraft({ alphaStr: '0.1' }))
     await startRun()
+    vi.mocked(inferenceApi.computeCI).mockResolvedValue(intervals(45))
     await act(async () => state.handleReset())
-    await act(async () => pending.resolve(intervals()))
-    expect(state.ciResult).toBeNull()
-    expect(state.piResult).toBeNull()
-    expect(state.appliedConfig).toBeNull()
+    await act(async () => pending.resolve(intervals(20)))
+    expect(state.ciResult?.point_estimates.mean).toBe(45)
+    expect(state.appliedConfig?.alpha).toBe(0.05)
+    expect(vi.mocked(inferenceApi.computeCI).mock.lastCall![0]).toMatchObject({ alpha: 0.05 })
     expect(state.isComputing).toBe(false)
   })
 

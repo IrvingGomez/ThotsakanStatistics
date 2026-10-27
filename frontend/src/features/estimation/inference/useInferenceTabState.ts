@@ -228,6 +228,8 @@ export function useInferenceTabState() {
     const next = initialInferenceDraft(dataState.numericCols[0])
     draftRef.current = next; updateDraft(next); setFieldErrors({})
     setResetGeneration(value => value + 1)
+    // Like every other tab, Reset shows the result for the defaults straight away.
+    if (hasDataRef.current) void runRef.current(next)
   }, [clearResult, dataState.numericCols])
   const activate = useCallback(() => setActivated(true), [])
   const isDirty = !!appliedDraft && JSON.stringify(computationDraft(draft)) !== JSON.stringify(computationDraft(appliedDraft))
