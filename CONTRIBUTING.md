@@ -2,7 +2,7 @@
 
 Thanks for helping. Please read the [Code of Conduct](CODE_OF_CONDUCT.md) first. It applies to everything below.
 
-- **Before proposing a feature:** read [`docs/design.md`](docs/design.md). If a feature doesn't fit the lab identity, we don't build it.
+- **Before proposing a feature:** read [`docs/design.md`](docs/design.md), [`docs/decisions.md`](docs/decisions.md) and [`docs/interaction_contract.md`](docs/interaction_contract.md). A feature that conflicts with a recorded decision needs Irving Gomez's approval first.
 - **Setup:** see the [README](README.md#getting-started).
 - **Architecture:** see [`docs/architecture.md`](docs/architecture.md).
 
@@ -138,7 +138,7 @@ Linear regression is the only feature left to migrate. Discuss the design first;
 Use Conventional Commits (`feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `perf`) with a short, lowercase, imperative subject. Explain *why* in the body when it isn't obvious:
 
 ```
-feat: hypothesis testing tab with rejection region and verdict
+feat: hypothesis testing tab with rejection region
 fix: keep the null curve readable when the statistic is far out
 ```
 
