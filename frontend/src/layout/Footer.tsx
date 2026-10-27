@@ -15,7 +15,7 @@ export default function Footer({
   dataset = 'No dataset loaded',
   rows,
   cols,
-  version = '0.1.0-alpha',
+  version = import.meta.env.VITE_APP_VERSION,
 }: FooterProps) {
   return (
     <footer className="app-footer min-h-8 flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-1 shrink-0 min-w-0

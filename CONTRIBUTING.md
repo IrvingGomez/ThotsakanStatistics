@@ -116,7 +116,8 @@ A statistics feature touches every layer, in this order:
 4. `backend/tests/…`: core/service tests plus an API test in `tests/api/`.
 5. `frontend/src/api/<feature>.ts`: typed client.
 6. `frontend/src/features/<area>/`: a `use<Feature>TabState` hook plus `*Controls`, `*Observation`, `*Notebook` and `*Tab`, wired into `App.tsx`.
-7. Docs: the status table in `docs/roadmap.md`, the Features table in `README.md`, and a dated note under `changelogs/`.
+7. Version: raise it in `frontend/package.json` (and the root `package.json`) when releasing — middle number for a new feature, last number for fixes only (see `docs/decisions.md`).
+8. Docs: the status table in `docs/roadmap.md`, the Features table in `README.md`, and a dated note under `changelogs/`.
 
 Linear regression is the only feature left to migrate. Discuss the design first; the plan is in [`docs/roadmap.md`](docs/roadmap.md).
 

@@ -357,7 +357,7 @@ export default function App() {
           }
         </ErrorBoundary>
       </div>
-      <Footer dataset={footerDataset} version="0.1.0-alpha" />
+      <Footer dataset={footerDataset} />
     </div>
   )
 }

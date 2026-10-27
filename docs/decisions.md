@@ -30,6 +30,12 @@ Regression; data formats other than CSV.
 Deploy on Wednesday 4 November 2026 (moved from 28 October).
 *Why:* more inconsistencies than expected; time to fix them before the event.
 
+### Version numbers — 2026-10-27
+Semantic versioning. v1 is **1.0.0**. A new feature raises the middle number (1.1.0, 1.2.0, …), a release with
+only bug fixes the last one (1.0.1), and a big change in what the app is the first one (2.0.0). The version
+lives in one place, `frontend/package.json`; the footer reads it, and the root `package.json` matches it.
+*Where:* `frontend/vite.config.ts`, `frontend/src/layout/Footer.tsx`.
+
 ### Order after v1 — 2026-10-27
 First the goodness-of-fit test for the normal distribution, then a deep rework of Hypothesis Testing, then
 Linear Regression. Hypothesis Testing is marked as working but needing that rework, not as complete.
