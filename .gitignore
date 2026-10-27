@@ -102,3 +102,7 @@ Try_reflex/
 
 # Extra
 .secret
+# LaTeX build files of docs/guide
+docs/guide/*.aux
+docs/guide/*.log
+docs/guide/*.out

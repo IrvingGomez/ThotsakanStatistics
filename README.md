@@ -74,6 +74,7 @@ cd frontend && npm run test && npm run build
 | [`docs/architecture.md`](docs/architecture.md) | Layers, folders, request flow, sessions, API endpoints, testing |
 | [`docs/roadmap.md`](docs/roadmap.md) | Authoritative feature status, backlog after v1, known issues |
 | [`docs/AUTH.md`](docs/AUTH.md) | Google sign-in setup and troubleshooting |
+| [`docs/guide/`](docs/guide/) | A readable PDF guide to all of the above, for the lab and its students |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Workflow, coding standards, testing, commits |
 | [`changelogs/`](changelogs/) | Dated change notes |
 
