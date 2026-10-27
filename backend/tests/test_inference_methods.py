@@ -16,6 +16,11 @@ def _params(**overrides):
 DATA = pd.Series([float(v) for v in range(2, 42)])  # n = 40
 
 
+def _frame(data):
+    """The dataset the services read: the analysed column is "x", as in _params."""
+    return pd.DataFrame({"x": data})
+
+
 def _method(table, statistic):
     rows = json.loads(table.to_json(orient="records"))
     return next(r["Method"] for r in rows if r["Statistic"] == statistic)
@@ -110,9 +115,9 @@ def test_regions_ignore_estimator_and_bootstrap_choices():
     """Regions always use the sample mean and std (ddof=1) with normal-theory intervals."""
     from services.inference import calculate_regions
 
-    reference = calculate_regions(DATA, _region_params())
+    reference = calculate_regions(_frame(DATA), _region_params())
     tampered = calculate_regions(
-        DATA,
+        _frame(DATA),
         _region_params(
             sigma_estimator="MAD (bias corrected)", mean_estimator="Trimmed Mean", trim_param=0.2,
             bootstrap_mean=True, bootstrap_deviation=True, bootstrap_samples=50,
@@ -125,7 +130,7 @@ def test_regions_ignore_estimator_and_bootstrap_choices():
 def test_regions_box_is_the_mean_t_interval_and_the_chi_square_deviation_interval():
     from services.inference import calculate_regions
 
-    res = calculate_regions(DATA, _region_params())
+    res = calculate_regions(_frame(DATA), _region_params())
     rows = json.loads(res["table"])
     mean = next(r for r in rows if r["Statistic"] == "Mean")
     dev = next(r for r in rows if r["Statistic"] == "Deviation")
@@ -137,7 +142,7 @@ def test_regions_box_is_the_mean_t_interval_and_the_chi_square_deviation_interva
 def test_regions_table_is_omitted_when_the_box_is_off():
     from services.inference import calculate_regions
 
-    assert calculate_regions(DATA, _region_params(add_ci_box=False))["table"] is None
+    assert calculate_regions(_frame(DATA), _region_params(add_ci_box=False))["table"] is None
 
 
 @pytest.mark.parametrize("data", [DATA, pd.Series([4.1, 5.3, 3.8, 6.0, 4.7]), pd.Series([0.001 * v for v in range(1, 201)])])
@@ -147,7 +152,7 @@ def test_regions_window_holds_every_contour_and_the_box(data, probs):
     import numpy as np
     from services.inference import calculate_regions
 
-    res = calculate_regions(data, _region_params(probs=probs, alpha=0.001))
+    res = calculate_regions(_frame(data), _region_params(probs=probs, alpha=0.001))
     z = np.array(res["z_matrix"])
     edge = np.concatenate([z[0], z[-1], z[:, 0], z[:, -1]])
     assert edge.max() < min(res["levels"])
@@ -179,8 +184,8 @@ def test_ci_and_pi_halves_match_the_full_calculation():
 
     params = _params(bootstrap_mean=True, bootstrap_pi=True, bootstrap_samples=200)
     full_ci, full_pi, _, _, _, _ = calculate_intervals(DATA, params)
-    ci, ci_ctx = calculate_ci(DATA, params)
-    pi, pi_ctx = calculate_pi(DATA, params)
+    ci, ci_ctx = calculate_ci(_frame(DATA), params)
+    pi, pi_ctx = calculate_pi(_frame(DATA), params)
     # normal-theory rows are deterministic, so they must be identical; bootstrap rows only need to exist
     stable = lambda table: [r for r in json.loads(table.to_json(orient="records")) if not r["Method"].startswith("Bootstrap")]
     assert stable(ci) == stable(full_ci)
@@ -199,8 +204,8 @@ def test_ci_half_does_not_resample_for_prediction_and_vice_versa(monkeypatch):
     real = module.ci_mean_bootstrap
     monkeypatch.setattr(module, "ci_mean_bootstrap", lambda **kw: calls.append("ci") or real(**kw))
     params = _params(bootstrap_mean=True, bootstrap_pi=True, bootstrap_samples=50)
-    calculate_ci(DATA, params)
+    calculate_ci(_frame(DATA), params)
     assert calls == ["ci"]
     calls.clear()
-    calculate_pi(DATA, params)
+    calculate_pi(_frame(DATA), params)
     assert calls == ["pi"]

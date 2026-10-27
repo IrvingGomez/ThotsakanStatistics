@@ -4,7 +4,7 @@ from api.deps import apply_filters, get_session_data
 from api.schemas.hypothesis import HypothesisParams, HypothesisResponse
 from services.hypothesis import run_hypothesis_test
 
-router = APIRouter(prefix="/api/hypothesis", tags=["hypothesis"])
+router = APIRouter()
 
 
 @router.post("/test", response_model=HypothesisResponse)

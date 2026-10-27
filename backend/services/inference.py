@@ -37,6 +37,22 @@ def get_estimators(data: pd.Series):
         "deviation_estimators": deviation_choices,
     }
 
+def prepare_sample(df: pd.DataFrame, params: InferenceParams):
+    """The analysed values and, when a weights column is chosen, their weights.
+
+    Values and weights come from one frame, so rows missing either are dropped together and each
+    value keeps its own weight (as in services/descriptive.py).
+    """
+    if params.column not in df.columns:
+        raise ValueError(f"Column '{params.column}' not found in dataset")
+    if not params.weights_column:
+        return df[params.column].dropna(), None
+    if params.weights_column not in df.columns:
+        raise ValueError(f"Weights column '{params.weights_column}' not found in dataset")
+    complete = df[[params.column, params.weights_column]].dropna()
+    return complete[params.column], complete[params.weights_column]
+
+
 def calculate_intervals(data: pd.Series, params: InferenceParams, weights: pd.Series = None):
     n = len(data)
     dist = select_distribution(params.mean_estimator, params.sigma_estimator)
@@ -169,12 +185,14 @@ _WITHOUT_PI = dict(pi_mean_normal=False, pi_median_normal=False, pi_iqr_normal=F
 _WITHOUT_CI_BOOTSTRAP = dict(bootstrap_mean=False, bootstrap_median=False, bootstrap_deviation=False)
 
 
-def calculate_ci(data: pd.Series, params: InferenceParams, weights: pd.Series = None):
+def calculate_ci(df: pd.DataFrame, params: InferenceParams):
+    data, weights = prepare_sample(df, params)
     ci_table, _, _, _, _, context = calculate_intervals(data, params.model_copy(update=_WITHOUT_PI), weights)
     return ci_table, context
 
 
-def calculate_pi(data: pd.Series, params: InferenceParams, weights: pd.Series = None):
+def calculate_pi(df: pd.DataFrame, params: InferenceParams):
+    data, weights = prepare_sample(df, params)
     _, pi_table, _, _, _, context = calculate_intervals(
         data, params.model_copy(update=_WITHOUT_CI_BOOTSTRAP), weights
     )
@@ -192,14 +210,16 @@ _REGION_FIXED = dict(
     bootstrap_pi=False,
     trim_param=None,
     winsor_limits=None,
+    weights_column=None,  # so a weights column cannot drop rows from the regions
     ci_mean_normal=True,
     ci_median_normal=True,
     ci_deviation_normal=True,
 )
 
 
-def calculate_regions(data: pd.Series, params: ConfidenceRegionsParams, weights: pd.Series = None):
+def calculate_regions(df: pd.DataFrame, params: ConfidenceRegionsParams):
     fixed = params.model_copy(update=_REGION_FIXED)
+    data, _ = prepare_sample(df, fixed)
     ci_table, _, mean_ci, sigma_ci, _, _ = calculate_intervals(data, fixed, None)
 
     eps_mu, eps_sigma = region_padding(

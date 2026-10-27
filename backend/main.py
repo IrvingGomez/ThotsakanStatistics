@@ -44,9 +44,9 @@ app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 _protected = [Depends(require_user)]
 app.include_router(data.router, prefix="/api/data", tags=["data"], dependencies=_protected)
 app.include_router(descriptive.router, prefix="/api/descriptive", tags=["descriptive"], dependencies=_protected)
-app.include_router(inference.router, dependencies=_protected)  # defines its own prefix /api/inference
-app.include_router(graphical.router, dependencies=_protected)  # defines its own prefix /api/graphical
-app.include_router(hypothesis.router, dependencies=_protected)  # defines its own prefix /api/hypothesis
+app.include_router(inference.router, prefix="/api/inference", tags=["inference"], dependencies=_protected)
+app.include_router(graphical.router, prefix="/api/graphical", tags=["graphical"], dependencies=_protected)
+app.include_router(hypothesis.router, prefix="/api/hypothesis", tags=["hypothesis"], dependencies=_protected)
 app.include_router(probability.router, prefix="/api/probability", tags=["probability"], dependencies=_protected)
 
 @app.get("/api/health")
