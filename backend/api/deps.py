@@ -9,6 +9,8 @@ from sessions.store import get_session
 
 def require_user(request: Request, settings: Settings = Depends(get_settings)) -> User:
     """Gate for every data route: a valid signed session cookie for an allowed domain."""
+    if settings.demo_mode:
+        return User(email="demo@demo.invalid", name="Demo user")
     if settings.auth_disabled:
         return User(email=f"dev@{settings.allowed_domain}", name="Development user")
     token = request.cookies.get(SESSION_COOKIE)

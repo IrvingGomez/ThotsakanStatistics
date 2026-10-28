@@ -41,7 +41,7 @@ docker compose up --build                    # prod-style, http://localhost:8080
 docker compose -f docker-compose.dev.yml up  # hot reload: frontend :5173, backend host :8097
 ```
 
-- **Startup requirement:** the backend refuses to start unless `GOOGLE_CLIENT_ID` and `AUTH_SECRET_KEY` (≥ 32 chars) are set in the root `.env`, or `AUTH_DISABLED=true` (local dev only).
+- **Startup requirement:** the backend refuses to start unless `GOOGLE_CLIENT_ID` and `AUTH_SECRET_KEY` (≥ 32 chars) are set in the root `.env`, or `AUTH_DISABLED=true` (local dev only) or `DEMO_MODE=true` (a separate public demo instance; see `docs/AUTH.md`).
 - **Single worker:** the backend must run one uvicorn worker, because dataset sessions are held in memory.
 - **CI:** `.github/workflows/tests.yml` runs backend `pytest` and frontend tests + build on every pull request into `dev` or `main`; `docker.yml` builds both images, pushes them to GHCR from `dev`, and smoke-tests the stack.
 - **No linter:** no linter or formatter is configured.

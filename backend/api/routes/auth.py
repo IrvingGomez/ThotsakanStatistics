@@ -23,7 +23,8 @@ def auth_config(settings: Settings = Depends(get_settings)):
     """Public: lets the frontend get the (non-secret) client ID at runtime,
     so the same built image works for any deployment."""
     return {
-        "enabled": not settings.auth_disabled,
+        "enabled": settings.login_required,
+        "demo": settings.demo_mode,
         "clientId": settings.google_client_id,
         "allowedDomain": settings.allowed_domain,
     }
@@ -32,7 +33,7 @@ def auth_config(settings: Settings = Depends(get_settings)):
 @router.post("/google")
 def google_login(body: GoogleLoginRequest, response: Response,
                  settings: Settings = Depends(get_settings)):
-    if settings.auth_disabled:
+    if not settings.login_required:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Authentication is disabled.")
     try:
         user = verify_google_credential(body.credential, settings)

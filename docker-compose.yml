@@ -16,6 +16,9 @@ services:
       AUTH_SESSION_HOURS: ${AUTH_SESSION_HOURS:-12}
       AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}
       AUTH_DISABLED: ${AUTH_DISABLED:-false}
+      DEMO_MODE: ${DEMO_MODE:-false}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-}
+      SESSION_MEMORY_MB: ${SESSION_MEMORY_MB:-}
     restart: unless-stopped
 
   frontend:
@@ -24,6 +27,9 @@ services:
       args:
         BASE_REGISTRY: ${BASE_REGISTRY:-mirror.gcr.io/library}
     image: thotsakan-stats-frontend
+    environment:
+      CLIENT_MAX_BODY_SIZE: ${CLIENT_MAX_BODY_SIZE:-100m}
+      UPLOAD_RATE_LIMIT: ${UPLOAD_RATE_LIMIT:-120r/m}
     restart: unless-stopped
     depends_on:
       backend:

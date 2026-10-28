@@ -1,11 +1,14 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 import uuid
 import pandas as pd
 import io
 import os
 from pathlib import Path
 
+from config import Settings, get_settings
 from sessions.store import set_session
+
+MB = 1024 * 1024
 
 router = APIRouter()
 
@@ -25,13 +28,15 @@ def _read_numbers_as_numbers(df: pd.DataFrame) -> pd.DataFrame:
 
 
 @router.post("/upload")
-async def upload_dataset(file: UploadFile = File(...)):
+async def upload_dataset(file: UploadFile = File(...), settings: Settings = Depends(get_settings)):
     if not file.filename.endswith('.csv'):
         raise HTTPException(status_code=400, detail="Only CSV files are supported")
-    
+
+    content = await file.read()
+    if len(content) > settings.max_upload_mb * MB:
+        raise HTTPException(status_code=413, detail=f"The file is larger than {settings.max_upload_mb} MB.")
+
     try:
-        content = await file.read()
-        
         # Parse CSV
         # We handle parsing using pandas as requested. 
         # Further schema improvements might be needed for dates, numerical, and categorical parsing.
@@ -41,7 +46,7 @@ async def upload_dataset(file: UploadFile = File(...)):
         session_id = str(uuid.uuid4())
         
         # Store df
-        set_session(session_id, df)
+        set_session(session_id, df, max_total_bytes=settings.session_memory_mb * MB)
 
         # Dev only: keep a copy of the raw upload on disk (see docker-compose.dev.yml).
         dump_dir = os.getenv("UPLOAD_DUMP_DIR")

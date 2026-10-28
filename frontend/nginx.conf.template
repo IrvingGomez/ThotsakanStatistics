@@ -1,13 +1,28 @@
+# Uploads per client IP (UPLOAD_RATE_LIMIT, default 120r/m, plus a burst of 60). Visitors on one
+# Wi-Fi share an IP, so keep it generous; it stops one client from flooding the server.
+limit_req_zone $binary_remote_addr zone=uploads:10m rate=${UPLOAD_RATE_LIMIT};
+
 server {
     listen 80;
     root /usr/share/nginx/html;
     index index.html;
 
-    # CSV uploads go through /api/data/upload
-    client_max_body_size 100m;
+    # CSV uploads go through /api/data/upload (CLIENT_MAX_BODY_SIZE, default 100m)
+    client_max_body_size ${CLIENT_MAX_BODY_SIZE};
 
     gzip on;
     gzip_types text/css application/javascript application/json image/svg+xml;
+
+    location = /api/data/upload {
+        limit_req zone=uploads burst=60 nodelay;
+        limit_req_status 429;
+        proxy_pass ${BACKEND_URL};
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 120s;
+    }
 
     location /api/ {
         proxy_pass ${BACKEND_URL};

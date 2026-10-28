@@ -18,6 +18,19 @@ def _flag(name: str, default: bool = False) -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _megabytes(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    return int(raw)
+
+
+# Demo mode (public events) caps what one open, login-free server will hold.
+DEMO_MAX_UPLOAD_MB = 10
+DEMO_SESSION_MEMORY_MB = 1024
+MAX_UPLOAD_MB = 100  # matches nginx's default client_max_body_size
+
+
 @dataclass(frozen=True)
 class Settings:
     auth_disabled: bool
@@ -26,10 +39,18 @@ class Settings:
     secret_key: str
     session_hours: int
     cookie_secure: bool
+    demo_mode: bool = False
+    max_upload_mb: int = MAX_UPLOAD_MB
+    session_memory_mb: int = 0  # 0 = no limit on the datasets held in memory
+
+    @property
+    def login_required(self) -> bool:
+        return not (self.auth_disabled or self.demo_mode)
 
 
 @lru_cache
 def get_settings() -> Settings:
+    demo = _flag("DEMO_MODE")
     return Settings(
         auth_disabled=_flag("AUTH_DISABLED"),
         google_client_id=os.getenv("GOOGLE_CLIENT_ID", "").strip(),
@@ -37,12 +58,15 @@ def get_settings() -> Settings:
         secret_key=os.getenv("AUTH_SECRET_KEY", "").strip(),
         session_hours=int(os.getenv("AUTH_SESSION_HOURS", "12") or 12),
         cookie_secure=_flag("AUTH_COOKIE_SECURE"),
+        demo_mode=demo,
+        max_upload_mb=_megabytes("MAX_UPLOAD_MB", DEMO_MAX_UPLOAD_MB if demo else MAX_UPLOAD_MB),
+        session_memory_mb=_megabytes("SESSION_MEMORY_MB", DEMO_SESSION_MEMORY_MB if demo else 0),
     )
 
 
 def validate_settings(s: Settings) -> None:
     """Fail fast at startup instead of rejecting every login at runtime."""
-    if s.auth_disabled:
+    if not s.login_required:
         return
     problems = []
     if not s.google_client_id:

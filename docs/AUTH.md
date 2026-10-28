@@ -77,6 +77,7 @@ python3 -c "import secrets; print(secrets.token_urlsafe(48))"
 | `AUTH_SESSION_HOURS` | no (`12`) | Lifetime of a login |
 | `AUTH_COOKIE_SECURE` | no (`false`) | Set `true` behind HTTPS so the cookie is HTTPS-only |
 | `AUTH_DISABLED` | no (`false`) | **Dev only.** Skips login and treats everyone as a dev user. The UI shows an amber "Auth disabled (dev)" badge. Never use in production |
+| `DEMO_MODE` | no (`false`) | **Public demo only.** Skips login, shows a neutral "Demo" badge and applies the demo limits. Run it as a separate instance (see [Demo mode](#demo-mode)) |
 
 `.env` also holds two non-auth Docker settings, `BASE_REGISTRY` and `WEB_PORT`; `.env.example` documents them.
 
@@ -111,11 +112,32 @@ curl -s -o /dev/null -w "%{http_code}\n" -X POST localhost:8080/api/descriptive/
 
 Use `localhost:8000` instead of `localhost:8080` when running without Docker. `"enabled": false` means `AUTH_DISABLED=true` is set somewhere (check `.env` and your shell environment, which overrides `.env`).
 
+## Demo mode
+
+For public events, run a second, login-free copy of the app beside the real one, from its own env file and compose project:
+
+```bash
+cp .env.demo.example .env.demo
+docker compose -p thotsakan-demo --env-file .env.demo up -d --build   # http://<server>:8081
+docker compose -p thotsakan-demo --env-file .env.demo down            # after the event
+```
+
+With `DEMO_MODE=true` nobody signs in, no Google credentials are needed, and the logo bar shows a neutral "Demo" badge. Because anyone can reach it, it also limits what one open server holds:
+
+| Variable | Demo default | Meaning |
+|---|---|---|
+| `MAX_UPLOAD_MB` | `10` (otherwise `100`) | Largest CSV the backend accepts; larger files get HTTP 413 with a message |
+| `SESSION_MEMORY_MB` | `1024` (otherwise no limit) | Memory all open datasets may use together; the least recently used are dropped first, and their users see "Session expired" |
+| `CLIENT_MAX_BODY_SIZE` | `11m` in `.env.demo.example` (otherwise `100m`) | nginx body limit; keep it a little above `MAX_UPLOAD_MB` so the app explains a refusal |
+| `UPLOAD_RATE_LIMIT` | `120r/m` | Uploads per client IP, burst 60, then HTTP 429. Applies to every deployment. Visitors on one Wi-Fi share an IP, so keep it generous |
+
+`curl -s localhost:8081/api/auth/config` returns `"enabled":false,"demo":true`. Never set `DEMO_MODE` on the instance students sign in to.
+
 ## Production checklist
 
 - Serve over **HTTPS**, add the HTTPS origin in Google Cloud, and set `AUTH_COOKIE_SECURE=true`.
 - Use a unique, random `AUTH_SECRET_KEY` per environment; inject it as a secret, not in the image. `.env` files are excluded from the Docker build contexts.
-- `AUTH_DISABLED` must be `false`.
+- `AUTH_DISABLED` and `DEMO_MODE` must be `false`.
 - Keep the backend at a **single uvicorn worker** (already the case): datasets are held in memory.
 - CI (`.github/workflows/docker.yml`) runs the compose smoke test with `AUTH_DISABLED=true` because it has no Google credentials; the auth gate itself is covered by `backend/tests/api/test_auth.py`.
 
@@ -132,5 +154,5 @@ Use `localhost:8000` instead of `localhost:8080` when running without Docker. `"
 | Backend exits with "Authentication is misconfigured" | Fill `GOOGLE_CLIENT_ID` / `AUTH_SECRET_KEY` (≥ 32 chars) in `.env` |
 | Login succeeds but next request is 401 | `AUTH_COOKIE_SECURE=true` over plain `http://`, so the browser drops the cookie; use HTTPS or set it to `false` locally |
 | Everyone suddenly signed out | `AUTH_SECRET_KEY` changed, or `AUTH_SESSION_HOURS` elapsed |
-| App opens with no login screen | `AUTH_DISABLED=true`; see the badge in the logo bar |
+| App opens with no login screen | `AUTH_DISABLED=true` or `DEMO_MODE=true`; see the badge in the logo bar |
 | Env change not picked up | Recreate the container: `docker compose up -d --force-recreate backend` |
