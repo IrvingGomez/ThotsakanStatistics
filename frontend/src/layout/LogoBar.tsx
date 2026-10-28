@@ -40,7 +40,13 @@ export default function LogoBar() {
 
       {/* Right: signed-in user + institutional logos */}
       <div className="flex items-center gap-4">
-        {config && !config.enabled && (
+        {config?.demo && (
+          <span className="px-2 py-1 rounded text-xs font-medium text-[var(--color-text-muted)] border border-[var(--color-border)]"
+            title="Demo version: no sign-in. An uploaded file is kept in memory for at most 30 minutes and never saved.">
+            Demo
+          </span>
+        )}
+        {config && !config.enabled && !config.demo && (
           <span className="px-2 py-1 rounded text-xs font-medium bg-amber-500/20 text-amber-300 border border-amber-500/40"
             title="AUTH_DISABLED=true: login is skipped. Never use in production.">
             Auth disabled (dev)

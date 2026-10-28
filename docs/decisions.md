@@ -53,6 +53,16 @@ First the goodness-of-fit test for the normal distribution, then a deep rework o
 Linear Regression. Hypothesis Testing is marked as working but needing that rework, not as complete.
 *Where:* [`roadmap.md`](roadmap.md#after-v1-backlog).
 
+### Demo mode for public events — 2026-10-28
+Events show the app without sign-in through `DEMO_MODE=true`, on a **separate instance** next to the one
+students sign in to, started only for the event. The logo bar shows a neutral "Demo" badge instead of the
+amber development badge. Uploads are capped (10 MB by default), the datasets held in memory are capped
+together (1 GB by default, least recently used dropped first), and nginx limits uploads per client IP.
+`AUTH_DISABLED` stays for local development only.
+*Why:* the event on 6 November 2026 needs the app open to visitors; the development switch looked unfinished
+and left an open server with no limits.
+*Where:* `docs/AUTH.md` (Demo mode), `.env.demo.example`.
+
 ---
 
 ## How results appear

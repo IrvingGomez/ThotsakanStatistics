@@ -20,6 +20,7 @@ export interface AuthUser {
 
 interface AuthConfig {
   enabled: boolean
+  demo?: boolean
   clientId: string
   allowedDomain: string
 }

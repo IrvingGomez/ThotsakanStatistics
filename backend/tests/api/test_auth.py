@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 
 import api.routes.auth as auth_routes
 from api.deps import require_user
-from config import Settings, get_settings
+from config import Settings, get_settings, validate_settings
 from main import app
 from services.auth import AuthError, SESSION_COOKIE, User, is_allowed_email, read_session_token, issue_session_token
 
@@ -46,7 +46,7 @@ def test_data_routes_require_login(client):
 def test_open_routes(client):
     assert client.get("/api/health").status_code == 200
     body = client.get("/api/auth/config").json()
-    assert body == {"enabled": True, "clientId": "client-id", "allowedDomain": "cmkl.ac.th"}
+    assert body == {"enabled": True, "demo": False, "clientId": "client-id", "allowedDomain": "cmkl.ac.th"}
 
 
 def test_login_sets_cookie_and_grants_access(client, monkeypatch):
@@ -100,3 +100,36 @@ def test_session_token_tamper_and_expiry():
 def test_auth_disabled_bypass(client):
     assert client.get("/api/auth/me").status_code == 200
     assert client.post("/api/auth/google", json={"credential": "x"}).status_code == 400
+
+
+@pytest.mark.parametrize("client", [make_settings(demo_mode=True, google_client_id="", secret_key="")],
+                         indirect=True)
+def test_demo_mode_opens_the_app_without_login(client):
+    body = client.get("/api/auth/config").json()
+    assert body["enabled"] is False and body["demo"] is True
+    assert client.get("/api/auth/me").json()["name"] == "Demo user"
+    assert client.post("/api/auth/google", json={"credential": "x"}).status_code == 400
+
+
+def test_demo_mode_needs_no_google_credentials():
+    validate_settings(make_settings(demo_mode=True, google_client_id="", secret_key=""))
+    with pytest.raises(RuntimeError):
+        validate_settings(make_settings(google_client_id="", secret_key=""))
+
+
+@pytest.mark.parametrize("env,upload_mb,memory_mb", [
+    ({}, 100, 0),
+    ({"DEMO_MODE": "true"}, 10, 1024),
+    ({"DEMO_MODE": "true", "MAX_UPLOAD_MB": "5", "SESSION_MEMORY_MB": "256"}, 5, 256),
+])
+def test_demo_mode_limits_from_the_environment(monkeypatch, env, upload_mb, memory_mb):
+    for name in ("DEMO_MODE", "MAX_UPLOAD_MB", "SESSION_MEMORY_MB"):
+        monkeypatch.delenv(name, raising=False)
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+    get_settings.cache_clear()
+    try:
+        s = get_settings()
+        assert (s.max_upload_mb, s.session_memory_mb) == (upload_mb, memory_mb)
+    finally:
+        get_settings.cache_clear()

@@ -33,7 +33,8 @@ Every analysis screen has three panels (the code calls them `Controls`, `Observa
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ LOGO BAR — Himmapan Lab · Thotsakan · CMKL · AICE · user · Sign out          │
-│            (amber "Auth disabled (dev)" badge when AUTH_DISABLED=true)       │
+│            (amber "Auth disabled (dev)" badge when AUTH_DISABLED=true,       │
+│             neutral "Demo" badge when DEMO_MODE=true)                        │
 ├──────────────────────────────────────────────────────────────────────────────┤
 │ HEADER — [Home] [Data] [Probability] [Statistics] [Hypothesis Testing]       │
 │          [Linear Regression]                                                 │
