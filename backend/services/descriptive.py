@@ -1,0 +1,139 @@
+import pandas as pd
+from typing import List
+
+from api.deps import apply_filters
+
+from core.estimation.descriptive import (
+    compute_descriptive_statistics,
+    compute_histogram,
+    compute_boxplot_data,
+)
+from api.schemas.descriptive import (
+    DescriptiveRequest,
+    DescriptiveResponse,
+    StatRow,
+    DescriptiveSummary,
+    HistogramData,
+    BoxData,
+)
+
+def build_histogram(series: pd.Series) -> HistogramData:
+    data = compute_histogram(series)
+    return HistogramData(binEdges=data["binEdges"], counts=data["counts"])
+
+def _stat_id(measure: str, category: str) -> str | None:
+    """Map a row to the id of the checkbox that owns it (None = always shown).
+
+    Every selectable statistic has an id, basic or advanced, so the frontend can show or hide
+    rows without asking the backend again.
+    """
+    if category == "Quantiles":
+        return "quantiles"
+    if measure.startswith("Trimmed Mean"):
+        return "trimmed_mean"
+    if measure.startswith("Winsorized Mean"):
+        return "winsorized_mean"
+    return {
+        "Minimum":            "minimum",
+        "Maximum":            "maximum",
+        "Mean":               "mean",
+        "Median":             "median",
+        "Std (ddof=1)":       "std_dev_1",
+        "Interquartile Mean": "iqm",
+        "Weighted Mean":      "weighted_mean",
+        "Geometric Mean":     "geometric_mean",
+        "Harmonic Mean":      "harmonic_mean",
+        "Variance (ddof=0)":  "variance_0",
+        "Variance (ddof=1)":  "variance_1",
+        "Std (ddof=0)":       "std_dev_0",
+        "IQR":                "iqr",
+        "Range":              "range",
+        "MAD":                "mad",
+        "AAD":                "aad",
+        "Skewness (k-statistic)":     "skewness",
+        "Kurtosis (k-statistic)":            "kurtosis",
+    }.get(measure)
+
+
+def calculate_descriptive(df: pd.DataFrame, req: DescriptiveRequest) -> DescriptiveResponse:
+    if req.column not in df.columns:
+        raise ValueError(f"Column '{req.column}' not found in dataset")
+        
+    df = apply_filters(df, req.filters)  # the same filter as every other tab
+
+    if req.weightsCol:
+        if req.weightsCol not in df.columns:
+            raise ValueError(f"Weights column '{req.weightsCol}' not found in dataset")
+        # One frame, so values and weights stay aligned: rows missing either are dropped together.
+        complete = df[[req.column, req.weightsCol]].dropna()
+        series = complete[req.column]
+        weights = complete[req.weightsCol]
+    else:
+        series = df[req.column].dropna()
+        weights = None
+    
+    if len(series) < 2:
+        raise ValueError(f"Not enough data points ({len(series)}) for column '{req.column}' after filtering.")
+    
+    # 1. Run core stats computation
+    stats_df = compute_descriptive_statistics(
+        series,
+        quantile_probs=req.quantileProbs,
+        trim_alpha=req.trimAlpha,
+        winsor_limits=req.winsorLimits,
+        weights=weights
+    )
+    
+    # Map the DataFrame rows back to our StatRow schema
+    rows: List[StatRow] = []
+    
+    # Map core names to frontend categories
+    cat_map = {
+        "Quantiles": "Quantiles",
+        "Central Tendency": "Central Tendency",
+        "Dispersion": "Dispersion",
+        "Shape": "Shape"
+    }
+
+    # Add extremes explicitly since core/ may not add min/max
+    _min, _max = series.min(), series.max()
+    rows.append(StatRow(category="Extremes", measure="Minimum", value=_min, consistencyCorr=None, robust=False, statId="minimum"))
+    rows.append(StatRow(category="Extremes", measure="Maximum", value=_max, consistencyCorr=None, robust=False, statId="maximum"))
+    
+    for _, row in stats_df.iterrows():
+        cat = cat_map.get(row["Statistic Type"], "Central Tendency")
+        val = None if pd.isna(row["Value"]) else float(row["Value"])
+        corr = None if pd.isna(row["Bias Corrected"]) else float(row["Bias Corrected"])
+        
+        rows.append(StatRow(
+            category=cat, # type: ignore
+            measure=str(row["Measure"]),
+            value=val,
+            consistencyCorr=corr,
+            robust=bool(row["Robust"]),
+            statId=_stat_id(str(row["Measure"]), cat)
+        ))
+        
+    # 2. Build Summary
+    summary = DescriptiveSummary(
+        n=len(series),
+        mean=float(series.mean()),
+        median=float(series.median()),
+        std=float(series.std(ddof=1)),
+        iqr=float(series.quantile(0.75) - series.quantile(0.25))
+    )
+    
+    # 3. Build Histogram
+    histogram = build_histogram(series)
+    
+    # 4. Build BoxData
+    box = compute_boxplot_data(series)
+    boxData = BoxData(**box)
+    
+    return DescriptiveResponse(
+        rows=rows,
+        summary=summary,
+        histogram=histogram,
+        boxData=boxData
+    )
+

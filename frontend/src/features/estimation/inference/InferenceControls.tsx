@@ -1,0 +1,74 @@
+import { useEffect, useRef } from 'react'
+import { Accordion, AnalysisActions, Divider, RadioGroup, SectionLabel, SelectField, VariableSection, SwitchField, TextField } from '../../../components/ControlPrimitives'
+import CheckboxTree from '../../../components/CheckboxTree'
+import DualInput from '../../../components/DualInput'
+import { LABELS, confidenceReadout, estimatorOptions } from '../../../labels'
+import { INTERVAL_TREE, selectionInfo } from './inferenceOptions'
+import type { InferenceDraft, InferenceState } from './useInferenceTabState'
+
+const ALPHA = { min: 0.001, max: 0.5, step: 0.001, decimals: 3 }
+const BOOTSTRAP = { min: 100, max: 5000, step: 100, decimals: 0 }
+const [ciNode, piNode] = INTERVAL_TREE
+const clamp = (value: number, min: number, max: number, fallback: number) =>
+  Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback
+
+export default function InferenceControls({ state }: { state: InferenceState }) {
+  const { draft, setDraft, fieldErrors, activate, resetGeneration } = state
+  const formRef = useRef<HTMLFormElement>(null)
+  useEffect(() => { activate() }, [activate])
+  useEffect(() => {
+    if (Object.keys(fieldErrors).length) formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus()
+  }, [fieldErrors])
+
+  const isRegions = draft.estimationType === 'Confidence Regions'
+  const info = selectionInfo(draft.selected)
+  const alpha = Number(draft.alphaStr)
+  const validAlpha = draft.alphaStr.trim() !== '' && Number.isFinite(alpha) && alpha > 0 && alpha < 1
+  const textField = (key: 'crProbs', label: string, hint?: string) => (
+    <TextField label={label} value={draft[key]} onChange={value => setDraft({ [key]: value })} hint={hint} error={fieldErrors[key]} />
+  )
+
+  const alphaInput = <DualInput label={LABELS.alpha} value={clamp(alpha, ALPHA.min, ALPHA.max, 0.05)} min={ALPHA.min} max={ALPHA.max} step={ALPHA.step} decimals={ALPHA.decimals}
+    onChange={value => setDraft({ alphaStr: value.toFixed(ALPHA.decimals) })}
+    textValue={draft.alphaStr} onTextChange={alphaStr => setDraft({ alphaStr })} resetSignal={resetGeneration}
+    hint={validAlpha ? `${confidenceReadout(alpha)}${isRegions ? ' for the marginal intervals' : ''}` : 'Enter a value between 0 and 1.'}
+    error={fieldErrors.alphaStr} />
+
+  return <form ref={formRef} onSubmit={event => { event.preventDefault(); void state.handleRun() }} noValidate className="analysis-panel flex flex-col gap-1 pb-4">
+    <VariableSection value={draft.column} onChange={column => setDraft({ column })} options={state.numericCols}
+      error={fieldErrors.column} loaded={!!state.sessionId} />
+    <RadioGroup<InferenceDraft['estimationType']> label="Estimate" value={draft.estimationType} onChange={estimationType => setDraft({ estimationType })}
+      options={[{ value: 'Confidence and Prediction Intervals', label: 'Intervals' }, { value: 'Confidence Regions', label: 'Confidence regions' }]} />
+    {isRegions ? <>
+      {textField('crProbs', 'Region coverage levels', 'Use proportions: 0.5, 0.95 means 50%, 95%. These levels control the contours.')}
+      <SwitchField label="Show marginal confidence interval box" checked={draft.addCiBox} onChange={addCiBox => setDraft({ addCiBox })} />
+      {draft.addCiBox && <div className="ml-3 pl-3 mb-2 border-l border-[var(--color-border-md)]">{alphaInput}</div>}
+    </> : <>
+      {/* The top-level 'ci' / 'pi' ticks stay on; each section shows only the methods under it. */}
+      <Accordion title={ciNode.label} open={draft.ciOpen || !!fieldErrors.selected} onToggle={() => setDraft({ ciOpen: !draft.ciOpen })}>
+        <CheckboxTree label="Show" nodes={ciNode.children!} checked={draft.selected} onChange={selected => setDraft({ selected })} />
+      </Accordion>
+      <Accordion title={piNode.label} open={draft.piOpen || !!fieldErrors.selected} onToggle={() => setDraft({ piOpen: !draft.piOpen })}>
+        <CheckboxTree label="Show" nodes={piNode.children!} checked={draft.selected} onChange={selected => setDraft({ selected })} />
+      </Accordion>
+      {fieldErrors.selected && <p role="alert" className="mb-3 text-xs text-red-400">{fieldErrors.selected}</p>}
+      {/* What to show comes first; the settings that tune it sit together below (one section, as in every tab). */}
+      <Divider />
+      <SectionLabel>Settings</SectionLabel>
+      {alphaInput}
+      {info.needsDeviationEstimator && <>
+        <SelectField label={LABELS.sigmaEstimator} value={draft.sigmaEst} onChange={sigmaEst => setDraft({ sigmaEst })}
+          options={estimatorOptions([...new Set([draft.sigmaEst, ...state.deviationEstimators])])}
+          hint="Scale used by the methods that assume normality." />
+      </>}
+      {info.anyBootstrap && <DualInput label={LABELS.bootstrapSamples} value={clamp(Number(draft.samplesStr), BOOTSTRAP.min, BOOTSTRAP.max, 1000)}
+        min={BOOTSTRAP.min} max={BOOTSTRAP.max} step={BOOTSTRAP.step} decimals={BOOTSTRAP.decimals}
+        onChange={value => setDraft({ samplesStr: String(Math.round(value)) })}
+        textValue={draft.samplesStr} onTextChange={samplesStr => setDraft({ samplesStr })} resetSignal={resetGeneration}
+        hint="Number of resamples. More resamples take longer." error={fieldErrors.samplesStr} />}
+    </>}
+    {Object.keys(fieldErrors).length > 0 && <p role="alert" className="text-sm text-red-400">Check the highlighted fields.</p>}
+    <p className="mt-2 text-sm text-[var(--color-text-muted)]">{info.anyBootstrap && !isRegions ? 'Results update automatically. Bootstrap takes a moment.' : 'Results update automatically.'}</p>
+    <AnalysisActions onReset={state.handleReset} />
+  </form>
+}

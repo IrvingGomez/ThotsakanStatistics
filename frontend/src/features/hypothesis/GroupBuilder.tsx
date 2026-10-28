@@ -1,0 +1,111 @@
+import { useId } from 'react';
+import { useData } from '../../context/DataContext';
+import { SelectField, TextField } from '../../components/ControlPrimitives';
+import type { GroupSpec } from '../../api/hypothesis';
+
+/**
+ * A group is the union of one or more selected values of one categorical column.
+ * Two builders are independent, so group 1 and group 2 may name different
+ * columns — that flexibility is inherited from the original Gradio app.
+ */
+export default function GroupBuilder({
+  label,
+  value,
+  onChange,
+  categoricalCols,
+  showName = true,
+  sampleCount,
+  describedBy,
+}: {
+  label: string;
+  value: GroupSpec;
+  onChange: (next: GroupSpec) => void;
+  categoricalCols: string[];
+  showName?: boolean;
+  sampleCount?: number;
+  describedBy?: string;
+}) {
+  const id = useId();
+  const { getUniqueValues } = useData();
+  const levels = value.column ? getUniqueValues(value.column) : [];
+
+  const setColumn = (column: string) => {
+    // Values belong to the old column; clearing them avoids a silently empty group.
+    onChange({ ...value, column, values: [] });
+  };
+
+  const toggleValue = (level: string) => {
+    const selected = value.values.includes(level)
+      ? value.values.filter((v) => v !== level)
+      : [...value.values, level];
+
+    // Mirrors the Gradio app: the name follows the first selection until the
+    // student types their own.
+    const autoNamed = !value.name || value.name === label || value.name === value.values[0];
+    const name = autoNamed ? (selected[0] ?? '') : value.name;
+    onChange({ ...value, values: selected, name });
+  };
+
+  return (
+    <fieldset className="mb-3 min-w-0 border border-[var(--color-border-md)] rounded-md overflow-hidden">
+      <legend className="sr-only">{label}</legend>
+      <div className="bg-[var(--color-bg-input)] px-3 py-1.5 text-xs font-semibold text-[var(--color-text)] border-b border-[var(--color-border-md)] flex justify-between items-center">
+        <span>{label}</span>
+        <span className="text-xs font-normal text-[var(--color-text-muted)]">
+          {value.values.length} selected{sampleCount !== undefined ? ` · n = ${sampleCount}` : ''}
+        </span>
+      </div>
+
+      <div className="p-2.5">
+        <SelectField label="Grouping column" value={value.column} onChange={setColumn} options={categoricalCols} placeholder="Select a column…" />
+
+        {value.column && (
+          <>
+            <div className="flex justify-between items-center mb-1">
+              <span id={id + '-values'} className="text-sm text-[var(--color-text)]">Categories</span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => onChange({ ...value, values: levels })}
+                  aria-label={`Select all categories for ${label}`}
+                  className="text-xs text-[var(--color-accent)] hover:underline cursor-pointer p-1"
+                >
+                  All
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onChange({ ...value, values: [] })}
+                  aria-label={`Clear categories for ${label}`}
+                  className="text-xs text-[var(--color-text-muted)] hover:underline cursor-pointer p-1"
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+
+            <div role="group" aria-labelledby={id + '-values'} aria-describedby={describedBy} className="max-h-40 overflow-y-auto custom-scrollbar rounded-md border border-[var(--color-border-md)] bg-[var(--color-bg-base)] p-1.5 mb-2">
+              {levels.length === 0 && (
+                <p className="text-xs text-[var(--color-text-muted)] px-1 py-0.5">No values found.</p>
+              )}
+              {levels.map((level) => (
+                <label key={level} className="flex items-center gap-2 cursor-pointer px-1 py-1.5 rounded hover:bg-[var(--color-bg-hover)]">
+                  <input
+                    type="checkbox"
+                    checked={value.values.includes(level)}
+                    onChange={() => toggleValue(level)}
+                    className="accent-[var(--color-accent)] cursor-pointer"
+                  />
+                  <span className="text-sm text-[var(--color-text)] break-words min-w-0">{level}</span>
+                </label>
+              ))}
+            </div>
+
+            {showName && (
+              <TextField label="Group name" value={value.name} onChange={(name) => onChange({ ...value, name })} placeholder={label} />
+            )}
+          </>
+        )}
+      </div>
+    </fieldset>
+  );
+}

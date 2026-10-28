@@ -1,0 +1,53 @@
+# Development stack with hot reload (Vite on :5173, uvicorn --reload on :8000).
+# pip/npm installs live in named volumes (bind mounts are slow on Windows/macOS);
+# each start script reinstalls only when the lockfile changed. Reset them with
+#   docker compose -f docker-compose.dev.yml down -v
+# Uploaded CSVs are copied to ./dev-playground/uploads/ (git-ignored) on the host.
+#   docker compose -f docker-compose.dev.yml up --build
+services:
+  backend:
+    image: ${BASE_REGISTRY:-mirror.gcr.io/library}/python:3.12-slim
+    # hostname: backend
+    working_dir: /app
+    volumes:
+      - ./backend:/app
+      - backend-deps:/deps
+      - ./dev-playground/uploads:/playground/uploads
+    environment:
+      MPLBACKEND: Agg
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+      PYTHONPATH: /deps
+      UPLOAD_DUMP_DIR: /playground/uploads
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      AUTH_ALLOWED_DOMAIN: ${AUTH_ALLOWED_DOMAIN:-cmkl.ac.th}
+      AUTH_SECRET_KEY: ${AUTH_SECRET_KEY:-}
+      AUTH_SESSION_HOURS: ${AUTH_SESSION_HOURS:-12}
+      AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}
+      AUTH_DISABLED: ${AUTH_DISABLED:-false}
+      DEMO_MODE: ${DEMO_MODE:-false}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-}
+      SESSION_MEMORY_MB: ${SESSION_MEMORY_MB:-}
+    command: sh dev-start.sh
+    ports:
+      - "8097:8000"
+
+  frontend:
+    image: ${BASE_REGISTRY:-mirror.gcr.io/library}/node:22-alpine
+    # hostname: frontend
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+      - frontend-node-modules:/app/node_modules
+    environment:
+      VITE_PROXY_TARGET: http://backend:8000
+      VITE_USE_POLLING: "true"
+    command: sh dev-start.sh
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+
+volumes:
+  backend-deps:
+  frontend-node-modules:
